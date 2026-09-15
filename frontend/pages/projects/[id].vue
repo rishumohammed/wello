@@ -56,6 +56,9 @@
 
         <!-- Header Quick Actions -->
         <div class="flex items-center gap-2 flex-wrap">
+          <button class="btn btn-secondary btn-sm" @click="createInvoiceFromProject" id="btn-create-invoice-project-header">
+            <IconReceipt :size="14" /> Create Invoice
+          </button>
           <button class="btn btn-secondary btn-sm" @click="startTimerOnProject" id="btn-start-timer-header">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
             Start Timer
@@ -123,17 +126,17 @@
           <IconClock :size="14" class="text-tertiary" />
         </div>
         <div class="flex items-baseline gap-2 mb-3">
-          <div class="metric-value" style="font-size:var(--font-2xl);">{{ proj.totalHM }}</div>
+          <div class="metric-value kpi-val-1">{{ proj.totalHM }}</div>
           <div class="text-tertiary text-xs">total logged</div>
         </div>
         <div class="metric-sub-breakdown">
           <div class="flex justify-between text-xs py-1 border-b">
             <span class="text-tertiary">Unpaid time:</span>
-            <span class="fw-600" style="color:#D97706;">{{ proj.unpaidHM }}</span>
+            <span class="fw-600 kpi-val-3">{{ proj.unpaidHM }}</span>
           </div>
           <div class="flex justify-between text-xs py-1">
             <span class="text-tertiary">Paid time:</span>
-            <span class="fw-600" style="color:var(--color-success);">{{ proj.paidHM }}</span>
+            <span class="fw-600 kpi-val-2">{{ proj.paidHM }}</span>
           </div>
         </div>
       </div>
@@ -145,7 +148,7 @@
           <span class="text-xs text-tertiary fw-600">Net: {{ store.fmtCurrency(proj.netIncome) }}</span>
         </div>
         <div class="flex items-baseline gap-2 mb-3">
-          <div class="metric-value" style="font-size:var(--font-2xl); color:var(--color-success);">
+          <div class="metric-value kpi-val-2">
             {{ store.fmtCurrency(proj.revenue) }}
           </div>
           <div class="text-tertiary text-xs">revenue</div>
@@ -157,7 +160,7 @@
           </div>
           <div class="flex justify-between text-xs py-1">
             <span class="text-tertiary">Project expenses:</span>
-            <span class="fw-600" style="color:#DC2626;">{{ store.fmtCurrency(proj.expenses) }}</span>
+            <span class="fw-600 kpi-val-3">{{ store.fmtCurrency(proj.expenses) }}</span>
           </div>
         </div>
       </div>
@@ -169,7 +172,7 @@
           <span class="text-xs text-brand fw-600">Work-Value</span>
         </div>
         <div class="flex items-baseline gap-2 mb-3">
-          <div class="metric-value gradient" style="font-size:var(--font-2xl);">
+          <div class="metric-value kpi-val-3">
             {{ proj.netHrVal > 0 ? store.fmtHourly(proj.netHrVal) : `${store.currency}0/hr` }}
           </div>
           <div class="text-tertiary text-xs">current rate</div>
@@ -177,7 +180,7 @@
         <div class="metric-sub-breakdown">
           <div class="flex justify-between text-xs py-1 border-b">
             <span class="text-tertiary">Unpaid time value:</span>
-            <span class="fw-600" style="color:#D97706;">{{ store.fmtCurrency(Math.round(proj.estUnpaidValue)) }}</span>
+            <span class="fw-600 kpi-val-3">{{ store.fmtCurrency(Math.round(proj.estUnpaidValue)) }}</span>
           </div>
           <div class="flex justify-between text-xs py-1">
             <span class="text-tertiary">Implied quote rate:</span>
@@ -520,12 +523,40 @@
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useWelloStore } from '~/stores/wello'
+import { useAuthStore } from '~/stores/auth'
 import { useToast } from '~/composables/useToast'
 
 const route = useRoute()
 const router = useRouter()
 const store = useWelloStore()
+const authStore = useAuthStore()
 const toast = useToast()
+
+async function createInvoiceFromProject() {
+  if (!proj.value) return
+  try {
+    const res = await $fetch('/api/invoices/from-job', {
+      method: 'POST',
+      body: {
+        jobId: proj.value.id,
+        jobName: proj.value.name,
+        jobDescription: proj.value.description,
+        clientName: proj.value.client?.name || 'Valued Client',
+        clientContact: proj.value.client?.email || proj.value.client?.phone || '',
+        quoteAmount: proj.value.quoteAmount,
+        hoursWorked: Math.round((proj.value.totalMin || 60) / 60),
+        rate: proj.value.netHrVal || 500,
+        userId: authStore.user?.id || 'u1',
+      }
+    })
+
+    if (res?.invoice) {
+      router.push(`/invoicing/${res.invoice.id}`)
+    }
+  } catch (err) {
+    console.error('Failed to create invoice from project:', err)
+  }
+}
 
 const projectId = computed(() => route.params.id)
 

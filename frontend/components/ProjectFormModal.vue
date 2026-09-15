@@ -85,16 +85,19 @@
             <!-- Service Category & Status -->
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label" for="form-proj-service">Service / Category</label>
+                <div class="flex items-center justify-between mb-1">
+                  <label class="form-label mb-0" for="form-proj-service">Service / Category</label>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                    style="padding: 0; height: auto; font-size: 11px; color: var(--color-purple); text-decoration: underline;"
+                    @click="showCategoryRequestModal = true"
+                  >
+                    Can't find your service?
+                  </button>
+                </div>
                 <select id="form-proj-service" v-model="form.serviceCategory" class="form-select">
-                  <option value="Web Development">Web Development</option>
-                  <option value="Design & Development">Design & Development</option>
-                  <option value="UI/UX Design">UI/UX Design</option>
-                  <option value="Consulting & Strategy">Consulting & Strategy</option>
-                  <option value="Software Engineering">Software Engineering</option>
-                  <option value="Branding">Branding</option>
-                  <option value="Content & Copywriting">Content & Copywriting</option>
-                  <option value="Other">Other</option>
+                  <option v-for="cat in categoryList" :key="cat" :value="cat">{{ cat }}</option>
                 </select>
               </div>
 
@@ -108,6 +111,55 @@
                   <option value="completed">Completed</option>
                   <option value="lost">Lost</option>
                 </select>
+              </div>
+            </div>
+
+            <!-- Category Request Modal -->
+            <div v-if="showCategoryRequestModal" class="modal-overlay" style="z-index: 1100;" @click.self="showCategoryRequestModal = false">
+              <div class="modal" style="max-width: 440px;">
+                <div class="modal-header">
+                  <div class="modal-title">Request a New Category</div>
+                  <button type="button" class="modal-close" @click="showCategoryRequestModal = false">&times;</button>
+                </div>
+                <div class="modal-body">
+                  <p class="text-secondary text-sm mb-3">
+                    Can't find the right category for your work? Submit a request to our taxonomy curation team.
+                  </p>
+                  <div class="form-group mb-3">
+                    <label class="form-label">Category Name <span class="required">*</span></label>
+                    <input
+                      v-model="catReq.requestedName"
+                      type="text"
+                      class="form-input"
+                      placeholder="e.g. AI Prompt Engineering, Audio Mastering"
+                    />
+                  </div>
+                  <div class="form-group mb-3">
+                    <label class="form-label">Your Email <span class="required">*</span></label>
+                    <input
+                      v-model="catReq.userEmail"
+                      type="email"
+                      class="form-input"
+                      placeholder="user@example.com"
+                    />
+                  </div>
+                  <div class="form-group mb-3">
+                    <label class="form-label">Description / Scope (Optional)</label>
+                    <textarea
+                      v-model="catReq.description"
+                      class="form-textarea"
+                      rows="2"
+                      placeholder="Briefly describe what services fit in this category..."
+                    ></textarea>
+                  </div>
+                </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-secondary" @click="showCategoryRequestModal = false">Cancel</button>
+                  <button type="button" class="btn btn-primary" :disabled="submittingReq" @click="handleCategoryRequest">
+                    <span v-if="submittingReq">Submitting…</span>
+                    <span v-else>Submit Request</span>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -168,9 +220,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useWelloStore } from '~/stores/wello'
 import { useToast } from '~/composables/useToast'
+import { useAuthStore } from '~/stores/auth'
 
 const props = defineProps({
   project: { type: Object, default: null },
@@ -178,6 +231,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'created', 'updated'])
 const store = useWelloStore()
+const authStore = useAuthStore()
 const toast = useToast()
 const saving = ref(false)
 
@@ -185,6 +239,75 @@ const isEdit = computed(() => !!props.project)
 
 const showNewClient = ref(false)
 const newClientName = ref('')
+
+const showCategoryRequestModal = ref(false)
+const submittingReq = ref(false)
+const catReq = reactive({
+  requestedName: '',
+  userEmail: authStore.user?.email || '',
+  description: '',
+})
+
+const defaultCategories = [
+  'Web Development',
+  'Design & Development',
+  'UI/UX Design',
+  'Consulting & Strategy',
+  'Software Engineering',
+  'Branding',
+  'Content & Copywriting',
+  'Other',
+]
+const categoryList = ref([...defaultCategories])
+
+onMounted(async () => {
+  try {
+    const res = await $fetch('/api/categories')
+    if (res?.categories && Array.isArray(res.categories)) {
+      const names = res.categories.map(c => c.name)
+      // Merge unique
+      const set = new Set([...names, ...defaultCategories])
+      categoryList.value = Array.from(set)
+    }
+  } catch (err) {
+    console.warn('Could not fetch dynamic categories:', err)
+  }
+})
+
+async function handleCategoryRequest() {
+  if (!catReq.requestedName.trim() || !catReq.userEmail.trim()) {
+    toast.error('Please fill in category name and email.')
+    return
+  }
+  submittingReq.value = true
+  try {
+    const res = await $fetch('/api/category-requests', {
+      method: 'POST',
+      body: {
+        requestedName: catReq.requestedName.trim(),
+        userEmail: catReq.userEmail.trim(),
+        description: catReq.description.trim(),
+      },
+    })
+    toast.success(res?.message || 'Category request submitted!')
+    
+    // Add to local options and select it
+    const reqName = catReq.requestedName.trim()
+    if (!categoryList.value.includes(reqName)) {
+      categoryList.value.unshift(reqName)
+    }
+    form.serviceCategory = reqName
+
+    // Reset and close
+    catReq.requestedName = ''
+    catReq.description = ''
+    showCategoryRequestModal.value = false
+  } catch (err) {
+    toast.error(err?.data?.statusMessage || 'Failed to submit category request.')
+  } finally {
+    submittingReq.value = false
+  }
+}
 
 const form = reactive({
   name: props.project?.name || '',

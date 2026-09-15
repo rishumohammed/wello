@@ -104,19 +104,19 @@
         <div class="project-card-stats">
           <div class="project-stat">
             <div class="project-stat-label">Total Time</div>
-            <div class="project-stat-value">{{ proj.totalHM }}</div>
+            <div class="project-stat-value kpi-val-1">{{ proj.totalHM }}</div>
+          </div>
+          <div class="project-stat">
+            <div class="project-stat-label">Paid Revenue</div>
+            <div class="project-stat-value kpi-val-2">{{ store.fmtCurrency(proj.revenue) }}</div>
           </div>
           <div class="project-stat">
             <div class="project-stat-label">Unpaid Time</div>
-            <div class="project-stat-value" style="color:#D97706;">{{ proj.unpaidHM }}</div>
-          </div>
-          <div class="project-stat">
-            <div class="project-stat-label">Revenue</div>
-            <div class="project-stat-value" style="color:var(--color-success);">{{ store.fmtCurrency(proj.revenue) }}</div>
+            <div class="project-stat-value kpi-val-3">{{ proj.unpaidHM }}</div>
           </div>
           <div class="project-stat">
             <div class="project-stat-label">Net Income</div>
-            <div class="project-stat-value">{{ store.fmtCurrency(proj.netIncome) }}</div>
+            <div class="project-stat-value kpi-val-4">{{ store.fmtCurrency(proj.netIncome) }}</div>
           </div>
           <div class="project-stat">
             <div class="project-stat-label">Effective Value</div>

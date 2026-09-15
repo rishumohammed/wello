@@ -84,25 +84,25 @@
       <div class="hero-supporting-metrics" id="hero-supporting-data">
         <div class="hero-sub-metric" id="sub-metric-worked">
           <div class="hero-sub-label">Time Worked</div>
-          <div class="hero-sub-value text-brand">{{ stats.todayHM }}</div>
+          <div class="hero-sub-value kpi-val-1">{{ stats.todayHM }}</div>
           <div class="text-tertiary text-xs mt-1">across all projects</div>
         </div>
 
         <div class="hero-sub-metric" id="sub-metric-revenue">
           <div class="hero-sub-label">Revenue Today</div>
-          <div class="hero-sub-value" style="color:var(--color-success);">{{ store.fmtCurrency(stats.todayRev) }}</div>
+          <div class="hero-sub-value kpi-val-2">{{ store.fmtCurrency(stats.todayRev) }}</div>
           <div class="text-tertiary text-xs mt-1">payments & earned</div>
         </div>
 
         <div class="hero-sub-metric" id="sub-metric-expenses">
           <div class="hero-sub-label">Expenses Today</div>
-          <div class="hero-sub-value" style="color:#DC2626;">{{ store.fmtCurrency(stats.todayExp) }}</div>
+          <div class="hero-sub-value kpi-val-3">{{ store.fmtCurrency(stats.todayExp) }}</div>
           <div class="text-tertiary text-xs mt-1">direct project costs</div>
         </div>
 
         <div class="hero-sub-metric" id="sub-metric-net">
           <div class="hero-sub-label">Net Value</div>
-          <div class="hero-sub-value gradient">{{ store.fmtCurrency(stats.todayNetVal) }}</div>
+          <div class="hero-sub-value kpi-val-4">{{ store.fmtCurrency(stats.todayNetVal) }}</div>
           <div class="text-tertiary text-xs mt-1">after expenses</div>
         </div>
       </div>

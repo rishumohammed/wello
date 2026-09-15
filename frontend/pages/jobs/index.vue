@@ -28,30 +28,52 @@
       <!-- Summary Metrics (4 Cards) -->
       <div class="grid-4 mb-6" id="jobs-summary-metrics">
         <!-- Revenue Received -->
-        <div class="metric-card" id="metric-total-revenue">
-          <div class="metric-label">Revenue Received</div>
-          <div class="metric-value" style="color:var(--color-success);">{{ store.fmtCurrency(totalRevenueReceived) }}</div>
+        <div class="metric-card hover-lift" id="metric-total-revenue">
+          <div class="metric-header">
+            <span class="metric-label">Revenue Received</span>
+            <div class="metric-icon-box kpi-icon-1">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+            </div>
+          </div>
+          <div class="metric-value kpi-val-1">{{ store.fmtCurrency(totalRevenueReceived) }}</div>
           <div class="metric-secondary">Collected from {{ totalPaymentsCount }} payments</div>
         </div>
 
         <!-- Outstanding Balance -->
-        <div class="metric-card" id="metric-total-outstanding">
-          <div class="metric-label">Outstanding Balance</div>
-          <div class="metric-value" style="color:#D97706;">{{ store.fmtCurrency(totalOutstanding) }}</div>
+        <div class="metric-card hover-lift" id="metric-total-outstanding">
+          <div class="metric-header">
+            <span class="metric-label">Outstanding Balance</span>
+            <div class="metric-icon-box kpi-icon-2">
+              <IconAlert :size="18" />
+            </div>
+          </div>
+          <div class="metric-value kpi-val-2">{{ store.fmtCurrency(totalOutstanding) }}</div>
           <div class="metric-secondary">Promised quote: {{ store.fmtCurrency(totalPromisedQuote) }}</div>
         </div>
 
         <!-- Expenses & Net -->
-        <div class="metric-card" id="metric-total-net">
-          <div class="metric-label">Net Profit (All Jobs)</div>
-          <div class="metric-value gradient">{{ store.fmtCurrency(totalNetIncome) }}</div>
+        <div class="metric-card hover-lift" id="metric-total-net">
+          <div class="metric-header">
+            <span class="metric-label">Net Profit (All Jobs)</span>
+            <div class="metric-icon-box kpi-icon-3">
+              <IconInsights :size="18" />
+            </div>
+          </div>
+          <div class="metric-value kpi-val-3">{{ store.fmtCurrency(totalNetIncome) }}</div>
           <div class="metric-secondary">After {{ store.fmtCurrency(totalExpenses) }} expenses</div>
         </div>
 
         <!-- Overall Effective Value -->
-        <div class="metric-card" id="metric-total-eff-val">
-          <div class="metric-label">Overall Effective Rate</div>
-          <div class="metric-value" style="font-size:var(--font-2xl);">{{ store.fmtHourly(overallEffectiveHourly) }}</div>
+        <div class="metric-card hover-lift" id="metric-total-eff-val">
+          <div class="metric-header">
+            <span class="metric-label">Overall Effective Rate</span>
+            <div class="metric-icon-box kpi-icon-4">
+              <IconClock :size="18" />
+            </div>
+          </div>
+          <div class="metric-value kpi-val-4">{{ store.fmtHourly(overallEffectiveHourly) }}</div>
           <div class="metric-secondary">Across {{ totalJobHours.toFixed(1) }}h total project time</div>
         </div>
       </div>
@@ -157,6 +179,9 @@
                   <!-- Actions -->
                   <td class="table-text-right" @click.stop>
                     <div class="flex items-center justify-end gap-1">
+                      <button class="btn btn-ghost btn-icon text-brand" @click="handleCreateInvoiceFromJob(job)" title="Create Invoice from Job" :id="`btn-inv-${job.id}`">
+                        <IconReceipt :size="13" />
+                      </button>
                       <button class="btn btn-ghost btn-icon text-success" @click="showPaymentFor(job.id)" title="Record payment" :id="`btn-pay-${job.id}`">
                         <IconPlus :size="13" />
                       </button>
@@ -296,9 +321,38 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useWelloStore } from '~/stores/wello'
+import { useAuthStore } from '~/stores/auth'
 
 const store = useWelloStore()
+const authStore = useAuthStore()
+const router = useRouter()
+
+async function handleCreateInvoiceFromJob(job) {
+  try {
+    const res = await $fetch('/api/invoices/from-job', {
+      method: 'POST',
+      body: {
+        jobId: job.id,
+        jobName: job.name,
+        jobDescription: job.description,
+        clientName: job.client?.name || 'Valued Client',
+        clientContact: job.client?.email || job.client?.phone || '',
+        quoteAmount: job.quoteAmount,
+        hoursWorked: Math.round((job.totalMin || 60) / 60),
+        rate: job.netHrVal || 500,
+        userId: authStore.user?.id || 'u1',
+      }
+    })
+
+    if (res?.invoice) {
+      router.push(`/invoicing/${res.invoice.id}`)
+    }
+  } catch (err) {
+    console.error('Failed to create invoice from job:', err)
+  }
+}
 
 const showPaymentModalFor = ref(null)
 const showExpenseModalFor = ref(null)

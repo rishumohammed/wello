@@ -254,6 +254,13 @@ const SAMPLE_USER = {
   avatarInitials: 'RM',
   targetHourly: 350,
   currency: '₹',
+  businessName: 'Rahul Mehta Tech Consulting',
+  businessLogo: '',
+  businessAddress: '102 Tech Park, Suite 4B, Indiranagar, Bengaluru, KA 560038, India',
+  businessPhone: '+91 98765 43210',
+  businessEmail: 'rahul@mehtatech.in',
+  businessTaxId: 'GSTIN: 29AAAAA0000A1Z5',
+  defaultInvoiceNotes: 'Payment is due within 14 days of invoice date. Thank you for your business!',
 }
 
 // ─── Store Definition ───────────────────────────────────────────────────────

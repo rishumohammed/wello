@@ -31,47 +31,55 @@
     <div v-if="selectedPeriod === 'today'" class="period-section mb-6" id="section-period-today">
       <div class="grid-3 mb-4">
         <!-- Total Work Time -->
-        <div class="card card-padded" id="today-work-time-card">
-          <div class="metric-label flex items-center justify-between">
-            <span>Total Work Time</span>
-            <IconClock :size="14" class="text-tertiary" />
+        <div class="metric-card hover-lift" id="today-work-time-card">
+          <div class="metric-header">
+            <span class="metric-label">Total Work Time</span>
+            <div class="metric-icon-box kpi-icon-1">
+              <IconClock :size="18" />
+            </div>
           </div>
-          <div class="metric-value" style="font-size:var(--font-2xl);">{{ currentPeriodData.totalWorkTimeHM }}</div>
-          <div class="text-tertiary text-xs mt-1">across {{ currentPeriodData.sessionsCount }} work session{{ currentPeriodData.sessionsCount !== 1 ? 's' : '' }}</div>
+          <div class="metric-value kpi-val-1">{{ currentPeriodData.totalWorkTimeHM }}</div>
+          <div class="metric-secondary">across {{ currentPeriodData.sessionsCount }} work session{{ currentPeriodData.sessionsCount !== 1 ? 's' : '' }}</div>
           <div class="flex justify-between text-xs pt-3 mt-3 border-t">
             <span class="text-tertiary">Paid time:</span>
-            <span class="fw-600 text-success">{{ currentPeriodData.paidTimeHM }}</span>
+            <span class="fw-600 kpi-val-2">{{ currentPeriodData.paidTimeHM }}</span>
           </div>
         </div>
 
         <!-- Financials: Revenue & Expenses & Net -->
-        <div class="card card-padded" id="today-financials-card">
-          <div class="metric-label flex items-center justify-between">
-            <span>Financial Return</span>
-            <span class="text-xs text-tertiary">Net: {{ store.fmtCurrency(currentPeriodData.netValue) }}</span>
+        <div class="metric-card hover-lift" id="today-financials-card">
+          <div class="metric-header">
+            <span class="metric-label">Financial Return</span>
+            <div class="metric-icon-box kpi-icon-2">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+            </div>
           </div>
-          <div class="metric-value text-success" style="font-size:var(--font-2xl);">{{ store.fmtCurrency(currentPeriodData.revenue) }}</div>
-          <div class="text-tertiary text-xs mt-1">revenue earned / collected</div>
+          <div class="metric-value kpi-val-2">{{ store.fmtCurrency(currentPeriodData.revenue) }}</div>
+          <div class="metric-secondary">revenue earned / collected</div>
           <div class="flex justify-between text-xs pt-3 mt-3 border-t">
             <span class="text-tertiary">Direct expenses:</span>
-            <span class="fw-600" style="color:#DC2626;">{{ store.fmtCurrency(currentPeriodData.expenses) }}</span>
+            <span class="fw-600 kpi-val-3">{{ store.fmtCurrency(currentPeriodData.expenses) }}</span>
           </div>
         </div>
 
         <!-- Effective Hourly Value -->
-        <div class="card card-padded" id="today-effective-hourly-card">
-          <div class="metric-label flex items-center justify-between">
-            <span>Effective Hourly Value</span>
-            <span class="badge badge-rate">Work-Value</span>
+        <div class="metric-card hover-lift" id="today-effective-hourly-card">
+          <div class="metric-header">
+            <span class="metric-label">Effective Hourly Value</span>
+            <div class="metric-icon-box kpi-icon-3">
+              <IconInsights :size="18" />
+            </div>
           </div>
-          <div class="metric-value gradient" style="font-size:var(--font-2xl);">{{ store.fmtHourly(currentPeriodData.effectiveHourlyValue) }}</div>
-          <div class="text-tertiary text-xs mt-1">
+          <div class="metric-value kpi-val-3">{{ store.fmtHourly(currentPeriodData.effectiveHourlyValue) }}</div>
+          <div class="metric-secondary">
             Target: {{ store.fmtHourly(currentPeriodData.targetRate) }}
-            <span v-if="currentPeriodData.effectiveHourlyValue >= currentPeriodData.targetRate" class="text-success fw-600 ml-1">✓ On target</span>
+            <span v-if="currentPeriodData.effectiveHourlyValue >= currentPeriodData.targetRate" class="kpi-val-2 fw-600 ml-1">✓ On target</span>
           </div>
           <div class="flex justify-between text-xs pt-3 mt-3 border-t">
             <span class="text-tertiary">Unpaid client time:</span>
-            <span class="fw-600 text-warning">{{ currentPeriodData.unpaidClientTimeHM }}</span>
+            <span class="fw-600 kpi-val-3">{{ currentPeriodData.unpaidClientTimeHM }}</span>
           </div>
         </div>
       </div>
@@ -81,29 +89,41 @@
     <div v-else-if="selectedPeriod === 'week'" class="period-section mb-6" id="section-period-week">
       <div class="grid-4 mb-4">
         <!-- Total Work Time & Time Split -->
-        <div class="card card-padded" id="week-work-time-card">
-          <div class="metric-label">Total Work Time</div>
-          <div class="metric-value" style="font-size:var(--font-2xl);">{{ currentPeriodData.totalWorkTimeHM }}</div>
+        <div class="metric-card hover-lift" id="week-work-time-card">
+          <div class="metric-header">
+            <span class="metric-label">Total Work Time</span>
+            <div class="metric-icon-box kpi-icon-1">
+              <IconClock :size="18" />
+            </div>
+          </div>
+          <div class="metric-value kpi-val-1">{{ currentPeriodData.totalWorkTimeHM }}</div>
           <div class="metric-sub-breakdown mt-2">
             <div class="flex justify-between text-xs py-1 border-b">
               <span class="text-tertiary">Paid time:</span>
-              <span class="fw-600 text-success">{{ currentPeriodData.paidTimeHM }}</span>
+              <span class="fw-600 kpi-val-2">{{ currentPeriodData.paidTimeHM }}</span>
             </div>
             <div class="flex justify-between text-xs py-1">
               <span class="text-tertiary">Unpaid client time:</span>
-              <span class="fw-600 text-warning">{{ currentPeriodData.unpaidClientTimeHM }}</span>
+              <span class="fw-600 kpi-val-3">{{ currentPeriodData.unpaidClientTimeHM }}</span>
             </div>
           </div>
         </div>
 
         <!-- Revenue & Net Value -->
-        <div class="card card-padded" id="week-financials-card">
-          <div class="metric-label">Revenue & Net Value</div>
-          <div class="metric-value text-success" style="font-size:var(--font-2xl);">{{ store.fmtCurrency(currentPeriodData.revenue) }}</div>
+        <div class="metric-card hover-lift" id="week-financials-card">
+          <div class="metric-header">
+            <span class="metric-label">Revenue & Net Value</span>
+            <div class="metric-icon-box kpi-icon-2">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+            </div>
+          </div>
+          <div class="metric-value kpi-val-2">{{ store.fmtCurrency(currentPeriodData.revenue) }}</div>
           <div class="metric-sub-breakdown mt-2">
             <div class="flex justify-between text-xs py-1 border-b">
               <span class="text-tertiary">Expenses:</span>
-              <span class="fw-600" style="color:#DC2626;">{{ store.fmtCurrency(currentPeriodData.expenses) }}</span>
+              <span class="fw-600 kpi-val-3">{{ store.fmtCurrency(currentPeriodData.expenses) }}</span>
             </div>
             <div class="flex justify-between text-xs py-1">
               <span class="text-tertiary">Net economic value:</span>
@@ -113,10 +133,15 @@
         </div>
 
         <!-- Average Effective Value -->
-        <div class="card card-padded" id="week-avg-effective-card">
-          <div class="metric-label">Avg Effective Value</div>
-          <div class="metric-value gradient" style="font-size:var(--font-2xl);">{{ store.fmtHourly(currentPeriodData.effectiveHourlyValue) }}</div>
-          <div class="text-tertiary text-xs mt-1">across all projects this week</div>
+        <div class="metric-card hover-lift" id="week-avg-effective-card">
+          <div class="metric-header">
+            <span class="metric-label">Avg Effective Value</span>
+            <div class="metric-icon-box kpi-icon-3">
+              <IconInsights :size="18" />
+            </div>
+          </div>
+          <div class="metric-value kpi-val-3">{{ store.fmtHourly(currentPeriodData.effectiveHourlyValue) }}</div>
+          <div class="metric-secondary">across all projects this week</div>
           <div class="flex justify-between text-xs pt-3 mt-3 border-t">
             <span class="text-tertiary">Target benchmark:</span>
             <span class="fw-600">{{ store.fmtHourly(currentPeriodData.targetRate) }}</span>
@@ -124,12 +149,17 @@
         </div>
 
         <!-- Best-Value Project This Week -->
-        <div class="card card-padded" id="week-best-project-card">
-          <div class="metric-label">Best-Value Project</div>
+        <div class="metric-card hover-lift" id="week-best-project-card">
+          <div class="metric-header">
+            <span class="metric-label">Best-Value Project</span>
+            <div class="metric-icon-box kpi-icon-4">
+              <IconFolders :size="18" />
+            </div>
+          </div>
           <div class="fw-700 text-base text-primary truncate mt-1">
             {{ currentPeriodData.bestValueProject ? currentPeriodData.bestValueProject.name : '—' }}
           </div>
-          <div class="text-xs text-brand fw-600 mt-1">
+          <div class="text-xs kpi-val-4 fw-600 mt-1">
             {{ currentPeriodData.bestValueProject ? store.fmtHourly(currentPeriodData.bestValueProject.effectiveHourly) : '—' }}
           </div>
           <div class="flex justify-between text-xs pt-3 mt-3 border-t">
@@ -144,29 +174,41 @@
     <div v-else class="period-section mb-6" id="section-period-month">
       <div class="grid-4 mb-4">
         <!-- Total Work Time & Unpaid Time -->
-        <div class="card card-padded" id="month-work-time-card">
-          <div class="metric-label">Total Work Time</div>
-          <div class="metric-value" style="font-size:var(--font-2xl);">{{ currentPeriodData.totalWorkTimeHM }}</div>
+        <div class="metric-card hover-lift" id="month-work-time-card">
+          <div class="metric-header">
+            <span class="metric-label">Total Work Time</span>
+            <div class="metric-icon-box kpi-icon-1">
+              <IconClock :size="18" />
+            </div>
+          </div>
+          <div class="metric-value kpi-val-1">{{ currentPeriodData.totalWorkTimeHM }}</div>
           <div class="metric-sub-breakdown mt-2">
             <div class="flex justify-between text-xs py-1 border-b">
               <span class="text-tertiary">Paid time:</span>
-              <span class="fw-600 text-success">{{ currentPeriodData.paidTimeHM }}</span>
+              <span class="fw-600 kpi-val-2">{{ currentPeriodData.paidTimeHM }}</span>
             </div>
             <div class="flex justify-between text-xs py-1">
               <span class="text-tertiary">Unpaid client time:</span>
-              <span class="fw-600 text-warning">{{ currentPeriodData.unpaidClientTimeHM }}</span>
+              <span class="fw-600 kpi-val-3">{{ currentPeriodData.unpaidClientTimeHM }}</span>
             </div>
           </div>
         </div>
 
         <!-- Revenue, Expenses, Net -->
-        <div class="card card-padded" id="month-financials-card">
-          <div class="metric-label">Revenue & Net Value</div>
-          <div class="metric-value text-success" style="font-size:var(--font-2xl);">{{ store.fmtCurrency(currentPeriodData.revenue) }}</div>
+        <div class="metric-card hover-lift" id="month-financials-card">
+          <div class="metric-header">
+            <span class="metric-label">Revenue & Net Value</span>
+            <div class="metric-icon-box kpi-icon-2">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+            </div>
+          </div>
+          <div class="metric-value kpi-val-2">{{ store.fmtCurrency(currentPeriodData.revenue) }}</div>
           <div class="metric-sub-breakdown mt-2">
             <div class="flex justify-between text-xs py-1 border-b">
               <span class="text-tertiary">Expenses:</span>
-              <span class="fw-600" style="color:#DC2626;">{{ store.fmtCurrency(currentPeriodData.expenses) }}</span>
+              <span class="fw-600 kpi-val-3">{{ store.fmtCurrency(currentPeriodData.expenses) }}</span>
             </div>
             <div class="flex justify-between text-xs py-1">
               <span class="text-tertiary">Net value:</span>
@@ -176,31 +218,41 @@
         </div>
 
         <!-- Effective Value & Value Given Away -->
-        <div class="card card-padded" id="month-effective-val-card">
-          <div class="metric-label">Effective Hourly Value</div>
-          <div class="metric-value gradient" style="font-size:var(--font-2xl);">{{ store.fmtHourly(currentPeriodData.effectiveHourlyValue) }}</div>
+        <div class="metric-card hover-lift" id="month-effective-val-card">
+          <div class="metric-header">
+            <span class="metric-label">Effective Hourly Value</span>
+            <div class="metric-icon-box kpi-icon-3">
+              <IconInsights :size="18" />
+            </div>
+          </div>
+          <div class="metric-value kpi-val-3">{{ store.fmtHourly(currentPeriodData.effectiveHourlyValue) }}</div>
           <div class="metric-sub-breakdown mt-2">
             <div class="flex justify-between text-xs py-1 border-b">
               <span class="text-tertiary">Value given away:</span>
-              <span class="fw-600 text-warning">{{ store.fmtCurrency(currentPeriodData.valueGivenAway) }}</span>
+              <span class="fw-600 kpi-val-3">{{ store.fmtCurrency(currentPeriodData.valueGivenAway) }}</span>
             </div>
             <div class="flex justify-between text-xs py-1">
               <span class="text-tertiary">Unpaid proportion:</span>
-              <span class="fw-600 text-warning">{{ currentPeriodData.unpaidRatioPct }}%</span>
+              <span class="fw-600 kpi-val-3">{{ currentPeriodData.unpaidRatioPct }}%</span>
             </div>
           </div>
         </div>
 
         <!-- Highest & Lowest Value Projects -->
-        <div class="card card-padded" id="month-extremes-card">
-          <div class="metric-label">Project Extremes</div>
+        <div class="metric-card hover-lift" id="month-extremes-card">
+          <div class="metric-header">
+            <span class="metric-label">Project Extremes</span>
+            <div class="metric-icon-box kpi-icon-4">
+              <IconFolders :size="18" />
+            </div>
+          </div>
           <div class="metric-sub-breakdown mt-1">
             <div class="py-1 border-b">
               <div class="text-xs text-tertiary">Highest-value project:</div>
               <div class="fw-700 text-sm text-primary truncate">
                 {{ currentPeriodData.bestValueProject ? currentPeriodData.bestValueProject.name : '—' }}
               </div>
-              <div class="text-xs text-brand fw-600">
+              <div class="text-xs kpi-val-4 fw-600">
                 {{ currentPeriodData.bestValueProject ? store.fmtHourly(currentPeriodData.bestValueProject.effectiveHourly) : '—' }}
               </div>
             </div>
@@ -340,28 +392,28 @@
           <!-- Started -->
           <div class="conversion-stat-box" id="conv-stat-started">
             <div class="text-xs text-tertiary uppercase fw-600 mb-1">Projects Started</div>
-            <div class="conversion-stat-value text-primary">{{ conversionData.totalStarted }}</div>
+            <div class="conversion-stat-value kpi-val-1">{{ conversionData.totalStarted }}</div>
             <div class="text-tertiary text-xs mt-1">all client engagements</div>
           </div>
 
           <!-- Converted -->
           <div class="conversion-stat-box" id="conv-stat-converted">
             <div class="text-xs text-tertiary uppercase fw-600 mb-1">Converted to Jobs</div>
-            <div class="conversion-stat-value text-success">{{ conversionData.convertedCount }}</div>
+            <div class="conversion-stat-value kpi-val-2">{{ conversionData.convertedCount }}</div>
             <div class="text-tertiary text-xs mt-1">{{ conversionData.conversionRatePct }}% success rate</div>
           </div>
 
           <!-- Lost -->
           <div class="conversion-stat-box" id="conv-stat-lost">
             <div class="text-xs text-tertiary uppercase fw-600 mb-1">Lost Engagements</div>
-            <div class="conversion-stat-value" style="color:#DC2626;">{{ conversionData.lostCount }}</div>
+            <div class="conversion-stat-value kpi-val-3">{{ conversionData.lostCount }}</div>
             <div class="text-tertiary text-xs mt-1">unconverted proposals</div>
           </div>
 
           <!-- Time in Lost Projects -->
           <div class="conversion-stat-box" id="conv-stat-lost-time">
             <div class="text-xs text-tertiary uppercase fw-600 mb-1">Time in Lost Projects</div>
-            <div class="conversion-stat-value text-warning">{{ conversionData.lostTimeHM }}</div>
+            <div class="conversion-stat-value kpi-val-4">{{ conversionData.lostTimeHM }}</div>
             <div class="text-tertiary text-xs mt-1">
               Est. value: {{ store.fmtCurrency(conversionData.lostTimeEstValue) }}
             </div>

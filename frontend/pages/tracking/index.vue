@@ -104,25 +104,25 @@
       <div class="hero-supporting-metrics mt-4 pt-4" id="tracking-range-totals">
         <div class="hero-sub-metric" id="metric-range-total-time">
           <div class="hero-sub-label">Total Time</div>
-          <div class="hero-sub-value text-brand">{{ rangeSummary.totalHM }}</div>
+          <div class="hero-sub-value kpi-val-1">{{ rangeSummary.totalHM }}</div>
           <div class="text-tertiary text-xs mt-1">{{ rangeSummary.sessions.length }} session{{ rangeSummary.sessions.length !== 1 ? 's' : '' }}</div>
         </div>
 
         <div class="hero-sub-metric" id="metric-range-paid-time">
           <div class="hero-sub-label">Paid Work Time</div>
-          <div class="hero-sub-value" style="color:var(--color-success);">{{ rangeSummary.paidHM }}</div>
+          <div class="hero-sub-value kpi-val-2">{{ rangeSummary.paidHM }}</div>
           <div class="text-tertiary text-xs mt-1">billable / revenue work</div>
         </div>
 
         <div class="hero-sub-metric" id="metric-range-unpaid-client">
           <div class="hero-sub-label">Unpaid Client Work</div>
-          <div class="hero-sub-value" style="color:#D97706;">{{ rangeSummary.unpaidClientHM }}</div>
+          <div class="hero-sub-value kpi-val-3">{{ rangeSummary.unpaidClientHM }}</div>
           <div class="text-tertiary text-xs mt-1">Est. value: {{ store.fmtCurrency(rangeSummary.unpaidClientEst) }}</div>
         </div>
 
         <div class="hero-sub-metric" id="metric-range-intentional-unpaid">
           <div class="hero-sub-label">Intentional Unpaid</div>
-          <div class="hero-sub-value" style="color:#2563EB;">{{ rangeSummary.intentionalUnpaidHM }}</div>
+          <div class="hero-sub-value kpi-val-4">{{ rangeSummary.intentionalUnpaidHM }}</div>
           <div class="text-tertiary text-xs mt-1">Est. value: {{ store.fmtCurrency(rangeSummary.intentionalUnpaidEst) }}</div>
         </div>
       </div>

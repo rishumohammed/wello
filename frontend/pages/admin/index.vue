@@ -1,123 +1,277 @@
 <template>
-  <div class="admin-dashboard animate-fade-in">
-    <!-- Stat Cards Grid (Global Wello Card Style) -->
-    <div class="grid-4 gap-4 mb-6" id="admin-stat-cards">
+  <div class="admin-dashboard animate-fade-in" style="display:flex;flex-direction:column;gap:24px;">
+    <!-- 5 KPI Metric Cards Grid (Matching Wello Global UI Design Style) -->
+    <div class="grid-2 md:grid-5 gap-4" id="admin-stat-cards">
       <!-- Card 1: Total Users -->
-      <div class="card card-padded" style="border-left: 4px solid var(--color-purple); box-shadow: var(--shadow-sm);">
-        <div class="text-xs text-tertiary fw-600 uppercase tracking-wider mb-1">Total Users</div>
-        <div class="text-2xl fw-800 text-primary mb-1">{{ users.length }}</div>
-        <div class="text-xs text-secondary flex items-center justify-between">
-          <span>Registered Accounts</span>
-          <NuxtLink to="/admin/users" class="auth-link-highlight">Manage →</NuxtLink>
+      <div class="metric-card hover-lift">
+        <div class="metric-header">
+          <span class="metric-label">Total Users</span>
+          <div class="metric-icon-box kpi-icon-1">
+            <IconUser :size="18" />
+          </div>
+        </div>
+        <div>
+          <div class="metric-value kpi-val-1 mb-2">
+            {{ stats.totalUsers || 0 }}
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="badge badge-completed">
+              ● Active: {{ stats.activeUsers || 0 }}
+            </span>
+            <NuxtLink
+              to="/admin/users"
+              class="btn btn-ghost btn-sm"
+            >
+              <span>View</span>
+              <span>→</span>
+            </NuxtLink>
+          </div>
         </div>
       </div>
 
-      <!-- Card 2: System Roles -->
-      <div class="card card-padded" style="border-left: 4px solid var(--color-info); box-shadow: var(--shadow-sm);">
-        <div class="text-xs text-tertiary fw-600 uppercase tracking-wider mb-1">Admins & Staff</div>
-        <div class="text-2xl fw-800 text-primary mb-1">{{ adminCount }}</div>
-        <div class="text-xs text-secondary flex items-center justify-between">
-          <span>System Administrators</span>
-          <NuxtLink to="/admin/users" class="auth-link-highlight">View All →</NuxtLink>
+      <!-- Card 2: Category Queue -->
+      <div class="metric-card hover-lift">
+        <div class="metric-header">
+          <span class="metric-label">Category Queue</span>
+          <div class="metric-icon-box kpi-icon-2">
+            <IconAlert :size="18" />
+          </div>
+        </div>
+        <div>
+          <div class="metric-value kpi-val-2 mb-2">
+            {{ stats.pendingCategoryRequests || 0 }}
+          </div>
+          <div class="flex items-center justify-between">
+            <span
+              class="badge"
+              :class="stats.pendingCategoryRequests > 0 ? 'badge-quoted' : 'badge-potential'"
+            >
+              {{ stats.pendingCategoryRequests > 0 ? 'Action Needed' : 'All Clear' }}
+            </span>
+            <NuxtLink
+              to="/admin/category-requests"
+              class="btn btn-ghost btn-sm"
+            >
+              <span>Review</span>
+              <span>→</span>
+            </NuxtLink>
+          </div>
         </div>
       </div>
 
-      <!-- Card 3: Resend Connection -->
-      <div class="card card-padded" :style="{ borderLeft: config.hasKey ? '4px solid var(--color-success)' : '4px solid var(--color-warning)', boxShadow: 'var(--shadow-sm)' }">
-        <div class="text-xs text-tertiary fw-600 uppercase tracking-wider mb-1">Resend API Provider</div>
-        <div class="text-lg fw-700 text-primary mb-1 truncate">{{ config.fromEmail }}</div>
-        <div class="text-xs text-secondary flex items-center justify-between">
-          <span>{{ config.hasKey ? 'Live Production API' : 'Sandbox (Dev Mode)' }}</span>
-          <NuxtLink to="/admin/config" class="auth-link-highlight">Settings →</NuxtLink>
+      <!-- Card 3: Jobs & Services -->
+      <div class="metric-card hover-lift">
+        <div class="metric-header">
+          <span class="metric-label">Jobs & Services</span>
+          <div class="metric-icon-box kpi-icon-3">
+            <IconBriefcase :size="18" />
+          </div>
+        </div>
+        <div>
+          <div class="metric-value kpi-val-3 mb-2">
+            {{ stats.totalJobs || 0 }}
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="badge badge-approved">
+              {{ stats.activeJobs || 0 }} Active
+            </span>
+            <NuxtLink
+              to="/admin/jobs"
+              class="btn btn-ghost btn-sm"
+            >
+              <span>Moderate</span>
+              <span>→</span>
+            </NuxtLink>
+          </div>
         </div>
       </div>
 
-      <!-- Card 4: Total Auth Events -->
-      <div class="card card-padded" style="border-left: 4px solid var(--color-pink); box-shadow: var(--shadow-sm);">
-        <div class="text-xs text-tertiary fw-600 uppercase tracking-wider mb-1">Auth & OTP Events</div>
-        <div class="text-2xl fw-800 text-primary mb-1">{{ logs.length }}</div>
-        <div class="text-xs text-secondary flex items-center justify-between">
-          <span>Recorded Logs</span>
-          <NuxtLink to="/admin/logs" class="auth-link-highlight">View Logs →</NuxtLink>
+      <!-- Card 4: Funnel Rate -->
+      <div class="metric-card hover-lift">
+        <div class="metric-header">
+          <span class="metric-label">Funnel Rate</span>
+          <div class="metric-icon-box kpi-icon-4">
+            <IconInsights :size="18" />
+          </div>
+        </div>
+        <div>
+          <div class="metric-value kpi-val-4 mb-2">
+            {{ funnelSummary.overallConversionRate || 0 }}%
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="badge badge-completed">
+              Completion Rate
+            </span>
+            <NuxtLink
+              to="/admin/registration-pipeline"
+              class="btn btn-ghost btn-sm"
+            >
+              <span>Funnel</span>
+              <span>→</span>
+            </NuxtLink>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 5: Audit Activity -->
+      <div class="metric-card hover-lift">
+        <div class="metric-header">
+          <span class="metric-label">Audit Activity</span>
+          <div class="metric-icon-box kpi-icon-5">
+            <IconShield :size="18" />
+          </div>
+        </div>
+        <div>
+          <div class="metric-value kpi-val-5 mb-2">
+            {{ stats.auditLogsCount || 0 }}
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="badge badge-in-progress">
+              Recorded Events
+            </span>
+            <button
+              @click="activeTab = 'audit'"
+              class="btn btn-ghost btn-sm"
+            >
+              <span>Logs</span>
+              <span>→</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Quick Navigation Shortcuts -->
-    <div class="card card-padded mb-6">
-      <div class="card-title mb-4">Quick Console Controls</div>
-      <div class="grid-3 gap-4" id="admin-quick-actions">
-        <NuxtLink to="/admin/users" class="card p-4 hover-lift text-decoration-none" style="border:1px solid var(--border-color);display:flex;align-items:center;gap:14px;box-shadow:var(--shadow-xs);">
-          <div style="width:42px;height:42px;border-radius:12px;background:rgba(122,63,246,0.1);color:var(--color-purple);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-            <IconUser :size="20" />
-          </div>
+    <!-- Middle Split: Registration Funnel Visualizer & Category Request Queue -->
+    <div class="grid-1 md:grid-2 gap-6">
+      <!-- Onboarding Funnel Progress -->
+      <div class="card card-padded">
+        <div class="flex items-center justify-between mb-4">
           <div>
-            <div class="fw-700 text-primary text-sm">User Directory & Roles</div>
-            <div class="text-xs text-tertiary">Inspect registered users and update role permissions</div>
+            <div class="card-title text-base">Registration Funnel Overview</div>
+            <div class="card-subtitle text-xs">Conversion across key user onboarding stages</div>
           </div>
-        </NuxtLink>
+          <NuxtLink to="/admin/registration-pipeline" class="btn btn-secondary btn-sm" style="font-size:11px;">Full Pipeline →</NuxtLink>
+        </div>
 
-        <NuxtLink to="/admin/config" class="card p-4 hover-lift text-decoration-none" style="border:1px solid var(--border-color);display:flex;align-items:center;gap:14px;box-shadow:var(--shadow-xs);">
-          <div style="width:42px;height:42px;border-radius:12px;background:rgba(0,123,255,0.1);color:var(--color-blue);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-            <IconSettings :size="20" />
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div v-for="stage in keyFunnelStages" :key="stage.stageName" style="display:flex;flex-direction:column;gap:4px;">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-semibold text-primary">{{ stage.stageLabel }}</span>
+              <span class="text-secondary font-mono">{{ stage.count }} users ({{ stage.conversionRate }}%)</span>
+            </div>
+            <div style="width:100%;height:8px;background:var(--color-off-white);border-radius:4px;overflow:hidden;border:1px solid var(--border-subtle);">
+              <div
+                style="height:100%;background:var(--grad-brand);border-radius:4px;transition:width 0.4s ease;"
+                :style="{ width: `${stage.conversionRate}%` }"
+              ></div>
+            </div>
           </div>
-          <div>
-            <div class="fw-700 text-primary text-sm">Resend API Configuration</div>
-            <div class="text-xs text-tertiary">API keys, sender names, and OTP expiration limits</div>
-          </div>
-        </NuxtLink>
+        </div>
+      </div>
 
-        <NuxtLink to="/admin/test-email" class="card p-4 hover-lift text-decoration-none" style="border:1px solid var(--border-color);display:flex;align-items:center;gap:14px;box-shadow:var(--shadow-xs);">
-          <div style="width:42px;height:42px;border-radius:12px;background:rgba(16,185,129,0.1);color:var(--color-success);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-            <IconClock :size="20" />
-          </div>
+      <!-- Pending Category Requests Queue -->
+      <div class="card card-padded">
+        <div class="flex items-center justify-between mb-4">
           <div>
-            <div class="fw-700 text-primary text-sm">Live Email Dispatcher</div>
-            <div class="text-xs text-tertiary">Test OTP dispatching directly via Resend REST API</div>
+            <div class="card-title text-base">Pending Category Requests</div>
+            <div class="card-subtitle text-xs">User taxonomy submissions awaiting review</div>
+          </div>
+          <NuxtLink to="/admin/category-requests" class="btn btn-secondary btn-sm" style="font-size:11px;">Manage Queue →</NuxtLink>
+        </div>
+
+        <div v-if="pendingRequests.length === 0" class="text-center py-8 text-tertiary text-xs">
+          ✨ All category requests have been processed!
+        </div>
+
+        <div v-else style="display:flex;flex-direction:column;gap:10px;">
+          <div
+            v-for="req in pendingRequests.slice(0, 3)"
+            :key="req.id"
+            style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--color-off-white);border-radius:8px;border:1px solid var(--border-color);"
+          >
+            <div>
+              <div class="font-bold text-sm text-primary">{{ req.requestedName }}</div>
+              <div class="text-xs text-tertiary">Requested by {{ req.userEmail }} · {{ req.requestCount }} request(s)</div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                @click="quickApproveCategory(req.id)"
+                class="btn btn-primary btn-sm"
+                style="padding:2px 8px;font-size:11px;"
+              >
+                Approve
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Console Shortcuts Grid (8 Color-Coded Module Cards) -->
+    <div class="card card-padded">
+      <div class="card-title text-base mb-4">Console Management Modules</div>
+      <div class="grid-2 md:grid-4 gap-4" id="admin-quick-actions">
+        <NuxtLink
+          v-for="module in consoleModules"
+          :key="module.to"
+          :to="module.to"
+          class="card p-3 hover-lift text-decoration-none"
+          style="border:1px solid var(--border-color);display:flex;align-items:center;gap:12px;box-shadow:var(--shadow-xs);transition:all 0.15s ease;"
+        >
+          <div
+            :style="{ background: module.bg, color: module.color }"
+            style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;"
+          >
+            <component :is="module.icon" :size="18" />
+          </div>
+          <div style="min-width:0;">
+            <div class="font-bold text-primary text-xs truncate">{{ module.title }}</div>
+            <div class="text-xs text-tertiary truncate" style="font-size:11px;">{{ module.desc }}</div>
           </div>
         </NuxtLink>
       </div>
     </div>
 
-    <!-- Recent Audit Logs Table Preview -->
+    <!-- Recent System Audit Activity Table -->
     <div class="card" id="recent-logs-preview">
       <div class="card-header flex items-center justify-between">
         <div>
-          <div class="card-title">Recent System Activity</div>
-          <div class="card-subtitle">Latest authentication dispatches and security events</div>
+          <div class="card-title text-base">Recent Audit Trail</div>
+          <div class="card-subtitle text-xs">Latest system changes and administrative security logs</div>
         </div>
-        <NuxtLink to="/admin/logs" class="btn btn-secondary btn-sm">View Full Logs →</NuxtLink>
+        <NuxtLink to="/admin/audit-logs" class="btn btn-secondary btn-sm" style="font-size:11px;">View All Audit Logs →</NuxtLink>
       </div>
 
       <div class="table-responsive">
-        <table class="table">
+        <table class="table text-xs">
           <thead>
             <tr>
               <th>Timestamp</th>
-              <th>Type</th>
-              <th>Email</th>
-              <th>Status</th>
+              <th>Module</th>
+              <th>Action</th>
+              <th>Admin / User</th>
               <th>Details</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-if="logs.length === 0">
-              <td colspan="5" class="text-center py-6 text-tertiary text-sm">No activity events logged yet.</td>
+            <tr v-if="auditLogs.length === 0">
+              <td colspan="5" class="text-center py-6 text-tertiary">No audit activity recorded yet.</td>
             </tr>
-            <tr v-for="log in recentLogs" :key="log.id">
-              <td class="text-xs text-tertiary whitespace-nowrap">{{ formatTime(log.timestamp) }}</td>
+            <tr v-for="log in recentAuditLogs" :key="log.id">
+              <td class="text-tertiary whitespace-nowrap">{{ formatTime(log.createdAt) }}</td>
               <td>
-                <span class="badge" :class="getEventTypeBadge(log.type)">
-                  {{ log.type }}
+                <span class="badge" style="background:var(--color-off-white);border:1px solid var(--border-color);color:var(--text-secondary);font-size:10px;">
+                  {{ log.module }}
                 </span>
               </td>
-              <td class="text-xs fw-600 text-primary">{{ log.email }}</td>
               <td>
-                <span class="badge" :class="log.status === 'success' ? 'badge-completed' : (log.status === 'failed' ? 'badge-lost' : 'badge-quoted')">
-                  {{ log.status }}
+                <span class="badge" :class="getActionBadgeClass(log.action)">
+                  {{ log.action }}
                 </span>
               </td>
-              <td class="text-xs text-secondary max-w-md truncate">{{ log.details }}</td>
+              <td class="font-medium text-primary">{{ log.adminEmail || 'System' }}</td>
+              <td class="text-secondary max-w-md truncate">{{ log.details || '—' }}</td>
             </tr>
           </tbody>
         </table>
@@ -128,41 +282,117 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useToast } from '~/composables/useToast'
 
 definePageMeta({
   layout: 'admin',
   middleware: 'admin',
 })
 
-const config = ref({
-  hasKey: false,
-  fromEmail: 'onboarding@resend.dev',
-  devMode: true,
+const toast = useToast()
+const refreshing = ref(false)
+
+const stats = ref({})
+const funnel = ref([])
+const funnelSummary = ref({})
+const categoryRequests = ref([])
+const auditLogs = ref([])
+const config = ref({})
+
+const currentDateStr = computed(() => {
+  return new Date().toLocaleDateString('en-IN', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
 })
 
-const users = ref([])
-const logs = ref([])
+const pendingRequests = computed(() => {
+  return categoryRequests.value.filter(r => r.status === 'PENDING')
+})
 
-const adminCount = computed(() => users.value.filter(u => u.role === 'admin').length)
-const recentLogs = computed(() => logs.value.slice(0, 5))
+const keyFunnelStages = computed(() => {
+  if (!funnel.value || funnel.value.length === 0) return []
+  const labelsMap = {
+    'registration_started': '1. Registration Started',
+    'email_entered': '2. Email Entered',
+    'password_created': '3. Password Created',
+    'service_selected': '4. Service Selected',
+    'first_project_created': '5. First Project Created',
+  }
+  return funnel.value
+    .filter(s => labelsMap[s.stageName])
+    .map(s => ({
+      ...s,
+      stageLabel: labelsMap[s.stageName],
+    }))
+})
+
+const recentAuditLogs = computed(() => {
+  return auditLogs.value.slice(0, 6)
+})
+
+const consoleModules = [
+  { title: 'User Directory', desc: 'Accounts & status', to: '/admin/users', icon: resolveComponent('IconUser'), bg: 'rgba(122,63,246,0.1)', color: 'var(--color-purple)' },
+  { title: 'Registration Funnel', desc: 'Drop-off analytics', to: '/admin/registration-pipeline', icon: resolveComponent('IconClock'), bg: 'rgba(16,185,129,0.1)', color: 'var(--color-success)' },
+  { title: 'Categories', desc: 'Master taxonomy', to: '/admin/categories', icon: resolveComponent('IconFolders'), bg: 'rgba(255,159,28,0.1)', color: 'var(--color-sunrise)' },
+  { title: 'Category Requests', desc: 'User request queue', to: '/admin/category-requests', icon: resolveComponent('IconAlert'), bg: 'rgba(255,56,125,0.1)', color: 'var(--color-pink)' },
+  { title: 'Jobs & Services', desc: 'Listing moderation', to: '/admin/jobs', icon: resolveComponent('IconBriefcase'), bg: 'rgba(0,123,255,0.1)', color: 'var(--color-blue)' },
+  { title: 'Analytics Center', desc: 'Platform intelligence', to: '/admin/analytics', icon: resolveComponent('IconInsights'), bg: 'rgba(59,130,246,0.1)', color: 'var(--color-info)' },
+  { title: 'Resend & Email Engine', desc: 'API keys & templates', to: '/admin/settings?tab=resend', icon: resolveComponent('IconEdit'), bg: 'rgba(122,63,246,0.1)', color: 'var(--color-purple)' },
+  { title: 'Security & Roles', desc: 'Admin RBAC', to: '/admin/settings?tab=roles', icon: resolveComponent('IconShield'), bg: 'rgba(16,185,129,0.1)', color: 'var(--color-success)' },
+]
 
 onMounted(async () => {
   await fetchOverviewData()
 })
 
 async function fetchOverviewData() {
+  refreshing.value = true
   try {
-    const [configRes, usersRes, logsRes] = await Promise.all([
+    const [statsRes, funnelRes, requestsRes, logsRes, configRes] = await Promise.all([
+      $fetch('/api/admin/stats').catch(() => null),
+      $fetch('/api/admin/funnel').catch(() => null),
+      $fetch('/api/admin/category-requests').catch(() => null),
+      $fetch('/api/admin/audit-logs').catch(() => null),
       $fetch('/api/admin/config').catch(() => null),
-      $fetch('/api/admin/users').catch(() => null),
-      $fetch('/api/admin/logs').catch(() => null),
     ])
 
+    if (statsRes?.stats) stats.value = statsRes.stats
+    if (funnelRes?.funnel) {
+      funnel.value = funnelRes.funnel
+      funnelSummary.value = funnelRes.summary || {}
+    }
+    if (requestsRes?.requests) categoryRequests.value = requestsRes.requests
+    if (logsRes?.logs) auditLogs.value = logsRes.logs
     if (configRes?.config) config.value = configRes.config
-    if (usersRes?.users) users.value = usersRes.users
-    if (logsRes?.logs) logs.value = logsRes.logs
   } catch (err) {
-    console.error('Failed to load overview data', err)
+    console.error('Failed to load admin overview data:', err)
+  } finally {
+    refreshing.value = false
+  }
+}
+
+async function refreshData() {
+  await fetchOverviewData()
+  toast.success('Admin Dashboard updated.')
+}
+
+async function quickApproveCategory(requestId) {
+  try {
+    const res = await $fetch('/api/admin/category-requests', {
+      method: 'POST',
+      body: {
+        requestId,
+        action: 'APPROVE',
+        adminEmail: 'admin@wello.com',
+      },
+    })
+    toast.success(res?.message || 'Category approved!')
+    await fetchOverviewData()
+  } catch (err) {
+    toast.error('Failed to approve category request.')
   }
 }
 
@@ -181,10 +411,10 @@ function formatTime(isoStr) {
   }
 }
 
-function getEventTypeBadge(type) {
-  if (type === 'login_success' || type === 'register_success') return 'badge-completed'
-  if (type === 'verify_failed') return 'badge-lost'
-  if (type === 'send_otp') return 'badge-job'
+function getActionBadgeClass(action) {
+  if (!action) return 'badge-secondary'
+  if (action.includes('APPROVED') || action.includes('CREATED') || action.includes('SUCCESS')) return 'badge-completed'
+  if (action.includes('REJECTED') || action.includes('SUSPENDED') || action.includes('BLOCKED')) return 'badge-lost'
   return 'badge-quoted'
 }
 </script>

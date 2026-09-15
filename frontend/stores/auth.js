@@ -29,52 +29,89 @@ const DEMO_ADMIN = {
 }
 
 export const useAuthStore = defineStore('auth', () => {
-  // Read existing session from localStorage if available
-  let initialToken = null
-  let initialUser = null
+  // Use Nuxt useCookie for SSR & Client session persistence across page refreshes
+  const tokenCookie  = useCookie(AUTH_TOKEN_KEY, { maxAge: 60 * 60 * 24 * 30, path: '/' })
+  const userCookie   = useCookie(AUTH_USER_KEY,  { maxAge: 60 * 60 * 24 * 30, path: '/' })
+  const logoutCookie = useCookie('wello_logged_out', { maxAge: 60 * 60 * 24 * 30, path: '/' })
 
+  let initialToken = tokenCookie.value || null
+  let initialUser  = null
+
+  if (userCookie.value) {
+    try {
+      initialUser = typeof userCookie.value === 'string' ? JSON.parse(userCookie.value) : userCookie.value
+    } catch (e) {
+      initialUser = userCookie.value
+    }
+  }
+
+  // Fallback to localStorage if client-side and cookie not parsed
   if (typeof window !== 'undefined') {
     try {
-      initialToken = localStorage.getItem(AUTH_TOKEN_KEY)
-      const userStr = localStorage.getItem(AUTH_USER_KEY)
-      if (userStr) initialUser = JSON.parse(userStr)
+      if (!initialToken) initialToken = localStorage.getItem(AUTH_TOKEN_KEY)
+      if (!initialUser) {
+        const userStr = localStorage.getItem(AUTH_USER_KEY)
+        if (userStr) initialUser = JSON.parse(userStr)
+      }
     } catch (e) {
       console.warn('Could not read auth session from storage', e)
     }
   }
 
-  // If no saved token in localStorage, start with DEMO_USER on fresh load unless explicitly logged out
-  const isExplicitlyLoggedOut = typeof window !== 'undefined' && localStorage.getItem('wello_logged_out') === 'true'
-  
+  const isExplicitlyLoggedOut = Boolean(
+    logoutCookie.value === 'true' ||
+    (typeof window !== 'undefined' && localStorage.getItem('wello_logged_out') === 'true')
+  )
+
   const token = ref(isExplicitlyLoggedOut ? null : (initialToken || 'demo_token_wello'))
   const user  = ref(isExplicitlyLoggedOut ? null : (initialUser  || { ...DEMO_USER }))
 
   const isAuthenticated = computed(() => Boolean(token.value && user.value))
+  const isLoggedIn = computed(() => Boolean(token.value && user.value))
   const isAdmin = computed(() => user.value?.role === 'admin')
 
   function init() {
-    if (typeof window === 'undefined') return
-    try {
-      const isLoggedOut = localStorage.getItem('wello_logged_out') === 'true'
-      if (isLoggedOut) {
-        token.value = null
-        user.value = null
-        return
+    const isLoggedOut = logoutCookie.value === 'true' || (typeof window !== 'undefined' && localStorage.getItem('wello_logged_out') === 'true')
+    if (isLoggedOut) {
+      token.value = null
+      user.value = null
+      return
+    }
+
+    if (userCookie.value) {
+      try {
+        const parsed = typeof userCookie.value === 'string' ? JSON.parse(userCookie.value) : userCookie.value
+        if (parsed) {
+          user.value = parsed
+          token.value = tokenCookie.value || token.value
+          return
+        }
+      } catch (e) {}
+    }
+
+    if (typeof window !== 'undefined') {
+      try {
+        const savedToken = localStorage.getItem(AUTH_TOKEN_KEY)
+        const userStr = localStorage.getItem(AUTH_USER_KEY)
+        if (savedToken && userStr) {
+          token.value = savedToken
+          user.value = JSON.parse(userStr)
+        }
+      } catch (e) {
+        console.warn('Could not read auth session from storage', e)
       }
-      const savedToken = localStorage.getItem(AUTH_TOKEN_KEY)
-      const userStr = localStorage.getItem(AUTH_USER_KEY)
-      if (savedToken && userStr) {
-        token.value = savedToken
-        user.value = JSON.parse(userStr)
-      }
-    } catch (e) {
-      console.warn('Could not read auth session from storage', e)
     }
   }
 
   function setSession(newToken, newUser) {
     token.value = newToken
     user.value = newUser
+
+    try {
+      logoutCookie.value = null
+      tokenCookie.value = newToken
+      userCookie.value = newUser
+    } catch (e) {}
 
     if (typeof window !== 'undefined') {
       try {
@@ -145,6 +182,12 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = null
     user.value = null
 
+    try {
+      logoutCookie.value = 'true'
+      tokenCookie.value = null
+      userCookie.value = null
+    } catch (e) {}
+
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem('wello_logged_out', 'true')
@@ -166,6 +209,7 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     user,
     isAuthenticated,
+    isLoggedIn,
     isAdmin,
     init,
     sendOtp,
