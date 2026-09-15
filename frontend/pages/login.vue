@@ -316,7 +316,11 @@ async function handleVerifyOtp() {
     })
 
     if (res.success) {
-      router.push('/')
+      if (authStore.isAdmin) {
+        router.push('/admin')
+      } else {
+        router.push('/')
+      }
     }
   } catch (err) {
     errorMessage.value = err?.message || 'Invalid or expired OTP code.'
