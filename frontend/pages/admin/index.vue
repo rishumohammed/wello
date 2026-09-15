@@ -1,28 +1,5 @@
 <template>
   <div class="admin-dashboard animate-fade-in">
-    <!-- Welcome Header Banner (High-contrast Wello Brand Banner) -->
-    <div class="card card-padded mb-6" style="background: var(--grad-brand); color: #FFFFFF; border: none; box-shadow: var(--shadow-md);">
-      <div class="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <div class="flex items-center gap-2 mb-2">
-            <span class="badge" style="background:rgba(255, 255, 255, 0.2);color:#FFFFFF;border:1px solid rgba(255,255,255,0.4);font-weight:700;">🛡️ System Admin</span>
-            <span class="badge" style="background:rgba(255, 255, 255, 0.25);color:#FFFFFF;font-weight:700;">
-              {{ config.hasKey ? '● Resend API Connected' : '⚡ Local Sandbox Mode' }}
-            </span>
-          </div>
-          <h1 style="font-size:24px;font-weight:800;margin-bottom:6px;color:#FFFFFF;">Wello Platform Administration</h1>
-          <p style="font-size:14px;color:rgba(255,255,255,0.9);max-width:650px;line-height:1.5;">
-            Welcome to the Admin Console. Monitor platform performance, manage user permissions, configure Resend REST API delivery, and audit security dispatches.
-          </p>
-        </div>
-        <div class="flex items-center gap-3">
-          <NuxtLink to="/admin/config" class="btn" style="background:#FFFFFF;color:var(--color-purple);font-weight:700;border:none;box-shadow:0 2px 8px rgba(0,0,0,0.12);padding:8px 16px;border-radius:8px;font-size:13px;text-decoration:none;" id="dashboard-btn-config">
-            ⚙️ Configure Resend API
-          </NuxtLink>
-        </div>
-      </div>
-    </div>
-
     <!-- Stat Cards Grid (Global Wello Card Style) -->
     <div class="grid-4 gap-4 mb-6" id="admin-stat-cards">
       <!-- Card 1: Total Users -->
