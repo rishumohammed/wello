@@ -1,17 +1,15 @@
 <template>
-  <div class="admin-shell">
-    <!-- Admin Sidebar -->
-    <aside class="admin-sidebar">
+  <div class="app-shell">
+    <!-- Desktop Admin Sidebar (Matching Global Wello Design Style) -->
+    <aside class="app-sidebar">
       <div class="sidebar-logo">
-        <NuxtLink to="/admin" class="sidebar-logo-link">
-          <img src="~/assets/logo.png" alt="Wello" style="height:28px;width:auto;object-fit:contain;" />
-          <span class="admin-console-badge">CONSOLE</span>
+        <NuxtLink to="/admin" class="sidebar-logo-link" style="display:flex;align-items:center;gap:8px;text-decoration:none;">
+          <img src="~/assets/logo.png" alt="Wello" style="height:30px;width:auto;object-fit:contain;" />
+          <span class="admin-badge">ADMIN</span>
         </NuxtLink>
       </div>
 
-      <div class="sidebar-section-title">ADMINISTRATION</div>
-
-      <nav class="sidebar-nav">
+      <nav class="sidebar-nav" style="padding-top:16px;">
         <NuxtLink
           v-for="item in navItems"
           :key="item.to"
@@ -26,16 +24,19 @@
       </nav>
 
       <div class="sidebar-footer">
-        <div class="sidebar-user">
-          <div class="user-avatar-admin">{{ displayAvatar }}</div>
-          <div class="user-info">
-            <div class="user-name">{{ displayName }}</div>
-            <div class="user-role-badge">System Administrator</div>
+        <div class="sidebar-user" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+            <div class="user-avatar" style="background:var(--grad-brand);color:#FFFFFF;font-weight:700;">{{ displayAvatar }}</div>
+            <div class="user-info" style="min-width:0;">
+              <div class="user-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ displayName }}</div>
+              <div class="user-role" style="font-size:11px;color:var(--color-purple);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">System Admin</div>
+            </div>
           </div>
           <button
             @click="handleLogout"
             class="btn-icon"
             title="Sign Out"
+            style="width:30px;height:30px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-tertiary);cursor:pointer;display:flex;align-items:center;justify-content:center;"
             id="admin-logout-btn"
           >
             <IconLogOut :size="15" />
@@ -45,13 +46,18 @@
     </aside>
 
     <!-- Admin Main Content Area -->
-    <div class="admin-main">
+    <div class="app-main">
       <!-- Admin Topbar -->
-      <header class="admin-topbar">
+      <header class="app-topbar">
         <div class="topbar-left">
-          <div class="topbar-title flex items-center gap-2">
-            <IconShield :size="18" style="color:var(--color-purple);" />
-            <span class="fw-700 text-primary">{{ currentPageTitle }}</span>
+          <NuxtLink to="/admin" class="topbar-mobile-logo" style="text-decoration:none;">
+            <img src="~/assets/logo.png" alt="Wello" style="height:26px;width:auto;object-fit:contain;" />
+          </NuxtLink>
+          <div class="topbar-breadcrumb">
+            <span class="current" style="display:flex;align-items:center;gap:8px;">
+              <IconShield :size="16" style="color:var(--color-purple);" />
+              {{ currentPageTitle }}
+            </span>
           </div>
         </div>
 
@@ -81,7 +87,7 @@
       </header>
 
       <!-- Main Admin Content Slot -->
-      <main class="admin-content">
+      <main class="app-content">
         <slot />
       </main>
     </div>
@@ -137,194 +143,13 @@ function isActive(path) {
 </script>
 
 <style scoped>
-.admin-shell {
-  display: flex;
-  min-height: 100vh;
-  background-color: #0F172A;
-  color: #F8FAFC;
-}
-
-.admin-sidebar {
-  width: 250px;
-  background: #1E293B;
-  border-right: 1px solid #334155;
-  display: flex;
-  flex-direction: column;
-  position: fixed;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 100;
-}
-
-.sidebar-logo {
-  padding: 20px 20px 16px;
-  border-bottom: 1px solid #334155;
-}
-
-.sidebar-logo-link {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  text-decoration: none;
-}
-
-.admin-console-badge {
+.admin-badge {
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.8px;
-  background: linear-gradient(135deg, #7A3FF6 0%, #FF387D 100%);
+  background: var(--grad-brand);
   color: #FFFFFF;
   padding: 2px 6px;
   border-radius: 4px;
-}
-
-.sidebar-section-title {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  color: #64748B;
-  padding: 20px 20px 8px;
-}
-
-.sidebar-nav {
-  padding: 0 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-}
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  color: #94A3B8;
-  text-decoration: none;
-  font-size: 13px;
-  font-weight: 500;
-  transition: all 0.15s ease;
-}
-
-.nav-item:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: #F8FAFC;
-}
-
-.nav-item.active {
-  background: linear-gradient(135deg, rgba(122, 63, 246, 0.25) 0%, rgba(122, 63, 246, 0.1) 100%);
-  color: #A78BFA;
-  font-weight: 600;
-  border-left: 3px solid #7A3FF6;
-}
-
-.nav-icon {
-  width: 18px;
-  height: 18px;
-}
-
-.sidebar-footer {
-  padding: 16px;
-  border-top: 1px solid #334155;
-  background: #0F172A;
-}
-
-.sidebar-user {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.user-avatar-admin {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #7A3FF6 0%, #FF387D 100%);
-  color: #FFFFFF;
-  font-weight: 700;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.user-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.user-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: #F8FAFC;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.user-role-badge {
-  font-size: 10px;
-  color: #A78BFA;
-  font-weight: 500;
-}
-
-.btn-icon {
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
-  border: 1px solid #334155;
-  background: #1E293B;
-  color: #94A3B8;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.btn-icon:hover {
-  background: #334155;
-  color: #F8FAFC;
-}
-
-.admin-main {
-  margin-left: 250px;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  background-color: #F8FAFC;
-  color: #0F172A;
-}
-
-.admin-topbar {
-  height: 64px;
-  background: #FFFFFF;
-  border-bottom: 1px solid #E2E8F0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
-  position: sticky;
-  top: 0;
-  z-index: 90;
-}
-
-.admin-content {
-  padding: 24px;
-  flex: 1;
-}
-
-@media (max-width: 768px) {
-  .admin-sidebar {
-    width: 60px;
-  }
-  .sidebar-section-title, .nav-label, .user-info, .admin-console-badge {
-    display: none;
-  }
-  .admin-main {
-    margin-left: 60px;
-  }
 }
 </style>

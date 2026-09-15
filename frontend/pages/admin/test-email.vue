@@ -57,8 +57,8 @@
           <div v-if="testResponseError" class="auth-alert error mb-3">
             {{ testResponseError }}
           </div>
-          <div v-if="testResponseData" class="p-3 bg-dark border-radius-sm text-xs font-mono overflow-x-auto text-light">
-            <pre>{{ JSON.stringify(testResponseData, null, 2) }}</pre>
+          <div v-if="testResponseData" style="padding:14px;background:#1E293B;color:#F8FAFC;border-radius:10px;font-size:12px;font-family:monospace;overflow-x:auto;margin-top:12px;">
+            <pre style="margin:0;white-space:pre-wrap;word-break:break-all;">{{ JSON.stringify(testResponseData, null, 2) }}</pre>
           </div>
         </div>
         <div v-else class="text-xs text-tertiary py-8 text-center border-dashed border border-radius-sm">

@@ -1,32 +1,32 @@
 <template>
   <div class="admin-dashboard animate-fade-in">
-    <!-- Welcome Header -->
-    <div class="card card-padded mb-6" style="background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%); color: #FFFFFF; border: 1px solid #334155;">
+    <!-- Welcome Header Banner (High-contrast Wello Brand Banner) -->
+    <div class="card card-padded mb-6" style="background: var(--grad-brand); color: #FFFFFF; border: none; box-shadow: var(--shadow-md);">
       <div class="flex items-center justify-between flex-wrap gap-4">
         <div>
           <div class="flex items-center gap-2 mb-2">
-            <span class="badge" style="background:rgba(122, 63, 246, 0.25);color:#A78BFA;border:1px solid #7A3FF6;">System Admin</span>
-            <span class="badge" :style="{ background: config.hasKey ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)', color: config.hasKey ? '#34D399' : '#FBBF24' }">
+            <span class="badge" style="background:rgba(255, 255, 255, 0.2);color:#FFFFFF;border:1px solid rgba(255,255,255,0.4);font-weight:700;">🛡️ System Admin</span>
+            <span class="badge" style="background:rgba(255, 255, 255, 0.25);color:#FFFFFF;font-weight:700;">
               {{ config.hasKey ? '● Resend API Connected' : '⚡ Local Sandbox Mode' }}
             </span>
           </div>
-          <h1 style="font-size:24px;font-weight:800;margin-bottom:6px;">Wello Platform Administration</h1>
-          <p style="font-size:13px;color:#94A3B8;max-width:600px;line-height:1.5;">
-            Welcome to the dedicated Admin Console. Monitor system health, manage platform accounts, configure email API delivery dispatches, and review authentication security logs.
+          <h1 style="font-size:24px;font-weight:800;margin-bottom:6px;color:#FFFFFF;">Wello Platform Administration</h1>
+          <p style="font-size:14px;color:rgba(255,255,255,0.9);max-width:650px;line-height:1.5;">
+            Welcome to the Admin Console. Monitor platform performance, manage user permissions, configure Resend REST API delivery, and audit security dispatches.
           </p>
         </div>
         <div class="flex items-center gap-3">
-          <NuxtLink to="/admin/config" class="btn btn-primary" id="dashboard-btn-config">
+          <NuxtLink to="/admin/config" class="btn" style="background:#FFFFFF;color:var(--color-purple);font-weight:700;border:none;box-shadow:0 2px 8px rgba(0,0,0,0.12);padding:8px 16px;border-radius:8px;font-size:13px;text-decoration:none;" id="dashboard-btn-config">
             ⚙️ Configure Resend API
           </NuxtLink>
         </div>
       </div>
     </div>
 
-    <!-- Stat Cards Grid -->
+    <!-- Stat Cards Grid (Global Wello Card Style) -->
     <div class="grid-4 gap-4 mb-6" id="admin-stat-cards">
       <!-- Card 1: Total Users -->
-      <div class="card card-padded" style="border-left: 4px solid var(--color-purple);">
+      <div class="card card-padded" style="border-left: 4px solid var(--color-purple); box-shadow: var(--shadow-sm);">
         <div class="text-xs text-tertiary fw-600 uppercase tracking-wider mb-1">Total Users</div>
         <div class="text-2xl fw-800 text-primary mb-1">{{ users.length }}</div>
         <div class="text-xs text-secondary flex items-center justify-between">
@@ -36,7 +36,7 @@
       </div>
 
       <!-- Card 2: System Roles -->
-      <div class="card card-padded" style="border-left: 4px solid var(--color-info);">
+      <div class="card card-padded" style="border-left: 4px solid var(--color-info); box-shadow: var(--shadow-sm);">
         <div class="text-xs text-tertiary fw-600 uppercase tracking-wider mb-1">Admins & Staff</div>
         <div class="text-2xl fw-800 text-primary mb-1">{{ adminCount }}</div>
         <div class="text-xs text-secondary flex items-center justify-between">
@@ -46,7 +46,7 @@
       </div>
 
       <!-- Card 3: Resend Connection -->
-      <div class="card card-padded" :style="{ borderLeft: config.hasKey ? '4px solid var(--color-success)' : '4px solid var(--color-warning)' }">
+      <div class="card card-padded" :style="{ borderLeft: config.hasKey ? '4px solid var(--color-success)' : '4px solid var(--color-warning)', boxShadow: 'var(--shadow-sm)' }">
         <div class="text-xs text-tertiary fw-600 uppercase tracking-wider mb-1">Resend API Provider</div>
         <div class="text-lg fw-700 text-primary mb-1 truncate">{{ config.fromEmail }}</div>
         <div class="text-xs text-secondary flex items-center justify-between">
@@ -56,7 +56,7 @@
       </div>
 
       <!-- Card 4: Total Auth Events -->
-      <div class="card card-padded" style="border-left: 4px solid #EC4899;">
+      <div class="card card-padded" style="border-left: 4px solid var(--color-pink); box-shadow: var(--shadow-sm);">
         <div class="text-xs text-tertiary fw-600 uppercase tracking-wider mb-1">Auth & OTP Events</div>
         <div class="text-2xl fw-800 text-primary mb-1">{{ logs.length }}</div>
         <div class="text-xs text-secondary flex items-center justify-between">
@@ -70,8 +70,8 @@
     <div class="card card-padded mb-6">
       <div class="card-title mb-4">Quick Console Controls</div>
       <div class="grid-3 gap-4" id="admin-quick-actions">
-        <NuxtLink to="/admin/users" class="card p-4 hover-lift text-decoration-none" style="border:1px solid var(--border-color);display:flex;align-items:center;gap:14px;">
-          <div style="width:40px;height:40px;border-radius:10px;background:rgba(122,63,246,0.1);color:#7A3FF6;display:flex;align-items:center;justify-content:center;">
+        <NuxtLink to="/admin/users" class="card p-4 hover-lift text-decoration-none" style="border:1px solid var(--border-color);display:flex;align-items:center;gap:14px;box-shadow:var(--shadow-xs);">
+          <div style="width:42px;height:42px;border-radius:12px;background:rgba(122,63,246,0.1);color:var(--color-purple);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
             <IconUser :size="20" />
           </div>
           <div>
@@ -80,8 +80,8 @@
           </div>
         </NuxtLink>
 
-        <NuxtLink to="/admin/config" class="card p-4 hover-lift text-decoration-none" style="border:1px solid var(--border-color);display:flex;align-items:center;gap:14px;">
-          <div style="width:40px;height:40px;border-radius:10px;background:rgba(59,130,246,0.1);color:#3B82F6;display:flex;align-items:center;justify-content:center;">
+        <NuxtLink to="/admin/config" class="card p-4 hover-lift text-decoration-none" style="border:1px solid var(--border-color);display:flex;align-items:center;gap:14px;box-shadow:var(--shadow-xs);">
+          <div style="width:42px;height:42px;border-radius:12px;background:rgba(0,123,255,0.1);color:var(--color-blue);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
             <IconSettings :size="20" />
           </div>
           <div>
@@ -90,8 +90,8 @@
           </div>
         </NuxtLink>
 
-        <NuxtLink to="/admin/test-email" class="card p-4 hover-lift text-decoration-none" style="border:1px solid var(--border-color);display:flex;align-items:center;gap:14px;">
-          <div style="width:40px;height:40px;border-radius:10px;background:rgba(16,185,129,0.1);color:#10B981;display:flex;align-items:center;justify-content:center;">
+        <NuxtLink to="/admin/test-email" class="card p-4 hover-lift text-decoration-none" style="border:1px solid var(--border-color);display:flex;align-items:center;gap:14px;box-shadow:var(--shadow-xs);">
+          <div style="width:42px;height:42px;border-radius:12px;background:rgba(16,185,129,0.1);color:var(--color-success);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
             <IconClock :size="20" />
           </div>
           <div>
@@ -151,14 +151,11 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useAuthStore } from '~/stores/auth'
 
 definePageMeta({
   layout: 'admin',
   middleware: 'admin',
 })
-
-const authStore = useAuthStore()
 
 const config = ref({
   hasKey: false,
