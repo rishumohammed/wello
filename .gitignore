@@ -1,0 +1,17 @@
+# Nuxt & Node build artifacts
+node_modules/
+.nuxt/
+.output/
+dist/
+*.log
+
+# Environment & local credentials
+.env
+.env.*
+!.env.example
+
+# IDE & OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
