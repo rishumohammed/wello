@@ -1,7 +1,7 @@
 // test_store_and_invoicing.mjs
 // Wello Store & Basic Invoicing Addon Integration Test Suite
 
-const BASE_URL = 'http://localhost:3000'
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3001'
 
 async function runTests() {
   console.log('====================================================')

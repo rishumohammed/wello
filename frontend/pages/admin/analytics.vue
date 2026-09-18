@@ -6,7 +6,7 @@
         <p class="page-subtitle">Real-time database analytics covering user growth, onboarding funnels, category demand, and geographic distribution.</p>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 flex-wrap">
         <button
           v-for="r in ranges"
           :key="r.key"
@@ -16,6 +16,17 @@
         >
           {{ r.label }}
         </button>
+      </div>
+    </div>
+
+    <!-- Custom Date Range Bar for Admin Analytics -->
+    <div v-if="selectedRange === 'custom'" class="card card-padded mb-6 animate-fade-in" id="admin-custom-date-bar">
+      <div class="flex items-center gap-3 flex-wrap text-xs text-secondary">
+        <span class="fw-600 text-primary">Custom Window:</span>
+        <span>From</span>
+        <input v-model="customStart" type="date" class="form-input form-input-sm" @change="fetchAnalytics" />
+        <span>To</span>
+        <input v-model="customEnd" type="date" class="form-input form-input-sm" @change="fetchAnalytics" />
       </div>
     </div>
 
@@ -89,7 +100,7 @@
               <td class="text-xs text-secondary">{{ g.state }}</td>
               <td class="text-xs fw-600 text-primary">{{ g.city }}</td>
               <td class="table-text-right text-xs tabular fw-700">{{ g.users }}</td>
-              <td class="table-text-right text-xs tabular fw-700" style="color:var(--color-purple);">{{ g.activeJobs }}</td>
+              <td class="table-text-right text-xs tabular fw-700 text-purple">{{ g.activeJobs }}</td>
             </tr>
           </tbody>
         </table>
@@ -116,11 +127,11 @@
             <tr v-for="cd in categoryDemand" :key="cd.categoryId">
               <td class="fw-700 text-sm text-primary">{{ cd.categoryName }}</td>
               <td class="table-text-right text-xs tabular fw-600">{{ cd.totalRequests }}</td>
-              <td class="table-text-right text-xs tabular fw-600" style="color:var(--color-purple);">{{ cd.successfulConnections }}</td>
+              <td class="table-text-right text-xs tabular fw-600 text-purple">{{ cd.successfulConnections }}</td>
               <td class="table-text-right text-xs tabular fw-600">
                 {{ (cd.providerCount / (cd.totalJobs || 1)).toFixed(2) }}
               </td>
-              <td class="table-text-right text-xs tabular fw-700" style="color:var(--color-success);">+{{ cd.growthRatePercent }}%</td>
+              <td class="table-text-right text-xs tabular fw-700 text-success">+{{ cd.growthRatePercent }}%</td>
             </tr>
           </tbody>
         </table>
@@ -138,11 +149,15 @@ definePageMeta({
 })
 
 const selectedRange = ref('30days')
+const customStart = ref(new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10))
+const customEnd = ref(new Date().toISOString().slice(0, 10))
+
 const ranges = [
   { key: 'today', label: 'Today' },
   { key: '7days', label: '7 Days' },
   { key: '30days', label: '30 Days' },
   { key: '90days', label: '90 Days' },
+  { key: 'custom', label: 'Custom' },
 ]
 
 const overview = ref({
@@ -167,7 +182,10 @@ async function changeRange(key) {
 
 async function fetchAnalytics() {
   try {
-    const res = await $fetch(`/api/admin/analytics?range=${selectedRange.value}`)
+    const url = selectedRange.value === 'custom'
+      ? `/api/admin/analytics?range=custom&start=${customStart.value}&end=${customEnd.value}`
+      : `/api/admin/analytics?range=${selectedRange.value}`
+    const res = await $fetch(url)
     if (res?.success) {
       overview.value = res.overview
       geography.value = res.geography

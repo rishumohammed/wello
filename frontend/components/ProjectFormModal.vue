@@ -42,8 +42,7 @@
                 </label>
                 <button
                   type="button"
-                  class="btn btn-ghost btn-sm"
-                  style="padding: 0 4px; height: auto; font-size: 11px; color: var(--color-purple);"
+                  class="btn btn-ghost btn-sm btn-text-link"
                   @click="showNewClient = !showNewClient"
                 >
                   {{ showNewClient ? 'Choose existing' : '+ Add new customer' }}
@@ -51,7 +50,7 @@
               </div>
 
               <!-- Quick create new client -->
-              <div v-if="showNewClient" class="card card-padded mb-2" style="background: var(--color-off-white); border: 1px dashed var(--color-purple);">
+              <div v-if="showNewClient" class="card card-padded mb-2 bg-off-white border-dashed-purple">
                 <div class="form-group mb-2">
                   <input
                     v-model="newClientName"
@@ -89,8 +88,7 @@
                   <label class="form-label mb-0" for="form-proj-service">Service / Category</label>
                   <button
                     type="button"
-                    class="btn btn-ghost btn-sm"
-                    style="padding: 0; height: auto; font-size: 11px; color: var(--color-purple); text-decoration: underline;"
+                    class="btn btn-ghost btn-sm btn-text-link underline"
                     @click="showCategoryRequestModal = true"
                   >
                     Can't find your service?
@@ -115,8 +113,8 @@
             </div>
 
             <!-- Category Request Modal -->
-            <div v-if="showCategoryRequestModal" class="modal-overlay" style="z-index: 1100;" @click.self="showCategoryRequestModal = false">
-              <div class="modal" style="max-width: 440px;">
+            <div v-if="showCategoryRequestModal" class="modal-overlay z-modal-top" @click.self="showCategoryRequestModal = false">
+              <div class="modal max-w-440">
                 <div class="modal-header">
                   <div class="modal-title">Request a New Category</div>
                   <button type="button" class="modal-close" @click="showCategoryRequestModal = false">&times;</button>

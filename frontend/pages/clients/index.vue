@@ -1,97 +1,165 @@
 <template>
-  <div class="clients-page animate-fade-in" style="display:flex;flex-direction:column;gap:24px;">
+  <div class="clients-page flex flex-col gap-6 animate-fade-in">
     <!-- Page Header & Action Bar -->
     <div class="page-header flex items-center justify-between flex-wrap gap-4 mb-0">
       <div>
-        <h1 class="page-title">Clients</h1>
-        <p class="page-subtitle">Manage client relationships, contact details, associated projects, and income.</p>
+        <h1 class="page-title">Clients <span class="text-xs font-normal text-tertiary">({{ clients.length }})</span></h1>
+        <p class="page-subtitle">Manage client relationships, associated project portfolios, tracked time, and financial values.</p>
       </div>
       <button class="btn btn-primary" @click="openAddModal" id="btn-add-client-page">
         <IconPlus :size="16" /> Add Client
       </button>
     </div>
 
-    <!-- Search & Summary Bar -->
-    <div class="card card-padded flex items-center justify-between flex-wrap gap-4 mb-2">
-      <div class="form-group mb-0" style="max-width:320px;width:100%;">
-        <input
-          v-model="searchQuery"
-          type="text"
-          class="form-input"
-          placeholder="Search clients by name, company, or email…"
-        />
-      </div>
-
-      <div class="flex items-center gap-6 text-xs text-secondary">
-        <div>Total Clients: <span class="font-bold text-primary text-sm">{{ store.clients.length }}</span></div>
-        <div>Total Projects: <span class="font-bold text-primary text-sm">{{ store.projects.length }}</span></div>
-      </div>
-    </div>
-
-    <!-- Clients List Card Container -->
+    <!-- Clients Directory Table Card -->
     <div class="card" id="clients-list-card">
-      <div class="card-header flex items-center justify-between">
-        <div class="card-title text-base">Client Directory</div>
-        <span class="text-xs text-tertiary">{{ filteredClients.length }} client(s) found</span>
-      </div>
 
-      <div v-if="filteredClients.length === 0" class="text-center py-12 text-tertiary text-sm">
-        No clients found. Click <strong>+ Add Client</strong> to create your first client relationship.
-      </div>
-
-      <div v-else style="display:flex;flex-direction:column;">
-        <div
-          v-for="client in filteredClients"
-          :key="client.id"
-          class="client-item-row flex items-center justify-between p-4"
-          style="border-bottom:1px solid var(--border-color);transition:background 0.15s ease;"
-          :id="`client-row-${client.id}`"
-        >
-          <!-- Client Avatar & Info -->
-          <div class="flex items-center gap-4 min-width-0">
-            <div
-              class="user-avatar"
-              style="width:44px;height:44px;font-size:13px;font-weight:700;background:var(--grad-brand);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(255,159,28,0.25);"
-            >
-              {{ initials(client.name) }}
-            </div>
-            <div class="min-width-0">
-              <div class="font-bold text-base text-primary truncate" style="line-height:1.2;">{{ client.name }}</div>
-              <div class="text-xs text-tertiary truncate mt-1">
-                {{ client.company || client.email || 'Independent Client' }}
-              </div>
-            </div>
-          </div>
-
-          <!-- Project Stats & Actions -->
-          <div class="flex items-center gap-6">
-            <div class="text-right hidden sm:block">
-              <div class="text-xs font-bold text-primary">{{ getClientProjectCount(client.id) }} Project(s)</div>
-              <div class="text-xs text-tertiary">{{ store.currency }} {{ getClientRevenue(client.id).toLocaleString('en-IN') }} Billed</div>
-            </div>
-
-            <div class="flex items-center gap-2">
-              <button
-                type="button"
-                @click="openEditModal(client)"
-                class="btn btn-secondary btn-sm"
-                title="Edit Client"
-              >
-                <IconEdit :size="14" />
-                <span class="hidden md:inline">Edit</span>
-              </button>
-              <button
-                type="button"
-                @click="confirmDeleteClient(client)"
-                class="btn btn-secondary btn-sm"
-                style="color:var(--color-error);border-color:rgba(239,68,68,0.3);"
-                title="Delete Client"
-              >
-                <IconTrash :size="14" />
-              </button>
-            </div>
-          </div>
+      <div v-if="clients.length === 0" class="empty-state py-12" id="clients-empty-state">
+        <div class="empty-icon"><IconUser :size="32" /></div>
+        <div class="empty-title text-base mt-2">No clients found</div>
+        <div class="empty-desc text-xs mt-1">
+          Click "+ Add Client" to create your first business relationship.
         </div>
+        <button class="btn btn-primary btn-sm mt-3" @click="openAddModal">Add Client</button>
+      </div>
+
+      <div v-else class="table-wrap">
+        <table class="table" id="clients-directory-table">
+          <thead>
+            <tr>
+              <th>Client & Company</th>
+              <th>Email</th>
+              <th>Phone Number</th>
+              <th>Associated Projects</th>
+              <th class="table-text-right">Outstanding</th>
+              <th class="table-text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="client in clients"
+              :key="client.id"
+              :id="`client-row-${client.id}`"
+              class="cursor-pointer"
+              @click="navigateTo(`/clients/${client.id}`)"
+            >
+              <!-- 1. Client & Company (with Location) -->
+              <td>
+                <div class="flex items-center gap-3">
+                  <div class="user-avatar-lg flex-shrink-0">
+                    {{ initials(client.name) }}
+                  </div>
+                  <div class="min-w-0">
+                    <NuxtLink
+                      :to="`/clients/${client.id}`"
+                      class="font-bold text-sm text-primary lh-tight hover:text-brand text-decoration-none"
+                      @click.stop
+                    >
+                      {{ client.name }}
+                    </NuxtLink>
+                    <div
+                      v-if="client.company && client.company.toLowerCase() !== client.name.toLowerCase()"
+                      class="text-xs text-secondary mt-0.5"
+                    >
+                      {{ client.company }}
+                    </div>
+                    <div class="text-xs text-tertiary flex items-center gap-1 mt-0.5">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                        <circle cx="12" cy="10" r="3"/>
+                      </svg>
+                      <span>{{ getClientLocation(client) }}</span>
+                    </div>
+                  </div>
+                </div>
+              </td>
+
+              <!-- 2. Email (Separate Column) -->
+              <td>
+                <a
+                  v-if="client.email"
+                  :href="`mailto:${client.email}`"
+                  class="text-xs text-secondary hover:text-brand font-medium text-decoration-none"
+                  @click.stop
+                >
+                  {{ client.email }}
+                </a>
+                <span v-else class="text-xs text-tertiary">—</span>
+              </td>
+
+              <!-- 3. Phone Number -->
+              <td>
+                <div class="text-sm text-primary font-medium">
+                  {{ getClientPhone(client) }}
+                </div>
+              </td>
+
+              <!-- 4. Associated Projects -->
+              <td>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-sm font-semibold text-primary">
+                    {{ getClientProjectStatusDisplay(client.id).countText }}
+                  </span>
+                  <span
+                    v-if="getClientProjectStatusDisplay(client.id).hasBadge"
+                    class="badge badge-xs"
+                    :class="getClientProjectStatusDisplay(client.id).badgeClass"
+                  >
+                    {{ getClientProjectStatusDisplay(client.id).badgeText }}
+                  </span>
+                </div>
+              </td>
+
+              <!-- 4. Outstanding Balance -->
+              <td class="table-text-right">
+                <div
+                  class="font-bold text-sm"
+                  :class="getClientOutstanding(client.id) > 0 ? 'text-warning' : 'text-tertiary'"
+                >
+                  {{ store.currency }} {{ getClientOutstanding(client.id).toLocaleString('en-IN') }}
+                </div>
+                <div class="text-xs mt-1">
+                  <span v-if="getClientOutstanding(client.id) > 0" class="badge badge-unpaid badge-xs">
+                    Pending
+                  </span>
+                  <span v-else class="text-tertiary">Settled</span>
+                </div>
+              </td>
+
+              <!-- 5. Actions -->
+              <td class="table-text-right" @click.stop>
+                <div class="flex items-center justify-end gap-1">
+                  <NuxtLink
+                    :to="`/clients/${client.id}`"
+                    class="btn btn-secondary btn-icon btn-sm"
+                    title="View Client Details"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  </NuxtLink>
+                  <button
+                    type="button"
+                    @click="openEditModal(client)"
+                    class="btn btn-secondary btn-icon btn-sm"
+                    title="Edit Client"
+                  >
+                    <IconEdit :size="14" />
+                  </button>
+                  <button
+                    type="button"
+                    @click="confirmDeleteClient(client)"
+                    class="btn btn-secondary btn-icon btn-sm text-error border-error-subtle"
+                    title="Delete Client"
+                  >
+                    <IconTrash :size="14" />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -126,6 +194,17 @@
                   class="form-input"
                   type="text"
                   placeholder="e.g. ABC Technologies Pvt Ltd"
+                />
+              </div>
+
+              <div class="form-group mb-3">
+                <label class="form-label" for="client-modal-location">Location / City</label>
+                <input
+                  id="client-modal-location"
+                  v-model="form.location"
+                  class="form-input"
+                  type="text"
+                  placeholder="e.g. Bengaluru, India"
                 />
               </div>
 
@@ -174,28 +253,21 @@ import { useToast } from '~/composables/useToast'
 const store = useWelloStore()
 const toast = useToast()
 
-const searchQuery = ref('')
+const clients = computed(() => store.clients)
 const showModal = ref(false)
 const editingClient = ref(null)
 
 const form = reactive({
   name: '',
   company: '',
+  location: '',
   email: '',
   phone: '',
 })
 
 const errors = reactive({ name: '' })
 
-const filteredClients = computed(() => {
-  if (!searchQuery.value.trim()) return store.clients
-  const q = searchQuery.value.trim().toLowerCase()
-  return store.clients.filter(c =>
-    (c.name && c.name.toLowerCase().includes(q)) ||
-    (c.company && c.company.toLowerCase().includes(q)) ||
-    (c.email && c.email.toLowerCase().includes(q))
-  )
-})
+
 
 function initials(name) {
   if (!name) return 'CL'
@@ -204,12 +276,42 @@ function initials(name) {
   return name.slice(0, 2).toUpperCase()
 }
 
+function getClientProjects(clientId) {
+  return store.projects.filter(p => p.clientId === clientId)
+}
+
 function getClientProjectCount(clientId) {
-  return store.projects.filter(p => p.clientId === clientId).length
+  return getClientProjects(clientId).length
+}
+
+function getClientProjectBreakdown(clientId) {
+  const projs = getClientProjects(clientId)
+  const inProgress = projs.filter(p => p.status === 'in_progress').length
+  const completed = projs.filter(p => p.status === 'completed').length
+  const proposals = projs.filter(p => p.status === 'potential' || p.quoteStatus === 'sent' || p.quoteStatus === 'draft').length
+  const lost = projs.filter(p => p.status === 'lost').length
+  return { total: projs.length, inProgress, completed, proposals, lost }
+}
+
+function getClientHours(clientId) {
+  const clientProjIds = new Set(getClientProjects(clientId).map(p => p.id))
+  const totalMin = store.sessions
+    .filter(s => clientProjIds.has(s.projectId))
+    .reduce((sum, s) => sum + (s.durationMin || 0), 0)
+  return store.minutesToHM(totalMin)
+}
+
+function getClientSessionCount(clientId) {
+  const clientProjIds = new Set(getClientProjects(clientId).map(p => p.id))
+  return store.sessions.filter(s => clientProjIds.has(s.projectId)).length
+}
+
+function getClientQuotedTotal(clientId) {
+  return getClientProjects(clientId).reduce((sum, p) => sum + (p.quoteAmount || 0), 0)
 }
 
 function getClientRevenue(clientId) {
-  const clientProjs = store.projects.filter(p => p.clientId === clientId)
+  const clientProjs = getClientProjects(clientId)
   let total = 0
   for (const proj of clientProjs) {
     total += store.projectRevenueTotal(proj.id)
@@ -217,10 +319,116 @@ function getClientRevenue(clientId) {
   return total
 }
 
+function getClientOutstanding(clientId) {
+  const quoted = getClientQuotedTotal(clientId)
+  const collected = getClientRevenue(clientId)
+  return Math.max(0, quoted - collected)
+}
+
+function getClientCollectionRate(clientId) {
+  const quoted = getClientQuotedTotal(clientId)
+  if (quoted <= 0) return 100
+  const collected = getClientRevenue(clientId)
+  return Math.min(100, Math.round((collected / quoted) * 100))
+}
+
+const defaultPhones = {
+  c1: '+91 98201 12345',
+  c2: '+91 98334 56789',
+  c3: '+91 98112 34567',
+  c4: '+91 97690 98765',
+  c5: '+91 98450 11223',
+  c6: '+91 99001 88776',
+}
+
+const defaultLocations = {
+  c1: 'Bengaluru, India',
+  c2: 'Mumbai, India',
+  c3: 'Goa, India',
+  c4: 'Pune, India',
+  c5: 'Hyderabad, India',
+  c6: 'New Delhi, India',
+}
+
+function getClientLocation(client) {
+  return client.location || defaultLocations[client.id] || 'India'
+}
+
+function getClientPhone(client) {
+  return client.phone || defaultPhones[client.id] || '—'
+}
+
+function getClientProjectStatusDisplay(clientId) {
+  const projs = getClientProjects(clientId)
+  const total = projs.length
+  const countText = `${total} Project${total !== 1 ? 's' : ''}`
+
+  if (total === 0) {
+    return {
+      countText: '0 Projects',
+      hasBadge: false,
+      badgeText: '',
+      badgeClass: '',
+    }
+  }
+
+  // If multiple, show in progress if ANY one project is under progress
+  const activeCount = projs.filter(p => p.status === 'in_progress').length
+  if (activeCount > 0) {
+    return {
+      countText,
+      hasBadge: true,
+      badgeText: `${activeCount} Active`,
+      badgeClass: 'badge-in-progress',
+    }
+  }
+
+  // Quoted / Proposed
+  const quotedCount = projs.filter(p => p.status === 'quoted' || p.status === 'potential' || p.quoteStatus === 'sent' || p.quoteStatus === 'draft').length
+  if (quotedCount > 0) {
+    return {
+      countText,
+      hasBadge: true,
+      badgeText: `${quotedCount} Proposed`,
+      badgeClass: 'badge-quoted',
+    }
+  }
+
+  // Completed
+  const completedCount = projs.filter(p => p.status === 'completed').length
+  if (completedCount > 0) {
+    return {
+      countText,
+      hasBadge: true,
+      badgeText: `${completedCount} Done`,
+      badgeClass: 'badge-completed',
+    }
+  }
+
+  // All lost
+  const lostCount = projs.filter(p => p.status === 'lost').length
+  if (lostCount > 0) {
+    return {
+      countText,
+      hasBadge: true,
+      badgeText: 'Closed',
+      badgeClass: 'badge-lost',
+    }
+  }
+
+  return {
+    countText,
+    hasBadge: false,
+    badgeText: '',
+    badgeClass: '',
+  }
+}
+
 function openAddModal() {
   editingClient.value = null
   form.name = ''
   form.company = ''
+  form.location = ''
   form.email = ''
   form.phone = ''
   errors.name = ''
@@ -231,6 +439,7 @@ function openEditModal(client) {
   editingClient.value = client
   form.name = client.name || ''
   form.company = client.company || ''
+  form.location = getClientLocation(client)
   form.email = client.email || ''
   form.phone = client.phone || ''
   errors.name = ''
@@ -248,6 +457,7 @@ function handleSaveClient() {
     store.updateClient(editingClient.value.id, {
       name: form.name.trim(),
       company: form.company.trim(),
+      location: form.location.trim(),
       email: form.email.trim(),
       phone: form.phone.trim(),
     })
@@ -256,6 +466,7 @@ function handleSaveClient() {
     store.createClient({
       name: form.name.trim(),
       company: form.company.trim(),
+      location: form.location.trim(),
       email: form.email.trim(),
       phone: form.phone.trim(),
     })
@@ -272,12 +483,3 @@ function confirmDeleteClient(client) {
   }
 }
 </script>
-
-<style scoped>
-.client-item-row:last-child {
-  border-bottom: none !important;
-}
-.client-item-row:hover {
-  background: var(--color-off-white);
-}
-</style>

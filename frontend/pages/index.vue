@@ -19,13 +19,13 @@
         <span>Create Project</span>
       </button>
       <button class="quick-action-btn" @click="showPaymentModal = true" id="action-add-income">
-        <svg class="action-icon" style="color:var(--color-success);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg class="action-icon text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
         </svg>
         <span>Add Income</span>
       </button>
       <button class="quick-action-btn" @click="showExpenseModal = true" id="action-add-expense">
-        <svg class="action-icon" style="color:#DC2626;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg class="action-icon text-danger" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
         </svg>
         <span>Add Expense</span>
@@ -33,7 +33,7 @@
     </div>
 
     <!-- Active timer banner (if running) -->
-    <div v-if="store.activeTimer" class="card mb-6" style="border-color: rgba(122,63,246,0.3); background: rgba(122,63,246,0.03);" id="home-running-timer-card">
+    <div v-if="store.activeTimer" class="card mb-6 timer-running-card" id="home-running-timer-card">
       <div class="card-padded flex items-center justify-between gap-4">
         <div class="flex items-center gap-3">
           <span class="timer-running-indicator"></span>
@@ -52,7 +52,7 @@
     <!-- PRIMARY HERO: TODAY'S VALUE -->
     <div class="metric-card-hero mb-6" id="home-hero-metric">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
-        <div class="metric-label" style="text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">Today's Value</div>
+        <div class="metric-label uppercase tracking-wide fw-700">Today's Value</div>
         <!-- Target comparison badge -->
         <div v-if="stats.target > 0" class="target-comparison-badge" :class="stats.isAboveTarget ? 'above' : 'below'" id="hero-target-comparison">
           <span v-if="stats.isAboveTarget">✓ +{{ stats.targetDeltaPct }}% Above Target</span>
@@ -66,7 +66,7 @@
         <div class="metric-value xl hero-value-main" id="hero-main-rate">
           {{ stats.todayHrVal.toLocaleString('en-IN') }}
         </div>
-        <div class="hero-unit" style="align-self:flex-end; margin-bottom: 8px;">/hour</div>
+        <div class="hero-unit self-end mb-2">/hour</div>
       </div>
 
       <!-- Target progress bar -->
@@ -130,7 +130,7 @@
     <div class="unpaid-insight-card mb-6" id="home-unpaid-insight">
       <div class="unpaid-insight-top">
         <div>
-          <div class="badge badge-unpaid mb-1" style="font-size:11px;">Time invested before payment</div>
+          <div class="badge badge-unpaid mb-1 text-2xs">Time invested before payment</div>
           <div class="unpaid-insight-title mt-1">{{ stats.todayUnpaidHM }} unpaid project work today</div>
           <div class="unpaid-insight-subtitle">Discovery, meetings, requirements & proposals before project billing.</div>
         </div>
@@ -142,7 +142,7 @@
 
       <!-- Relevant Project Links -->
       <div v-if="stats.unpaidProjectsList.length > 0" class="unpaid-projects-chip-list">
-        <span class="text-tertiary text-xs flex items-center" style="margin-right:4px;">Relevant projects:</span>
+        <span class="text-tertiary text-xs flex items-center mr-1">Relevant projects:</span>
         <NuxtLink
           v-for="p in stats.unpaidProjectsList"
           :key="p.projectId"
@@ -171,11 +171,11 @@
           </button>
         </div>
 
-        <div class="card-body" style="padding:0;">
-          <div v-if="stats.todaySessions.length === 0" class="empty-state" style="padding: 36px 16px;">
+        <div class="card-body p-0">
+          <div v-if="stats.todaySessions.length === 0" class="empty-state py-8 px-4">
             <div class="empty-icon"><IconClock /></div>
-            <div class="empty-title" style="font-size:var(--font-base);">No work logged today</div>
-            <div class="empty-desc" style="font-size:var(--font-xs);">Use Start Work or Log Session to record time.</div>
+            <div class="empty-title text-base">No work logged today</div>
+            <div class="empty-desc text-xs">Use Start Work or Log Session to record time.</div>
             <button class="btn btn-primary btn-sm mt-3" @click="showTimerModal = true">Start Work</button>
           </div>
 
@@ -216,7 +216,7 @@
                   {{ getSessionEffectiveRate(sess) }}
                 </template>
                 <template v-else>
-                  <span class="badge badge-unpaid" style="padding: 2px 7px; font-size: 10px;">Unpaid</span>
+                  <span class="badge badge-unpaid badge-xs">Unpaid</span>
                 </template>
               </div>
 
@@ -290,7 +290,7 @@
               <div class="chart-bar-value-top" v-if="bar.rate > 0">
                 {{ store.currency }}{{ bar.rate }}
               </div>
-              <div class="chart-bar-value-top" v-else style="color:var(--text-tertiary);">
+              <div class="chart-bar-value-top text-tertiary" v-else>
                 —
               </div>
               <div
@@ -340,7 +340,7 @@
               v-for="proj in activeProjectsList"
               :key="proj.id"
               :id="`proj-row-${proj.id}`"
-              style="cursor:pointer;"
+              class="cursor-pointer"
               @click="navigateTo(`/projects/${proj.id}`)"
             >
               <td>
@@ -397,9 +397,11 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useWelloStore } from '~/stores/wello'
+import { useAuthStore } from '~/stores/auth'
 import { useToast } from '~/composables/useToast'
 
 const store = useWelloStore()
+const authStore = useAuthStore()
 const toast = useToast()
 
 // Modal states
@@ -418,7 +420,10 @@ const insightIndex = ref(0)
 
 const stats = computed(() => store.dashboardStats)
 
-const firstName = computed(() => store.user.name.split(' ')[0] || 'Rahul')
+const firstName = computed(() => {
+  const name = authStore.user?.name || store.user?.name || ''
+  return name.trim().split(' ')[0] || 'User'
+})
 
 const greeting = computed(() => {
   const h = new Date().getHours()
@@ -525,10 +530,3 @@ onUnmounted(() => {
   if (ticker) clearInterval(ticker)
 })
 </script>
-
-<style scoped>
-.dashboard-page {
-  max-width: 1140px;
-  margin: 0 auto;
-}
-</style>

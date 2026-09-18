@@ -1,10 +1,10 @@
 <template>
-  <div class="admin-login-wrapper flex items-center justify-center min-h-screen" style="background: var(--color-off-white);">
-    <div class="card card-padded shadow-lg" style="width: 100%; max-width: 440px; background: white; border-radius: var(--radius-lg);">
+  <div class="admin-login-wrapper flex items-center justify-center min-h-screen bg-off-white">
+    <div class="card card-padded shadow-lg w-full max-w-440 bg-white rounded-16">
       <!-- Header -->
       <div class="text-center mb-6">
-        <div class="inline-flex items-center justify-center p-3 rounded-full mb-3" style="background: var(--color-purple-light);">
-          <IconShield style="width: 32px; height: 32px; color: var(--color-purple);" />
+        <div class="inline-flex items-center justify-center p-3 rounded-full mb-3 bg-purple-light">
+          <IconShield class="w-8 h-8 text-purple" />
         </div>
         <h2 class="text-2xl font-bold text-primary">Wello Admin Console</h2>
         <p class="text-secondary text-sm mt-1">Internal Management & Intelligence Portal</p>
@@ -42,7 +42,6 @@
           type="submit"
           class="btn btn-primary w-full py-3 text-base font-semibold"
           :disabled="loading"
-          style="background: var(--color-purple); border-color: var(--color-purple);"
         >
           <span v-if="loading">Authenticating…</span>
           <span v-else>Sign In to Admin Console</span>

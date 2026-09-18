@@ -7,8 +7,8 @@
       </div>
 
       <div class="flex items-center gap-3">
-        <input v-model="searchQuery" type="text" class="form-input text-xs" placeholder="Search jobs by title or provider…" style="width:240px;height:36px;" />
-        <button @click="fetchJobs" class="btn btn-secondary btn-sm" style="height:36px;">
+        <input v-model="searchQuery" type="text" class="form-input text-xs w-240 h-36" placeholder="Search jobs by title or provider…" />
+        <button @click="fetchJobs" class="btn btn-secondary btn-sm h-36">
           🔄 Refresh
         </button>
       </div>
@@ -16,12 +16,6 @@
 
     <!-- Jobs Table Card -->
     <div class="card" id="jobs-table-card">
-      <div class="card-header flex items-center justify-between">
-        <div>
-          <div class="card-title">All Jobs & Services ({{ filteredJobs.length }})</div>
-          <div class="card-subtitle">Showing active, quoted, in-progress, and completed service contracts</div>
-        </div>
-      </div>
 
       <div class="table-responsive">
         <table class="table">

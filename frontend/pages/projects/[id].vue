@@ -2,7 +2,7 @@
   <div class="project-detail-page animate-fade-in" v-if="proj">
     <!-- Breadcrumbs -->
     <div class="flex items-center gap-2 mb-4">
-      <NuxtLink to="/projects" class="btn btn-ghost btn-sm" style="padding-left:0;" id="btn-back-projects">
+      <NuxtLink to="/projects" class="btn btn-ghost btn-sm pl-0" id="btn-back-projects">
         <IconBack :size="15" />
         Projects
       </NuxtLink>
@@ -11,7 +11,7 @@
     </div>
 
     <!-- LOST PROJECT BANNER (if marked Lost) -->
-    <div v-if="proj.status === 'lost'" class="card card-padded mb-6" style="border-color: rgba(239,68,68,0.25); background: rgba(239,68,68,0.03);" id="lost-project-banner">
+    <div v-if="proj.status === 'lost'" class="card card-padded mb-6 border-danger-subtle bg-danger-subtle" id="lost-project-banner">
       <div class="flex items-start justify-between flex-wrap gap-4">
         <div>
           <div class="flex items-center gap-2 mb-1">
@@ -36,7 +36,7 @@
       <div class="flex items-start justify-between flex-wrap gap-4">
         <div class="flex-1 min-width-0">
           <div class="flex items-center gap-3 mb-2 flex-wrap">
-            <h1 class="page-title" style="font-size:var(--font-2xl);" id="project-title">{{ proj.name }}</h1>
+            <h1 class="page-title text-2xl" id="project-title">{{ proj.name }}</h1>
             <span v-if="proj.isJob" class="badge badge-job">Job</span>
             <StatusBadge :status="proj.status" />
           </div>
@@ -88,8 +88,8 @@
       </div>
 
       <!-- STATUS TRANSITION ACTIONS BAR -->
-      <div class="status-actions-bar mt-5 pt-4" style="border-top: 1px solid var(--color-soft-gray);" id="project-status-actions">
-        <span class="text-xs text-tertiary fw-600 mr-2 uppercase" style="letter-spacing:0.04em;">Lifecycle Status:</span>
+      <div class="status-actions-bar mt-5 pt-4 border-top-subtle" id="project-status-actions">
+        <span class="text-xs text-tertiary fw-600 mr-2 uppercase tracking-wide">Lifecycle Status:</span>
         <div class="flex items-center gap-2 flex-wrap">
           <button
             v-for="st in statusFlow"
@@ -106,9 +106,8 @@
           <!-- Mark Lost Button -->
           <button
             v-if="proj.status !== 'lost' && proj.status !== 'completed'"
-            class="btn btn-ghost btn-sm text-xs text-error"
+            class="btn btn-ghost btn-sm text-xs text-error ml-auto"
             @click="confirmLostModal = true"
-            style="margin-left:auto;"
             id="btn-mark-lost"
           >
             Mark as Lost
@@ -207,8 +206,8 @@
           </button>
         </div>
 
-        <div class="card-body" style="padding: var(--space-4);">
-          <div v-if="timelineEvents.length === 0" class="empty-state" style="padding:32px 16px;">
+        <div class="card-body p-4">
+          <div v-if="timelineEvents.length === 0" class="empty-state py-8 px-4">
             <div class="empty-icon"><IconClock /></div>
             <div class="empty-title">No activity recorded yet</div>
             <div class="empty-desc">Log your first meeting, discussion, or work session.</div>
@@ -239,7 +238,7 @@
 
                 <!-- Event Badges & Financial Info -->
                 <div class="flex items-center gap-2 mt-2 flex-wrap">
-                  <span v-if="ev.durationHM" class="badge" style="background:var(--color-off-white);color:var(--text-secondary);">
+                  <span v-if="ev.durationHM" class="badge badge-subtle">
                     {{ ev.durationHM }}
                   </span>
                   <span v-if="ev.paymentType === 'unpaid'" class="badge badge-unpaid">
@@ -323,7 +322,7 @@
               <IconPlus :size="13" /> Add Payment
             </button>
           </div>
-          <div class="card-body" style="padding:0;">
+          <div class="card-body p-0">
             <div v-if="!proj.paymentsHistory || proj.paymentsHistory.length === 0" class="p-4 text-center text-tertiary text-xs">
               No payments recorded for this project yet.
             </div>
@@ -357,7 +356,7 @@
               <IconPlus :size="13" /> Add Expense
             </button>
           </div>
-          <div class="card-body" style="padding:0;">
+          <div class="card-body p-0">
             <div v-if="!proj.expensesHistory || proj.expensesHistory.length === 0" class="p-4 text-center text-tertiary text-xs">
               No direct expenses recorded yet.
             </div>
@@ -373,9 +372,9 @@
                 <tr v-for="exp in proj.expensesHistory" :key="exp.id">
                   <td>
                     <div class="fw-600 text-xs">{{ exp.description }}</div>
-                    <div class="text-tertiary" style="font-size:10px;">{{ fmtDate(exp.date) }}</div>
+                    <div class="text-tertiary text-2xs">{{ fmtDate(exp.date) }}</div>
                   </td>
-                  <td class="fw-700 text-sm" style="color:#DC2626;">{{ store.fmtCurrency(exp.amount) }}</td>
+                  <td class="fw-700 text-sm text-danger">{{ store.fmtCurrency(exp.amount) }}</td>
                   <td class="text-xs text-secondary">{{ exp.category || 'General' }}</td>
                 </tr>
               </tbody>
@@ -397,7 +396,7 @@
             <button class="modal-close" @click="showConvertModal = false" aria-label="Close"><IconX /></button>
           </div>
           <div class="modal-body">
-            <div class="card card-padded mb-4" style="background:var(--color-off-white); border-color:var(--color-soft-gray);">
+            <div class="card card-padded mb-4 card-offwhite">
               <p class="text-sm text-primary fw-500 mb-2">
                 This project contains <strong>{{ proj.totalHM }}</strong> of previously recorded time.
               </p>
@@ -757,113 +756,3 @@ const timelineEvents = computed(() => {
   return events.sort((a, b) => b.date - a.date)
 })
 </script>
-
-<style scoped>
-.project-detail-page {
-  max-width: 1140px;
-  margin: 0 auto;
-}
-
-.status-actions-bar {
-  display: flex;
-  align-items: center;
-}
-
-.status-step-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border-radius: var(--radius-full);
-  background: var(--color-off-white);
-  border: 1px solid var(--color-soft-gray);
-  font-size: var(--font-xs);
-  font-weight: 600;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.status-step-btn:hover {
-  background: var(--color-white);
-  border-color: var(--color-gray-300);
-  color: var(--text-primary);
-}
-
-.status-step-btn.active {
-  background: var(--color-white);
-  border-color: var(--color-purple);
-  color: var(--color-purple);
-  box-shadow: 0 1px 4px rgba(122,63,246,0.15);
-}
-
-.status-step-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-}
-
-.metric-sub-breakdown {
-  margin-top: var(--space-2);
-}
-
-.project-timeline-stream {
-  display: flex;
-  flex-direction: column;
-  position: relative;
-}
-
-.project-timeline-stream::before {
-  content: '';
-  position: absolute;
-  left: 17px;
-  top: 14px;
-  bottom: 14px;
-  width: 2px;
-  background: var(--color-soft-gray);
-  z-index: 1;
-}
-
-.timeline-event-row {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-4);
-  padding: var(--space-3) 0;
-  position: relative;
-  z-index: 2;
-}
-
-.timeline-event-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border: 2px solid var(--color-white);
-  box-shadow: var(--shadow-xs);
-}
-
-.timeline-event-content {
-  background: var(--color-off-white);
-  border: 1px solid var(--color-soft-gray);
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
-  transition: all var(--transition-fast);
-}
-
-.timeline-event-content:hover {
-  background: var(--color-white);
-  border-color: var(--color-gray-300);
-}
-
-.timeline-event-actions {
-  opacity: 0.6;
-  transition: opacity var(--transition-fast);
-}
-
-.timeline-event-row:hover .timeline-event-actions {
-  opacity: 1;
-}
-</style>

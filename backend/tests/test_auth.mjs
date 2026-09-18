@@ -1,4 +1,4 @@
-const BASE = 'http://localhost:3000'
+const BASE = process.env.BASE_URL || 'http://localhost:3001'
 
 async function runTests() {
   console.log('--- TESTING WELLO AUTH & ADMIN API ---')

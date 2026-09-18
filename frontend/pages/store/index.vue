@@ -1,12 +1,12 @@
 <template>
-  <div class="store-page animate-fade-in" style="display:flex;flex-direction:column;gap:24px;">
+  <div class="store-page animate-fade-in flex flex-col gap-6">
     <!-- Page Header & Banner -->
     <div class="page-header flex items-center justify-between flex-wrap gap-4 mb-0">
       <div>
         <h1 class="page-title">Wello Store</h1>
         <p class="page-subtitle">Extend your Wello experience with powerful modular addons. Wello core services remain 100% FREE.</p>
       </div>
-      <NuxtLink to="/invoicing" class="btn btn-secondary btn-sm" style="display:inline-flex;align-items:center;gap:6px;" id="btn-open-invoices-store">
+      <NuxtLink to="/invoicing" class="btn btn-secondary btn-sm flex items-center gap-2" id="btn-open-invoices-store">
         <IconReceipt :size="15" />
         <span>My Invoices</span>
       </NuxtLink>
@@ -14,19 +14,18 @@
 
     <!-- Store Hero Banner -->
     <div
-      class="card p-6"
-      style="background:linear-gradient(135deg, rgba(255,159,28,0.06) 0%, rgba(122,63,246,0.08) 100%);border:1px solid rgba(122,63,246,0.18);border-radius:16px;"
+      class="card store-hero-banner p-6"
       id="store-hero-banner"
     >
       <div class="flex items-center justify-between flex-wrap gap-4">
-        <div style="max-width:560px;">
-          <div class="badge mb-2" style="background:rgba(122,63,246,0.12);color:var(--color-purple);font-weight:700;">Wello Addon Platform</div>
-          <h2 class="text-xl font-extrabold text-primary mb-2" style="letter-spacing:-0.5px;">Supercharge your workflow with official Wello Addons</h2>
-          <p class="text-sm text-secondary" style="line-height:1.5;">
+        <div class="max-w-xl">
+          <div class="badge badge-purple mb-2 font-bold">Wello Addon Platform</div>
+          <h2 class="text-xl font-extrabold text-primary mb-2">Supercharge your workflow with official Wello Addons</h2>
+          <p class="text-sm text-secondary">
             All addons integrate directly into your authenticated Wello account without separate logins or subscriptions. Core Wello tracking and reporting remains 100% free.
           </p>
         </div>
-        <div style="display:flex;align-items:center;gap:12px;">
+        <div class="flex items-center gap-3">
           <div class="text-right">
             <div class="text-xs text-tertiary fw-600 uppercase">Available Addons</div>
             <div class="font-extrabold text-2xl kpi-val-1">{{ addons.length }}</div>
@@ -68,73 +67,67 @@
       <div
         v-for="addon in filteredAddons"
         :key="addon.id"
-        class="card store-product-card hover-lift"
-        style="background:white;border:1px solid var(--border-color);border-radius:20px;box-shadow:0 4px 20px rgba(0,0,0,0.04);display:flex;flex-direction:column;justify-content:space-between;padding:24px;position:relative;overflow:hidden;transition:all 0.25s ease;"
+        class="card store-addon-card hover-lift"
         :id="`addon-card-${addon.slug}`"
       >
         <!-- Top Accent -->
-        <div style="position:absolute;top:0;left:0;right:0;height:6px;background:linear-gradient(90deg, var(--color-purple), var(--color-brand));"></div>
+        <div class="store-top-accent"></div>
 
         <div>
           <!-- Badges Bar -->
-          <div class="flex items-center justify-between gap-2 mb-4" style="margin-top:4px;">
+          <div class="flex items-center justify-between gap-2 mb-4 mt-1">
             <span
               class="badge"
-              :style="addon.isFree ? 'background:rgba(16,185,129,0.12);color:var(--color-success);font-weight:700;' : 'background:rgba(122,63,246,0.12);color:var(--color-purple);font-weight:700;'"
-              style="padding:4px 12px;border-radius:12px;font-size:11px;letter-spacing:0.3px;"
+              :class="addon.isFree ? 'addon-badge-free' : 'addon-badge-pro'"
             >
               {{ addon.isFree ? 'FREE ADDON' : 'PRO' }}
             </span>
 
             <span
               v-if="addon.isActivated"
-              class="badge"
-              style="background:rgba(16,185,129,0.15);color:var(--color-success);font-weight:700;font-size:11px;padding:4px 10px;border-radius:12px;display:inline-flex;align-items:center;gap:4px;"
+              class="badge addon-badge-active"
             >
-              <span style="width:6px;height:6px;border-radius:50%;background:var(--color-success);"></span> Active
+              <span class="addon-active-dot"></span> Active
             </span>
           </div>
 
           <!-- Product Icon & Title (Portrait Layout) -->
-          <div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px;margin-bottom:16px;">
-            <div
-              style="width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg, rgba(255,159,28,0.15) 0%, rgba(122,63,246,0.15) 100%);color:var(--color-purple);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(122,63,246,0.15);"
-            >
+          <div class="flex flex-col items-center text-center gap-3 mb-4">
+            <div class="addon-icon-wrap">
               <component :is="getIconComponent(addon.icon)" :size="30" />
             </div>
             <div>
-              <h3 class="font-extrabold text-lg text-primary" style="line-height:1.2;margin-bottom:2px;">{{ addon.name }}</h3>
+              <h3 class="font-extrabold text-lg text-primary mb-1">{{ addon.name }}</h3>
               <span class="text-xs text-tertiary font-medium">{{ addon.category }} · v{{ addon.version }}</span>
             </div>
           </div>
 
-          <p class="text-sm text-secondary mb-4 text-center" style="line-height:1.5;min-height:42px;">
+          <p class="text-sm text-secondary mb-4 text-center">
             {{ addon.description }}
           </p>
 
           <!-- Feature Bullet List -->
-          <div class="features-list" style="display:flex;flex-direction:column;gap:8px;background:var(--color-off-white);padding:14px;border-radius:12px;border:1px solid var(--border-subtle);margin-bottom:16px;">
-            <div v-for="(feat, idx) in addon.features" :key="idx" class="flex items-start gap-2 text-xs text-secondary" style="text-align:left;">
-              <IconCheck :size="14" style="color:var(--color-success);flex-shrink:0;margin-top:2px;" />
-              <span style="line-height:1.4;">{{ feat }}</span>
+          <div class="addon-features-box">
+            <div v-for="(feat, idx) in addon.features" :key="idx" class="flex items-start gap-2 text-xs text-secondary text-left">
+              <IconCheck :size="14" class="text-success flex-shrink-0 mt-1" />
+              <span>{{ feat }}</span>
             </div>
           </div>
         </div>
 
         <!-- Action Footer -->
-        <div style="display:flex;flex-direction:column;gap:10px;padding-top:12px;border-top:1px solid var(--border-subtle);">
+        <div class="flex flex-col gap-2 pt-3 border-t border-subtle">
           <div class="text-xs text-tertiary text-center font-medium">
             <span v-if="addon.isActivated">Activated on your account</span>
             <span v-else>Available for instant activation</span>
           </div>
 
-          <div style="display:flex;gap:8px;">
+          <div class="flex gap-2">
             <!-- Open Addon Button if Activated -->
             <NuxtLink
               v-if="addon.isActivated && addon.slug === 'basic-invoicing'"
               to="/invoicing"
-              class="btn btn-primary btn-sm"
-              style="flex:1;justify-content:center;gap:4px;height:38px;font-weight:600;"
+              class="btn btn-primary btn-sm flex-1 justify-center gap-1 font-semibold"
               :id="`btn-open-${addon.slug}`"
             >
               <span>Open Invoicing</span>
@@ -144,9 +137,8 @@
             <!-- Activate / Toggle Button -->
             <button
               type="button"
-              class="btn btn-sm"
+              class="btn btn-sm flex-1 justify-center font-semibold"
               :class="addon.isActivated ? 'btn-secondary' : 'btn-primary'"
-              style="flex:1;justify-content:center;height:38px;font-weight:600;"
               @click="toggleAddon(addon)"
               :disabled="activatingId === addon.id"
               :id="`btn-toggle-${addon.slug}`"
@@ -231,21 +223,3 @@ onMounted(() => {
   fetchAddons()
 })
 </script>
-
-<style scoped>
-.store-products-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-}
-@media (max-width: 992px) {
-  .store-products-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-@media (max-width: 640px) {
-  .store-products-grid {
-    grid-template-columns: 1fr;
-  }
-}
-</style>

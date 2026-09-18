@@ -3,13 +3,13 @@
     <!-- Desktop Admin Sidebar (Matching Global Wello Design Style) -->
     <aside class="app-sidebar">
       <div class="sidebar-logo">
-        <NuxtLink to="/admin" class="sidebar-logo-link" style="display:flex;align-items:center;gap:8px;text-decoration:none;">
-          <img src="~/assets/logo.png" alt="Wello" style="height:30px;width:auto;object-fit:contain;" />
+        <NuxtLink to="/admin" class="sidebar-logo-link flex items-center gap-2 text-decoration-none">
+          <img src="~/assets/logo.png" alt="Wello" class="h-8 w-auto object-contain" />
           <span class="admin-badge">ADMIN</span>
         </NuxtLink>
       </div>
 
-      <nav class="sidebar-nav" style="padding-top:16px;">
+      <nav class="sidebar-nav pt-4">
         <NuxtLink
           v-for="item in navItems"
           :key="item.to"
@@ -29,51 +29,48 @@
       <!-- Admin Topbar -->
       <header class="app-topbar">
         <div class="topbar-left">
-          <NuxtLink to="/admin" class="topbar-mobile-logo" style="text-decoration:none;">
-            <img src="~/assets/logo.png" alt="Wello" style="height:26px;width:auto;object-fit:contain;" />
+          <NuxtLink to="/admin" class="topbar-mobile-logo text-decoration-none">
+            <img src="~/assets/logo.png" alt="Wello" class="h-26 w-auto object-contain" />
           </NuxtLink>
         </div>
 
-        <div class="topbar-right" style="display:flex;align-items:center;gap:14px;position:relative;">
+        <div class="topbar-right flex items-center gap-3.5 relative">
           <!-- User Profile Dropdown Menu Trigger -->
-          <div ref="dropdownContainer" style="position:relative;">
+          <div ref="dropdownContainer" class="relative">
             <button
               type="button"
               @click.stop="showDropdown = !showDropdown"
               class="header-user-dropdown-btn"
-              style="display:flex;align-items:center;gap:8px;background:var(--color-off-white);border:1px solid var(--border-color);padding:4px 12px 4px 6px;border-radius:24px;cursor:pointer;transition:all 0.15s ease;"
               id="topbar-user-dropdown-trigger"
             >
-              <div class="user-avatar" style="background:var(--grad-brand);color:#FFFFFF;font-weight:700;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:0 2px 6px rgba(255,159,28,0.25);">
+              <div class="user-avatar-sm">
                 {{ displayAvatar }}
               </div>
-              <div style="display:flex;flex-direction:column;line-height:1.2;text-align:left;">
-                <span style="font-weight:600;font-size:13px;color:var(--text-primary);">{{ displayName }}</span>
-                <span style="font-size:10px;color:var(--color-purple);font-weight:700;letter-spacing:0.3px;">SYSTEM ADMIN</span>
+              <div class="flex flex-col lh-tight text-left">
+                <span class="fw-600 text-xs text-primary">{{ displayName }}</span>
+                <span class="text-2xs text-purple fw-700 tracking-wide">SYSTEM ADMIN</span>
               </div>
-              <IconChevronDown :size="13" style="color:var(--text-tertiary);margin-left:2px;" />
+              <IconChevronDown :size="13" class="text-tertiary ml-0.5" />
             </button>
 
             <!-- Dropdown Menu Box -->
             <div
               v-if="showDropdown"
               class="profile-dropdown-menu animate-fade-in"
-              style="position:absolute;right:0;top:calc(100% + 8px);width:230px;background:white;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.12);border:1px solid var(--border-color);z-index:1000;overflow:hidden;"
               @click.stop
             >
-              <div style="padding:12px 16px;border-bottom:1px solid var(--border-color);background:var(--color-off-white);">
-                <div style="font-weight:700;font-size:13px;color:var(--text-primary);">{{ displayName }}</div>
-                <div style="font-size:11px;color:var(--color-purple);font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ authStore.user?.email || 'admin@wello.com' }}</div>
+              <div class="p-3 border-b bg-off-white">
+                <div class="fw-700 text-xs text-primary">{{ displayName }}</div>
+                <div class="text-2xs text-purple fw-600 mt-0.5 truncate">{{ authStore.user?.email || 'admin@wello.com' }}</div>
               </div>
 
-              <div style="padding:6px 0;">
+              <div class="py-1.5">
                 <NuxtLink
                   to="/"
                   @click="showDropdown = false"
                   class="dropdown-menu-item"
-                  style="display:flex;align-items:center;gap:10px;padding:9px 16px;font-size:13px;color:var(--text-primary);text-decoration:none;transition:background 0.12s;"
                 >
-                  <IconHome :size="15" style="color:var(--text-tertiary);" />
+                  <IconHome :size="15" class="text-tertiary" />
                   <span>User Workspace</span>
                 </NuxtLink>
 
@@ -81,22 +78,20 @@
                   to="/admin/roles"
                   @click="showDropdown = false"
                   class="dropdown-menu-item"
-                  style="display:flex;align-items:center;gap:10px;padding:9px 16px;font-size:13px;color:var(--text-primary);text-decoration:none;transition:background 0.12s;"
                 >
-                  <IconShield :size="15" style="color:var(--text-tertiary);" />
+                  <IconShield :size="15" class="text-tertiary" />
                   <span>Admin Security</span>
                 </NuxtLink>
               </div>
 
-              <div style="border-top:1px solid var(--border-color);padding:6px 0;background:rgba(239,68,68,0.02);">
+              <div class="border-t py-1.5 bg-danger-subtle">
                 <button
                   type="button"
                   @click="handleLogout"
-                  class="dropdown-menu-item"
-                  style="width:100%;display:flex;align-items:center;gap:10px;padding:9px 16px;font-size:13px;color:#EF4444;background:none;border:none;cursor:pointer;text-align:left;font-weight:600;"
+                  class="dropdown-menu-item text-danger fw-600"
                   id="topbar-dropdown-signout"
                 >
-                  <IconLogOut :size="15" style="color:#EF4444;" />
+                  <IconLogOut :size="15" class="text-danger" />
                   <span>Sign Out</span>
                 </button>
               </div>
@@ -190,15 +185,3 @@ function isActive(path) {
   return route.path.startsWith(path)
 }
 </script>
-
-<style scoped>
-.admin-badge {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.8px;
-  background: var(--grad-brand);
-  color: #FFFFFF;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-</style>

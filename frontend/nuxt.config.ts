@@ -1,28 +1,23 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  srcDir: 'frontend/',
-  serverDir: 'backend/',
-  dir: {
-    public: 'public',
-  },
   compatibilityDate: '2024-04-03',
   modules: [
     '@pinia/nuxt',
     '@vueuse/nuxt',
   ],
   css: ['~/assets/css/main.css'],
+  routeRules: {
+    // Proxy all /api requests to the standalone backend server
+    '/api/**': {
+      proxy: process.env.BACKEND_API_URL || 'http://localhost:3001/api/**',
+    },
+  },
   runtimeConfig: {
-    // Private server-side config
-    dbHost: process.env.DB_HOST || 'localhost',
-    dbPort: process.env.DB_PORT || '3306',
-    dbUser: process.env.DB_USER || 'root',
-    dbPassword: process.env.DB_PASSWORD || '',
-    dbName: process.env.DB_NAME || 'wello',
-    // Public config
     public: {
       appName: 'Wello',
       appVersion: '1.0.0',
       currencySymbol: process.env.CURRENCY_SYMBOL || '₹',
+      apiBaseUrl: process.env.BACKEND_API_URL || 'http://localhost:3001/api',
     }
   },
   app: {
@@ -49,11 +44,6 @@ export default defineNuxtConfig({
         },
         { rel: 'icon', type: 'image/png', href: '/logo.png' }
       ]
-    }
-  },
-  nitro: {
-    experimental: {
-      wasm: true
     }
   }
 })

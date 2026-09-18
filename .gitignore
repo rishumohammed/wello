@@ -1,7 +1,9 @@
+
 # Nuxt & Node build artifacts
-node_modules/
-.nuxt/
-.output/
+**/node_modules/
+**/.nuxt/
+**/.output/
+**/.nitro/
 dist/
 *.log
 

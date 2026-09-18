@@ -2,14 +2,14 @@
   <Teleport to="body">
     <div class="modal-overlay" @click.self="$emit('cancel')" id="modal-confirm-overlay">
       <div class="modal confirm-dialog" id="modal-confirm" role="alertdialog" aria-modal="true">
-        <div class="modal-body" style="padding-top:var(--space-6);">
+        <div class="modal-body pt-6">
           <div class="confirm-icon" :class="iconType">
             <IconAlert v-if="iconType === 'danger' || iconType === 'warning'" :size="22" />
             <IconCheck v-else :size="22" />
           </div>
           <div>
-            <div class="modal-title" style="font-size:var(--font-md);">{{ title }}</div>
-            <p class="mt-2" style="font-size:var(--font-sm);">{{ message }}</p>
+            <div class="modal-title text-base">{{ title }}</div>
+            <p class="mt-2 text-sm text-secondary">{{ message }}</p>
           </div>
         </div>
         <div class="modal-footer">

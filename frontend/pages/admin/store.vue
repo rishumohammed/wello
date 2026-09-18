@@ -1,5 +1,5 @@
 <template>
-  <div class="admin-store-page animate-fade-in" style="display:flex;flex-direction:column;gap:24px;">
+  <div class="admin-store-page flex flex-col gap-6 animate-fade-in">
     <!-- Page Header & Action Bar -->
     <div class="page-header flex items-center justify-between flex-wrap gap-4 mb-0">
       <div>
@@ -63,13 +63,13 @@
     </div>
 
     <!-- Addon Management Directory (Rendered as Cards Grid) -->
-    <div id="admin-addons-card-section" style="display:flex;flex-direction:column;gap:16px;">
+    <div id="admin-addons-card-section" class="flex flex-col gap-4">
       <div class="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h2 class="text-lg font-bold text-primary mb-1">Addon Catalog Products</h2>
           <p class="text-xs text-secondary">Manage feature metadata, publish status, and inspect user adoption</p>
         </div>
-        <span class="badge" style="background:var(--color-off-white);color:var(--text-secondary);font-weight:700;">{{ addons.length }} product(s)</span>
+        <span class="badge bg-off-white text-secondary fw-700">{{ addons.length }} product(s)</span>
       </div>
 
       <div v-if="isLoading" class="text-center py-12 text-tertiary text-sm">
@@ -81,79 +81,74 @@
           v-for="addon in addons"
           :key="addon.id"
           class="card store-product-card hover-lift"
-          style="background:white;border:1px solid var(--border-color);border-radius:20px;box-shadow:0 4px 20px rgba(0,0,0,0.04);display:flex;flex-direction:column;justify-content:space-between;padding:24px;position:relative;overflow:hidden;transition:all 0.25s ease;"
           :id="`admin-addon-card-${addon.id}`"
         >
           <!-- Top Accent -->
-          <div style="position:absolute;top:0;left:0;right:0;height:6px;background:linear-gradient(90deg, var(--color-purple), var(--color-info));"></div>
+          <div class="store-card-accent-bar"></div>
 
           <div>
             <!-- Status & Pricing Badges -->
-            <div class="flex items-center justify-between gap-2 mb-4" style="margin-top:4px;">
+            <div class="flex items-center justify-between gap-2 mb-4 mt-1">
               <span
-                class="badge"
-                :style="addon.isFree ? 'background:rgba(16,185,129,0.12);color:var(--color-success);font-weight:700;' : 'background:rgba(122,63,246,0.12);color:var(--color-purple);font-weight:700;'"
-                style="padding:4px 12px;border-radius:12px;font-size:11px;letter-spacing:0.3px;"
+                class="badge badge-sm uppercase tracking-wide fw-700"
+                :class="addon.isFree ? 'badge-success-soft' : 'badge-purple-soft'"
               >
                 {{ addon.isFree ? 'FREE ADDON' : 'PRO' }}
               </span>
 
               <span
-                class="badge"
-                :style="addon.status === 'PUBLISHED' ? 'background:rgba(16,185,129,0.12);color:var(--color-success);' : 'background:rgba(245,158,11,0.12);color:#D97706;'"
-                style="font-weight:700;font-size:11px;padding:4px 12px;border-radius:12px;"
+                class="badge badge-sm fw-700"
+                :class="addon.status === 'PUBLISHED' ? 'badge-success-soft' : 'badge-warning-soft'"
               >
                 {{ addon.status }}
               </span>
             </div>
 
             <!-- Product Icon & Title (Portrait Layout) -->
-            <div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px;margin-bottom:16px;">
-              <div
-                style="width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg, rgba(122,63,246,0.15) 0%, rgba(0,123,255,0.15) 100%);color:var(--color-purple);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(122,63,246,0.15);"
-              >
+            <div class="flex flex-col items-center text-center gap-3 mb-4">
+              <div class="addon-icon-box">
                 <IconPackage :size="30" />
               </div>
               <div>
-                <h3 class="font-extrabold text-lg text-primary" style="line-height:1.2;margin-bottom:2px;">{{ addon.name }}</h3>
+                <h3 class="font-extrabold text-lg text-primary lh-tight mb-0.5">{{ addon.name }}</h3>
                 <span class="text-xs text-tertiary font-medium">{{ addon.category }} · v{{ addon.version }}</span>
               </div>
             </div>
 
-            <p class="text-sm text-secondary mb-4 text-center" style="line-height:1.5;min-height:42px;">
+            <p class="text-sm text-secondary mb-4 text-center min-h-42">
               {{ addon.description }}
             </p>
 
             <!-- Adoption Stats Summary Chips -->
-            <div class="flex items-center gap-3 text-xs mb-4 p-3" style="background:var(--color-off-white);border:1px solid var(--border-subtle);border-radius:12px;">
-              <div style="flex:1;text-align:center;">
-                <div class="text-tertiary" style="font-size:11px;">Active Users</div>
+            <div class="flex items-center gap-3 text-xs mb-4 p-3 card-offwhite rounded-12">
+              <div class="flex-1 text-center">
+                <div class="text-tertiary text-xs">Active Users</div>
                 <div class="font-bold text-primary text-sm mt-0.5">{{ addon.stats?.activeUsers || 0 }}</div>
               </div>
-              <div style="flex:1;border-left:1px solid var(--border-color);padding-left:12px;text-align:center;">
-                <div class="text-tertiary" style="font-size:11px;">Total Usage</div>
+              <div class="flex-1 border-left-subtle pl-3 text-center">
+                <div class="text-tertiary text-xs">Total Usage</div>
                 <div class="font-bold text-primary text-sm mt-0.5">{{ addon.stats?.usageCount || 0 }} times</div>
               </div>
             </div>
 
             <!-- Features List -->
-            <div v-if="addon.features && addon.features.length > 0" class="features-list" style="display:flex;flex-direction:column;gap:8px;background:var(--color-off-white);padding:14px;border-radius:12px;border:1px solid var(--border-subtle);margin-bottom:16px;">
-              <div v-for="(feat, idx) in addon.features" :key="idx" class="flex items-start gap-2 text-xs text-secondary" style="text-align:left;">
-                <IconCheck :size="14" style="color:var(--color-success);flex-shrink:0;margin-top:2px;" />
-                <span style="line-height:1.4;">{{ feat }}</span>
+            <div v-if="addon.features && addon.features.length > 0" class="features-list flex flex-col gap-2 card-offwhite p-3.5 rounded-12 mb-4">
+              <div v-for="(feat, idx) in addon.features" :key="idx" class="flex items-start gap-2 text-xs text-secondary text-left">
+                <IconCheck :size="14" class="text-success flex-shrink-0 mt-0.5" />
+                <span class="lh-normal">{{ feat }}</span>
               </div>
             </div>
           </div>
 
           <!-- Card Actions Footer -->
-          <div style="display:flex;flex-direction:column;gap:10px;padding-top:12px;border-top:1px solid var(--border-subtle);">
+          <div class="flex flex-col gap-2.5 pt-3 border-top-subtle">
             <div class="text-xs text-tertiary text-center font-mono">ID: {{ addon.id }}</div>
 
-            <div style="display:flex;gap:8px;">
-              <button class="btn btn-secondary btn-sm" style="flex:1;justify-content:center;height:38px;font-weight:600;" @click="toggleStatus(addon)">
+            <div class="flex gap-2">
+              <button class="btn btn-secondary btn-sm flex-1 justify-center h-38 fw-600" @click="toggleStatus(addon)">
                 {{ addon.status === 'PUBLISHED' ? 'Unpublish' : 'Publish' }}
               </button>
-              <button class="btn btn-primary btn-sm" style="flex:1;justify-content:center;height:38px;font-weight:600;" @click="openEditModal(addon)">
+              <button class="btn btn-primary btn-sm flex-1 justify-center h-38 fw-600" @click="openEditModal(addon)">
                 <IconEdit :size="13" /> Edit
               </button>
             </div>
@@ -190,7 +185,7 @@
           </div>
         </div>
 
-        <div style="background:var(--color-off-white);padding:16px;border-radius:12px;border:1px solid var(--border-subtle);display:flex;flex-direction:column;gap:12px;">
+        <div class="card-offwhite p-4 rounded-12 flex flex-col gap-3">
           <div class="text-xs text-tertiary fw-700 uppercase">Invoicing Addon Usage Insights</div>
           <div class="flex justify-between text-xs py-1 border-b">
             <span class="text-secondary">Total Invoices Created:</span>
@@ -202,7 +197,7 @@
           </div>
           <div class="flex justify-between text-xs py-1 border-b">
             <span class="text-secondary">Outstanding Unpaid Invoices:</span>
-            <span class="font-bold" style="color:#D97706;">{{ (invoiceStats.sentCount || 0) + (invoiceStats.overdueCount || 0) }}</span>
+            <span class="font-bold text-warning">{{ (invoiceStats.sentCount || 0) + (invoiceStats.overdueCount || 0) }}</span>
           </div>
           <div class="flex justify-between text-xs py-1">
             <span class="text-secondary">Total Settled Billed Amount:</span>
@@ -214,13 +209,13 @@
 
     <!-- Create / Edit Addon Modal -->
     <div v-if="showModal" class="modal-backdrop animate-fade-in" @click.self="showModal = false">
-      <div class="modal-content card p-6" style="max-width:540px;width:100%;">
+      <div class="modal-content card p-6 max-w-540 w-full">
         <div class="flex items-center justify-between pb-3 border-b mb-4">
           <div class="card-title text-base">{{ modalForm.id ? 'Edit Addon' : 'Create New Addon' }}</div>
           <button class="btn btn-ghost btn-sm p-0" @click="showModal = false">✕</button>
         </div>
 
-        <form @submit.prevent="saveAddonForm" style="display:flex;flex-direction:column;gap:14px;">
+        <form @submit.prevent="saveAddonForm" class="flex flex-col gap-3.5">
           <div class="form-group">
             <label class="form-label text-xs">Addon Name *</label>
             <input v-model="modalForm.name" type="text" class="form-input text-xs" required placeholder="e.g. Basic Invoicing" />
@@ -410,21 +405,3 @@ onMounted(() => {
   fetchAdminStoreData()
 })
 </script>
-
-<style scoped>
-.store-products-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-}
-@media (max-width: 992px) {
-  .store-products-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-@media (max-width: 640px) {
-  .store-products-grid {
-    grid-template-columns: 1fr;
-  }
-}
-</style>

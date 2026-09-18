@@ -7,10 +7,10 @@
       </div>
 
       <div class="flex items-center gap-3">
-        <input v-model="startDate" type="date" class="form-input text-xs" style="height:36px;" />
+        <input v-model="startDate" type="date" class="form-input text-xs h-36" />
         <span class="text-xs text-tertiary">to</span>
-        <input v-model="endDate" type="date" class="form-input text-xs" style="height:36px;" />
-        <button @click="fetchFunnel" class="btn btn-secondary btn-sm" style="height:36px;">
+        <input v-model="endDate" type="date" class="form-input text-xs h-36" />
+        <button @click="fetchFunnel" class="btn btn-secondary btn-sm h-36">
           Apply Filter
         </button>
       </div>
@@ -67,16 +67,17 @@
             <tr v-for="stage in funnel" :key="stage.stageKey">
               <td class="fw-600 text-sm text-primary">{{ stage.stageName }}</td>
               <td class="table-text-right fw-700 text-sm tabular">{{ stage.count }}</td>
-              <td class="table-text-right fw-600 text-sm tabular" style="color:var(--color-purple);">
+              <td class="table-text-right fw-600 text-sm tabular text-purple">
                 {{ stage.conversionRate }}%
               </td>
-              <td class="table-text-right text-xs tabular" :style="{ color: stage.dropOffRate > 20 ? 'var(--color-pink)' : 'var(--text-tertiary)' }">
+              <td class="table-text-right text-xs tabular" :class="stage.dropOffRate > 20 ? 'text-pink' : 'text-tertiary'">
                 {{ stage.dropOffRate }}%
               </td>
               <td>
-                <div style="width:100%;height:10px;background:var(--color-soft-gray);border-radius:999px;overflow:hidden;">
+                <div class="progress-bar-wrap">
                   <div
-                    :style="{ width: stage.conversionRate + '%', background: 'var(--grad-brand)', height: '100%' }"
+                    class="progress-fill progress-fill-gradient"
+                    :style="{ width: stage.conversionRate + '%' }"
                   ></div>
                 </div>
               </td>

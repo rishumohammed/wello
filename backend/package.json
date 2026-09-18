@@ -1,0 +1,23 @@
+{
+  "name": "wello-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nitropack dev --port 3001",
+    "build": "nitropack build",
+    "preview": "node .output/server/index.mjs",
+    "start": "node .output/server/index.mjs",
+    "test": "node tests/test_auth.mjs && node tests/test_admin_apis.mjs && node tests/test_store_and_invoicing.mjs"
+  },
+  "dependencies": {
+    "dayjs": "^1.11.13",
+    "h3": "^1.12.0",
+    "mysql2": "^3.11.0",
+    "nitropack": "^2.9.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "typescript": "^5.5.0"
+  }
+}

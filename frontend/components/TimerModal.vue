@@ -22,14 +22,14 @@
               <div class="fw-700 text-base text-primary">{{ timerProjectName }}</div>
               <div class="text-secondary text-xs mt-1">
                 {{ store.activeTimer.title }} · <span class="capitalize">{{ store.activeTimer.type }}</span>
-                <span v-if="store.activeTimer.paymentType === 'unpaid'" class="badge badge-unpaid ml-1" style="font-size:10px;padding:1px 6px;">Unpaid</span>
-                <span v-else-if="store.activeTimer.paymentType === 'paid'" class="badge badge-paid ml-1" style="font-size:10px;padding:1px 6px;">Paid</span>
-                <span v-else class="badge badge-intentional ml-1" style="font-size:10px;padding:1px 6px;">Intentional</span>
+                <span v-if="store.activeTimer.paymentType === 'unpaid'" class="badge badge-unpaid ml-1 text-2xs px-1.5 py-0.5">Unpaid</span>
+                <span v-else-if="store.activeTimer.paymentType === 'paid'" class="badge badge-paid ml-1 text-2xs px-1.5 py-0.5">Paid</span>
+                <span v-else class="badge badge-intentional ml-1 text-2xs px-1.5 py-0.5">Intentional</span>
               </div>
             </div>
 
             <!-- Big Timer Display -->
-            <div style="text-align:center; padding: 20px 0;">
+            <div class="text-center py-5">
               <div class="timer-display" :class="{ running: !store.isTimerPaused, paused: store.isTimerPaused }" id="timer-clock-digits">
                 {{ store.timerDisplay() }}
               </div>
@@ -54,8 +54,7 @@
               </button>
               <button
                 v-else
-                class="btn btn-secondary"
-                style="color:var(--color-purple); border-color:var(--color-purple);"
+                class="btn btn-secondary text-purple border-purple"
                 @click="store.resumeTimer()"
                 id="btn-resume-timer"
                 title="Resume timer"
@@ -150,7 +149,7 @@
               </select>
             </div>
 
-            <div class="modal-footer" style="padding: var(--space-4) 0 0 0; border-top:none;">
+            <div class="modal-footer pt-4 px-0 pb-0 border-none">
               <button type="button" class="btn btn-secondary" @click="$emit('close')" id="btn-cancel-timer">Cancel</button>
               <button type="submit" class="btn btn-primary" id="btn-start-timer-submit">
                 <IconClock :size="14" />
@@ -239,10 +238,3 @@ function handleStopTimer() {
   emit('close')
 }
 </script>
-
-<style scoped>
-.timer-display.paused {
-  color: #F59E0B;
-  animation: none;
-}
-</style>

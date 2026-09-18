@@ -7,7 +7,7 @@
       </div>
 
       <div class="flex items-center gap-3">
-        <select v-model="statusFilter" class="form-input text-xs" style="width:160px;height:36px;">
+        <select v-model="statusFilter" class="form-input text-xs form-select-sm h-36">
           <option value="ALL">All Statuses</option>
           <option value="PENDING">Pending ({{ countStatus('PENDING') }})</option>
           <option value="UNDER_REVIEW">Under Review</option>
@@ -15,7 +15,7 @@
           <option value="REJECTED">Rejected</option>
           <option value="MERGED">Merged</option>
         </select>
-        <button @click="fetchRequests" class="btn btn-secondary btn-sm" style="height:36px;">
+        <button @click="fetchRequests" class="btn btn-secondary btn-sm h-36">
           🔄 Refresh
         </button>
       </div>
@@ -29,12 +29,6 @@
 
     <!-- Requests Table Card -->
     <div class="card" id="requests-table-card">
-      <div class="card-header flex items-center justify-between">
-        <div>
-          <div class="card-title">Category Request Queue ({{ filteredRequests.length }})</div>
-          <div class="card-subtitle">User-submitted requests sorted by demand count</div>
-        </div>
-      </div>
 
       <div class="table-responsive">
         <table class="table">
@@ -71,7 +65,7 @@
               <td class="text-xs text-tertiary">{{ formatTime(req.createdAt) }}</td>
               <td class="table-text-right">
                 <div v-if="req.status === 'PENDING' || req.status === 'UNDER_REVIEW'" class="flex items-center justify-end gap-1">
-                  <button @click="processRequest(req.id, 'APPROVE')" class="btn btn-secondary btn-sm text-xs" style="color:var(--color-success);">
+                  <button @click="processRequest(req.id, 'APPROVE')" class="btn btn-secondary btn-sm text-xs text-success">
                     ✓ Approve
                   </button>
                   <button @click="processRequest(req.id, 'REJECT')" class="btn btn-ghost btn-sm text-xs text-danger">

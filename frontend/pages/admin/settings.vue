@@ -1,7 +1,7 @@
 <template>
-  <div class="admin-settings-page animate-fade-in" style="display:flex;flex-direction:column;gap:20px;">
+  <div class="admin-settings-page flex flex-col gap-5 animate-fade-in">
     <!-- Page Header & Tab Controls -->
-    <div class="card card-padded" style="background:white;border:1px solid var(--border-color);border-radius:16px;">
+    <div class="card card-padded bg-white border-soft rounded-16">
       <div class="flex items-center justify-between flex-wrap gap-4 mb-4">
         <div>
           <h1 class="text-xl font-bold text-primary mb-1">Admin Console Settings</h1>
@@ -10,17 +10,14 @@
       </div>
 
       <!-- Settings Sub-Tabs Navigation -->
-      <div class="flex items-center gap-2 overflow-x-auto pb-1" style="border-bottom:1px solid var(--border-color);">
+      <div class="flex items-center gap-2 overflow-x-auto pb-1 border-b">
         <button
           v-for="tab in tabs"
           :key="tab.id"
           type="button"
           @click="activeTab = tab.id"
-          class="btn btn-sm"
-          :style="activeTab === tab.id
-            ? 'background:var(--grad-brand);color:white;border:none;font-weight:700;box-shadow:0 2px 8px rgba(122,63,246,0.25);'
-            : 'background:var(--color-off-white);color:var(--text-secondary);border:1px solid var(--border-color);font-weight:600;'"
-          style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:12px;white-space:nowrap;transition:all 0.15s ease;"
+          class="admin-tab-btn"
+          :class="{ active: activeTab === tab.id }"
         >
           <component :is="tab.icon" :size="14" />
           <span>{{ tab.label }}</span>
@@ -94,8 +91,8 @@
         <!-- Status Card -->
         <div class="card card-padded">
           <div class="card-title text-base mb-2">Integration Status</div>
-          <div class="p-4 border-radius-sm mb-4" :style="{ background: config.hasKey ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)', border: config.hasKey ? '1px solid #10B981' : '1px solid #F59E0B' }">
-            <div class="font-bold text-sm mb-1" :style="{ color: config.hasKey ? '#10B981' : '#D97706' }">
+          <div class="p-4 border-radius-sm mb-4" :class="config.hasKey ? 'status-box-connected' : 'status-box-sandbox'">
+            <div class="status-box-title font-bold text-sm mb-1">
               {{ config.hasKey ? '✓ Live Resend API Connected' : '⚡ Local Dev Sandbox Active' }}
             </div>
             <div class="text-xs text-secondary">
@@ -120,7 +117,7 @@
         </div>
 
         <div class="grid-1 md:grid-2 gap-4">
-          <div v-for="tmpl in emailTemplates" :key="tmpl.id" class="p-4 border-radius-sm" style="border:1px solid var(--border-color);background:var(--color-off-white);">
+          <div v-for="tmpl in emailTemplates" :key="tmpl.id" class="p-4 border-radius-sm border-soft bg-off-white">
             <div class="font-bold text-sm text-primary mb-1">{{ tmpl.name }}</div>
             <div class="text-xs text-tertiary mb-3">{{ tmpl.description }}</div>
             <div class="form-group mb-2">
@@ -206,7 +203,7 @@
               <tr v-for="log in auditLogs" :key="log.id">
                 <td class="text-tertiary whitespace-nowrap">{{ formatTime(log.createdAt) }}</td>
                 <td>
-                  <span class="badge" style="background:var(--color-off-white);border:1px solid var(--border-color);color:var(--text-secondary);font-size:10px;">
+                  <span class="badge bg-off-white border-soft text-secondary text-2xs">
                     {{ log.module }}
                   </span>
                 </td>
@@ -232,12 +229,11 @@
           <div class="card-title text-base mb-1">Admin Roles Definition</div>
           <div class="card-subtitle text-xs mb-4">Configured RBAC role hierarchies</div>
 
-          <div style="display:flex;flex-direction:column;gap:12px;">
+          <div class="flex flex-col gap-3">
             <div
               v-for="role in roles"
               :key="role.roleKey || role.id"
-              class="p-4 border-radius-sm"
-              style="border:1px solid var(--border-color);background:var(--color-off-white);"
+              class="p-4 border-radius-sm border-soft bg-off-white"
             >
               <div class="flex items-center justify-between mb-1">
                 <span class="font-bold text-sm text-primary">{{ role.name }}</span>
@@ -246,7 +242,7 @@
               <p class="text-xs text-secondary mb-2">{{ role.description }}</p>
               <div class="text-xs text-tertiary font-semibold">Permissions ({{ role.permissions?.length || 0 }}):</div>
               <div class="flex flex-wrap gap-1 mt-1">
-                <span v-for="p in role.permissions" :key="p" class="badge" style="background:white;border:1px solid var(--border-subtle);font-size:10px;color:var(--color-purple);">
+                <span v-for="p in role.permissions" :key="p" class="badge bg-white border-subtle text-purple text-2xs">
                   {{ p }}
                 </span>
               </div>
@@ -259,13 +255,13 @@
           <div class="card-title text-base mb-1">Active Administrators</div>
           <div class="card-subtitle text-xs mb-4">Platform accounts with administrative privileges</div>
 
-          <div style="display:flex;flex-direction:column;gap:10px;">
-            <div v-for="admin in admins" :key="admin.id" class="p-3 border-radius-sm flex items-center justify-between" style="border:1px solid var(--border-color);background:white;">
+          <div class="flex flex-col gap-2.5">
+            <div v-for="admin in admins" :key="admin.id" class="p-3 border-radius-sm flex items-center justify-between border-soft bg-white">
               <div>
                 <div class="font-bold text-sm text-primary">{{ admin.name }}</div>
                 <div class="text-xs text-tertiary">{{ admin.email }}</div>
               </div>
-              <span class="badge" style="background:rgba(122,63,246,0.1);color:var(--color-purple);font-weight:700;">
+              <span class="badge badge-purple-soft fw-700">
                 {{ admin.roleKey || admin.role }}
               </span>
             </div>

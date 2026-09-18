@@ -101,6 +101,25 @@ export const useAuthStore = defineStore('auth', () => {
         console.warn('Could not read auth session from storage', e)
       }
     }
+
+    if (user.value) {
+      syncWithWelloStore(user.value)
+    }
+  }
+
+  function syncWithWelloStore(newUser) {
+    try {
+      const welloStore = useWelloStore()
+      if (welloStore?.user && newUser) {
+        welloStore.user.name = newUser.name
+        welloStore.user.email = newUser.email
+        welloStore.user.role = newUser.role || 'user'
+        welloStore.user.avatarInitials = newUser.avatarInitials || (newUser.name ? newUser.name.slice(0, 2).toUpperCase() : 'RM')
+        if (newUser.targetHourly) welloStore.user.targetHourly = newUser.targetHourly
+      }
+    } catch (e) {
+      // Wello store not initialized yet
+    }
   }
 
   function setSession(newToken, newUser) {
@@ -123,18 +142,7 @@ export const useAuthStore = defineStore('auth', () => {
       }
     }
 
-    // Sync with wello store profile
-    try {
-      const welloStore = useWelloStore()
-      if (welloStore?.user) {
-        welloStore.user.name = newUser.name
-        welloStore.user.email = newUser.email
-        welloStore.user.avatarInitials = newUser.avatarInitials
-        if (newUser.targetHourly) welloStore.user.targetHourly = newUser.targetHourly
-      }
-    } catch (e) {
-      // Wello store not initialized yet
-    }
+    syncWithWelloStore(newUser)
   }
 
   async function sendOtp(payload) {

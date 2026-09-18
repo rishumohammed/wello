@@ -35,12 +35,12 @@ const STORAGE_KEY = 'wello_store_v1'
 // ─── Initial Sample Data ────────────────────────────────────────────────────
 
 const SAMPLE_CLIENTS = [
-  { id: 'c1', name: 'ABC Technologies', email: 'contact@abctech.in', company: 'ABC Technologies Pvt Ltd' },
-  { id: 'c2', name: 'XYZ Interior & Living', email: 'priya@xyzinterior.com', company: 'XYZ Interior Design Studio' },
-  { id: 'c3', name: 'Coastal Realty', email: 'info@coastalrealty.in', company: 'Coastal Realty Group' },
-  { id: 'c4', name: 'MindSpark Studio', email: 'hello@mindspark.io', company: 'MindSpark Studio' },
-  { id: 'c5', name: 'HealthFirst Clinic', email: 'admin@healthfirst.org', company: 'HealthFirst Medical Group' },
-  { id: 'c6', name: 'Apex Logistics', email: 'ops@apexlogistics.com', company: 'Apex Global Logistics' },
+  { id: 'c1', name: 'ABC Technologies', email: 'contact@abctech.in', company: 'ABC Technologies Pvt Ltd', phone: '+91 98201 12345', location: 'Bengaluru, India' },
+  { id: 'c2', name: 'XYZ Interior & Living', email: 'priya@xyzinterior.com', company: 'XYZ Interior Design Studio', phone: '+91 98334 56789', location: 'Mumbai, India' },
+  { id: 'c3', name: 'Coastal Realty', email: 'info@coastalrealty.in', company: 'Coastal Realty Group', phone: '+91 98112 34567', location: 'Goa, India' },
+  { id: 'c4', name: 'MindSpark Studio', email: 'hello@mindspark.io', company: 'MindSpark Studio', phone: '+91 97690 98765', location: 'Pune, India' },
+  { id: 'c5', name: 'HealthFirst Clinic', email: 'admin@healthfirst.org', company: 'HealthFirst Medical Group', phone: '+91 98450 11223', location: 'Hyderabad, India' },
+  { id: 'c6', name: 'Apex Logistics', email: 'ops@apexlogistics.com', company: 'Apex Global Logistics', phone: '+91 99001 88776', location: 'New Delhi, India' },
 ]
 
 const SAMPLE_PROJECTS = [
@@ -253,6 +253,7 @@ const SAMPLE_USER = {
   email: 'rahul@mehtatech.in',
   avatarInitials: 'RM',
   targetHourly: 350,
+  role: 'user',
   currency: '₹',
   businessName: 'Rahul Mehta Tech Consulting',
   businessLogo: '',
@@ -392,6 +393,12 @@ export const useWelloStore = defineStore('wello', () => {
     return Math.round(projectRevenueTotal(project.id) / totalH)
   }
 
+  function projectEffectiveHourly(projectOrId) {
+    const proj = typeof projectOrId === 'string' ? getProject(projectOrId) : projectOrId
+    if (!proj) return 0
+    return projectGrossHourlyValue(proj)
+  }
+
   function estimatedUnpaidValue(project) {
     const unpaidH = projectUnpaidMinutes(project.id) / 60
     return Math.round(unpaidH * (user.value.targetHourly || 0))
@@ -482,9 +489,12 @@ export const useWelloStore = defineStore('wello', () => {
       const lastDay = new Date(nowD.getFullYear(), nowD.getMonth() + 1, 0)
       startDateStr = firstDay.toISOString().slice(0, 10)
       endDateStr = lastDay.toISOString().slice(0, 10)
-    } else if (rangeType === 'custom' && customStart && customEnd) {
-      startDateStr = customStart
-      endDateStr = customEnd
+    } else if (rangeType === 'all') {
+      startDateStr = '2000-01-01'
+      endDateStr = '2099-12-31'
+    } else if (rangeType === 'custom') {
+      startDateStr = customStart || daysAgo(30)
+      endDateStr = customEnd || t
     }
 
     const matchedSessions = sessions.value.filter(s => {
@@ -631,7 +641,7 @@ export const useWelloStore = defineStore('wello', () => {
 
   // ── Comprehensive Period Insights Engine ──────────────────────────────────
 
-  function getInsightsForPeriod(periodKey = 'month') {
+  function getInsightsForPeriod(periodKey = 'month', customStart = null, customEnd = null) {
     const t = today()
     const nowD = new Date()
     const targetRate = user.value.targetHourly || 350
@@ -668,6 +678,11 @@ export const useWelloStore = defineStore('wello', () => {
       endDateStr = '2099-12-31'
       periodLabel = 'All Time'
       dateRangeLabel = 'Lifetime Account History'
+    } else if (periodKey === 'custom') {
+      startDateStr = customStart || daysAgo(30)
+      endDateStr = customEnd || t
+      periodLabel = 'Custom Range'
+      dateRangeLabel = `${new Date(startDateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} – ${new Date(endDateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
     }
 
     // Filter sessions strictly within range (no duplication)
@@ -814,21 +829,66 @@ export const useWelloStore = defineStore('wello', () => {
 
   // ── Project Conversion Analysis Engine ────────────────────────────────────
 
-  function getConversionAnalysis() {
+  function getConversionAnalysis(periodKey = 'all', customStart = null, customEnd = null) {
+    const t = today()
+    const nowD = new Date()
     const targetRate = user.value.targetHourly || 350
     const allProjects = projects.value
-    const totalStarted = allProjects.length
+
+    let startDateStr = null
+    let endDateStr = null
+
+    if (periodKey === 'today') {
+      startDateStr = t
+      endDateStr = t
+    } else if (periodKey === 'week') {
+      const day = nowD.getDay() || 7
+      const monday = new Date(nowD)
+      monday.setDate(nowD.getDate() - (day - 1))
+      startDateStr = monday.toISOString().slice(0, 10)
+      const sunday = new Date(monday)
+      sunday.setDate(monday.getDate() + 6)
+      endDateStr = sunday.toISOString().slice(0, 10)
+    } else if (periodKey === 'month') {
+      const firstDay = new Date(nowD.getFullYear(), nowD.getMonth(), 1)
+      const lastDay = new Date(nowD.getFullYear(), nowD.getMonth() + 1, 0)
+      startDateStr = firstDay.toISOString().slice(0, 10)
+      endDateStr = lastDay.toISOString().slice(0, 10)
+    } else if (periodKey === 'custom') {
+      startDateStr = customStart || daysAgo(30)
+      endDateStr = customEnd || t
+    }
+
+    let filteredProjects = allProjects
+    if (startDateStr && endDateStr) {
+      filteredProjects = allProjects.filter(p => {
+        const cDate = p.createdAt ? p.createdAt.slice(0, 10) : ''
+        if (cDate && cDate >= startDateStr && cDate <= endDateStr) return true
+
+        const qDate = p.quoteDate ? p.quoteDate.slice(0, 10) : ''
+        if (qDate && qDate >= startDateStr && qDate <= endDateStr) return true
+
+        const hasSessionInPeriod = sessions.value.some(s => {
+          if (s.projectId !== p.id || !s.startedAt) return false
+          const sDate = s.startedAt.slice(0, 10)
+          return sDate >= startDateStr && sDate <= endDateStr
+        })
+        return hasSessionInPeriod
+      })
+    }
+
+    const totalStarted = filteredProjects.length
 
     // Converted to Jobs: isJob === true OR status in ['approved', 'in_progress', 'completed']
-    const convertedProjectsList = allProjects.filter(p => p.isJob || p.status === 'completed' || p.status === 'approved' || p.status === 'in_progress')
+    const convertedProjectsList = filteredProjects.filter(p => p.isJob || p.status === 'completed' || p.status === 'approved' || p.status === 'in_progress')
     const convertedCount = convertedProjectsList.length
 
     // Lost projects: status === 'lost'
-    const lostProjectsList = allProjects.filter(p => p.status === 'lost')
+    const lostProjectsList = filteredProjects.filter(p => p.status === 'lost')
     const lostCount = lostProjectsList.length
 
     // Potential / in proposal
-    const potentialProjectsList = allProjects.filter(p => p.status === 'potential' || p.status === 'quoted')
+    const potentialProjectsList = filteredProjects.filter(p => p.status === 'potential' || p.status === 'quoted')
     const potentialCount = potentialProjectsList.length
 
     const conversionRatePct = totalStarted > 0 ? Math.round((convertedCount / totalStarted) * 100) : 0
@@ -837,7 +897,18 @@ export const useWelloStore = defineStore('wello', () => {
     let lostTimeMin = 0
     const enrichedLost = lostProjectsList.map(p => {
       const pSess = getProjectSessions(p.id)
-      const pMin = pSess.reduce((sum, s) => sum + (s.durationMin || 0), 0)
+      const periodSess = (startDateStr && endDateStr)
+        ? pSess.filter(s => {
+            if (!s.startedAt) return false
+            const sDate = s.startedAt.slice(0, 10)
+            return sDate >= startDateStr && sDate <= endDateStr
+          })
+        : pSess
+
+      const pMin = (periodSess.length > 0)
+        ? periodSess.reduce((sum, s) => sum + (s.durationMin || 0), 0)
+        : pSess.reduce((sum, s) => sum + (s.durationMin || 0), 0)
+
       lostTimeMin += pMin
       const client = getClient(p.clientId)
       return {
@@ -862,6 +933,8 @@ export const useWelloStore = defineStore('wello', () => {
       lostTimeHM,
       lostTimeEstValue,
       targetRate,
+      startDateStr,
+      endDateStr,
       lostProjects: enrichedLost,
       convertedProjects: convertedProjectsList,
     }
@@ -967,75 +1040,103 @@ export const useWelloStore = defineStore('wello', () => {
 
     // 1. Value Growth / Trend Insight
     const growthPct = 18
+    const avgRateStr = fmt(periodData.effectiveHourlyValue || 287, currency.value)
     list.push({
       id: 'insight-value-growth',
       type: 'positive',
       tag: 'Economic Return',
+      stat: `+${growthPct}%`,
+      statSub: `avg ${avgRateStr}/h`,
       title: 'Effective Value Growth',
-      text: `Your effective value increased ${growthPct}% this month compared to earlier baselines, averaging ${fmt(periodData.effectiveHourlyValue || 287, currency.value)}/hour.`,
+      description: `Your effective value increased ${growthPct}% this month compared to earlier baselines, averaging ${avgRateStr}/hour.`,
+      text: `Your effective value increased ${growthPct}% this month compared to earlier baselines, averaging ${avgRateStr}/hour.`,
     })
 
     // 2. Unpaid Client Time Proportion
-    const unpaidPct = periodData.unpaidRatioPct || 23
+    const unpaidPct = periodData.unpaidRatioPct || 29
+    const unpaidTimeStr = periodData.unpaidClientHM || '2h 15m'
     list.push({
       id: 'insight-unpaid-ratio',
       type: 'warning',
       tag: 'Time Economics',
+      stat: `${unpaidPct}%`,
+      statSub: `${unpaidTimeStr} unbilled`,
       title: 'Unpaid Project Time',
-      text: `${unpaidPct}% of your project time was unpaid client work (${periodData.unpaidClientHM || '2h 15m'} across discovery & estimation).`,
+      description: `${unpaidPct}% of your project time was unpaid client work (${unpaidTimeStr} across discovery, meetings, and estimation).`,
+      text: `${unpaidPct}% of your project time was unpaid client work (${unpaidTimeStr} across discovery & estimation).`,
     })
 
     // 3. Highest-Value Project
     const bestProj = periodData.bestValueProject || enrichedProjects.value.find(p => p.id === 'p2') || enrichedProjects.value[0]
     if (bestProj) {
+      const topRateStr = fmt(bestProj.effectiveHourly || bestProj.netHrVal || 750, currency.value)
       list.push({
         id: 'insight-top-project',
         type: 'highlight',
         tag: 'Highest Yield',
+        stat: `${topRateStr}/h`,
+        statSub: bestProj.name,
         title: 'Best-Value Engagement',
-        text: `Project "${bestProj.name}" generated the highest effective value per hour at ${fmt(bestProj.effectiveHourly || bestProj.netHrVal || 750, currency.value)}/hour.`,
+        description: `Project "${bestProj.name}" generated your highest effective return per hour at ${topRateStr}/hour.`,
+        text: `Project "${bestProj.name}" generated the highest effective value per hour at ${topRateStr}/hour.`,
       })
     }
 
-    // 4. Lost Projects Opportunity Cost
+    // 4. Lost Projects Opportunity Cost (incorporates callout realization)
     if (convData.lostCount > 0) {
+      const lostValStr = fmt(convData.lostTimeEstValue, currency.value)
       list.push({
         id: 'insight-lost-projects',
         type: 'info',
         tag: 'Conversion Impact',
+        stat: convData.lostTimeHM,
+        statSub: `${lostValStr} unbilled`,
         title: 'Lost Engagements Investment',
-        text: `You invested ${convData.lostTimeHM} in ${convData.lostCount} projects that did not convert (unbilled opportunity cost: ${fmt(convData.lostTimeEstValue, currency.value)}).`,
+        description: `Invested across ${convData.lostCount} unconverted proposals. Unsuccessful projects still consume real time; Wello preserves this unbilled effort for accurate lifetime metrics.`,
+        text: `You invested ${convData.lostTimeHM} in ${convData.lostCount} projects that did not convert (unbilled opportunity cost: ${lostValStr}).`,
       })
     }
 
     // 5. Work Type Consumption (Revisions / Meetings / Production)
     const revisionType = periodData.typeBreakdown.find(t => t.type === 'revision')
-    const revPct = revisionType ? revisionType.pctOfTotal : 14
+    const revPct = revisionType ? revisionType.pctOfTotal : 7
     list.push({
       id: 'insight-revision-time',
       type: 'neutral',
       tag: 'Work Pattern',
+      stat: `${revPct}%`,
+      statSub: 'of logged time',
       title: 'Revision & Meeting Load',
+      description: `Client revisions and feedback loops consumed ${revPct}% of your total logged work time this period.`,
       text: `Client revisions and feedback loops consumed ${revPct}% of your total logged time this period.`,
     })
 
     // 6. Target Alignment
     if (periodData.effectiveHourlyValue < target) {
       const gap = target - periodData.effectiveHourlyValue
+      const gapStr = fmt(gap, currency.value)
+      const targetStr = fmt(target, currency.value)
       list.push({
         id: 'insight-target-gap',
         type: 'neutral',
         tag: 'Target Rate',
+        stat: `-${gapStr}/h`,
+        statSub: `Target: ${targetStr}/h`,
         title: 'Target Benchmark Gap',
-        text: `You are ${fmt(gap, currency.value)}/h away from your target rate of ${fmt(target, currency.value)}/hour.`,
+        description: `You are currently ${gapStr}/h away from your target rate of ${targetStr}/hour across active engagements.`,
+        text: `You are ${gapStr}/h away from your target rate of ${targetStr}/hour.`,
       })
     } else {
+      const targetStr = fmt(target, currency.value)
       list.push({
         id: 'insight-target-met',
         type: 'positive',
         tag: 'Target Rate',
-        title: 'Target Benchmark Surpassed',
-        text: `You have surpassed your target hourly benchmark of ${fmt(target, currency.value)}/hour for this period!`,
+        stat: '✓ Surpassed',
+        statSub: `Target: ${targetStr}/h`,
+        title: 'Target Benchmark Exceeded',
+        description: `Your average effective hourly earnings have surpassed your target benchmark of ${targetStr}/hour for this period.`,
+        text: `You have surpassed your target hourly benchmark of ${targetStr}/hour for this period!`,
       })
     }
 
@@ -1370,10 +1471,22 @@ export const useWelloStore = defineStore('wello', () => {
       email: data.email || '',
       phone: data.phone || '',
       company: data.company || '',
+      location: data.location || '',
       notes: data.notes || '',
     }
     clients.value.push(client)
     return client
+  }
+
+  function updateClient(id, data) {
+    const idx = clients.value.findIndex(c => c.id === id)
+    if (idx === -1) return false
+    clients.value[idx] = { ...clients.value[idx], ...data }
+    return true
+  }
+
+  function deleteClient(id) {
+    clients.value = clients.value.filter(c => c.id !== id)
   }
 
   function resetToDefaults() {
@@ -1424,6 +1537,7 @@ export const useWelloStore = defineStore('wello', () => {
     projectNetIncome,
     projectNetHourlyValue,
     projectGrossHourlyValue,
+    projectEffectiveHourly,
     estimatedUnpaidValue,
     todaysSessions,
     todaysTotalMinutes,
@@ -1464,6 +1578,8 @@ export const useWelloStore = defineStore('wello', () => {
     updateSession,
     deleteSession,
     createClient,
+    updateClient,
+    deleteClient,
     resetToDefaults,
   }
 })

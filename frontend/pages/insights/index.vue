@@ -6,7 +6,7 @@
       <p class="page-subtitle">Understand patterns in your time, conversion yield, and true work-value return.</p>
     </div>
 
-    <!-- Main Period View Selector Tabs: Today | This Week | This Month | All Time -->
+    <!-- Main Period View Selector Tabs: Today | This Week | This Month | All Time | Custom -->
     <div class="period-tabs-bar mb-6" id="insights-period-selector">
       <div class="filter-strip mb-0">
         <button
@@ -22,6 +22,35 @@
       </div>
       <div class="text-xs text-tertiary fw-500" id="period-daterange-label">
         {{ currentPeriodData.dateRangeLabel }}
+      </div>
+    </div>
+
+    <!-- Custom Date Range Bar for Main Period Selector -->
+    <div v-if="selectedPeriod === 'custom'" class="card card-padded mb-6 animate-fade-in" id="insights-custom-date-bar">
+      <div class="flex items-center justify-between flex-wrap gap-3">
+        <div class="flex items-center gap-2 text-xs">
+          <span class="fw-600 text-primary">Custom Date Range:</span>
+          <span class="text-secondary">From</span>
+          <input
+            v-model="customStartDate"
+            type="date"
+            class="form-input form-input-sm"
+            :max="customEndDate || todayStr"
+            id="input-main-custom-start"
+          />
+          <span class="text-secondary">To</span>
+          <input
+            v-model="customEndDate"
+            type="date"
+            class="form-input form-input-sm"
+            :min="customStartDate"
+            :max="todayStr"
+            id="input-main-custom-end"
+          />
+        </div>
+        <div class="text-xs text-tertiary fw-500">
+          {{ currentPeriodData.dateRangeLabel }}
+        </div>
       </div>
     </div>
 
@@ -289,11 +318,16 @@
             :id="`insight-tile-${ins.id}`"
           >
             <div class="flex items-center justify-between mb-2">
-              <span class="insight-badge">{{ ins.tag }}</span>
-              <span class="insight-type-indicator"></span>
+              <span class="insight-badge" :class="`badge-${ins.type}`">{{ ins.tag }}</span>
             </div>
+
+            <div class="insight-hero-stat-row" v-if="ins.stat">
+              <span class="insight-hero-stat" :class="`stat-${ins.type}`">{{ ins.stat }}</span>
+              <span class="insight-hero-sub" v-if="ins.statSub">{{ ins.statSub }}</span>
+            </div>
+
             <div class="insight-tile-title">{{ ins.title }}</div>
-            <div class="insight-tile-text">“{{ ins.text }}”</div>
+            <div class="insight-tile-desc">{{ ins.description || ins.text }}</div>
           </div>
         </div>
       </div>
@@ -324,7 +358,7 @@
 
       <div class="card-body">
         <!-- Interactive Value Trend Chart -->
-        <div class="interactive-bar-chart" style="height: 220px;" id="insights-trend-chart">
+        <div class="interactive-bar-chart h-220" id="insights-trend-chart">
           <!-- Target Reference Line -->
           <div
             class="chart-target-line"
@@ -346,7 +380,7 @@
             <div class="chart-bar-value-top" v-if="bar.rate > 0">
               {{ store.currency }}{{ bar.rate }}
             </div>
-            <div class="chart-bar-value-top" v-else style="color:var(--text-tertiary);">
+            <div class="chart-bar-value-top text-tertiary" v-else>
               —
             </div>
             <div
@@ -376,14 +410,57 @@
 
     <!-- SECTION 4: PROJECT CONVERSION ANALYSIS -->
     <div class="card mb-6" id="insights-conversion-analysis">
-      <div class="card-header">
+      <div class="card-header flex items-center justify-between flex-wrap gap-4">
         <div>
           <div class="card-title">Project Conversion Analysis</div>
           <div class="card-subtitle">Tracking pipeline yield and the unbilled time cost of lost opportunities</div>
         </div>
-        <span class="badge badge-job" style="font-size:11px;">
-          {{ conversionData.conversionRatePct }}% Conversion Rate
-        </span>
+        <div class="flex items-center gap-3 flex-wrap">
+          <!-- Filter: Today | This Week | Month | All | Custom -->
+          <div class="filter-strip mb-0" id="conversion-period-selector">
+            <button
+              v-for="p in convPeriodOptions"
+              :key="p.key"
+              class="filter-chip"
+              :class="{ active: selectedConvPeriod === p.key }"
+              @click="selectedConvPeriod = p.key"
+              :id="`conv-tab-${p.key}`"
+            >
+              {{ p.label }}
+            </button>
+          </div>
+
+          <span class="badge badge-job text-xs">
+            {{ conversionData.conversionRatePct }}% Conversion Rate
+          </span>
+        </div>
+      </div>
+
+      <!-- Custom Date Range Bar (shown when custom is selected) -->
+      <div v-if="selectedConvPeriod === 'custom'" class="px-6 py-3 border-b bg-surface-secondary flex items-center justify-between flex-wrap gap-3 animate-fade-in" id="conv-custom-date-bar">
+        <div class="flex items-center gap-2 text-xs text-secondary">
+          <span class="fw-600 text-primary">Custom Range:</span>
+          <span>From</span>
+          <input
+            v-model="convCustomStart"
+            type="date"
+            class="form-input form-input-sm"
+            :max="convCustomEnd || todayStr"
+            id="conv-custom-start"
+          />
+          <span>To</span>
+          <input
+            v-model="convCustomEnd"
+            type="date"
+            class="form-input form-input-sm"
+            :min="convCustomStart"
+            :max="todayStr"
+            id="conv-custom-end"
+          />
+        </div>
+        <div class="text-xs text-tertiary">
+          Filtering projects created, quoted, or worked between selected dates
+        </div>
       </div>
 
       <div class="card-body">
@@ -420,19 +497,6 @@
           </div>
         </div>
 
-        <!-- Analytical Context Callout -->
-        <div class="conversion-callout-banner mb-5">
-          <div class="flex items-center gap-3">
-            <div class="callout-icon-wrap"><IconClock :size="18" /></div>
-            <div>
-              <div class="fw-600 text-sm text-primary">Unsuccessful projects still consumed valuable time.</div>
-              <div class="text-tertiary text-xs mt-0.5">
-                You invested {{ conversionData.lostTimeHM }} in discovery, meetings, and proposals on engagements that didn't close. Wello retains this data to give you accurate lifetime realization metrics.
-              </div>
-            </div>
-          </div>
-        </div>
-
         <!-- Lost Projects Detailed Table -->
         <div v-if="conversionData.lostProjects.length > 0" class="table-wrap">
           <table class="table" id="table-lost-projects-insights">
@@ -459,10 +523,15 @@
                 <td class="table-text-right fw-600 text-warning tabular">{{ lp.timeHM }}</td>
                 <td class="table-text-right fw-600 tabular">{{ store.fmtCurrency(lp.estValue) }}</td>
                 <td class="table-text-right fw-600 text-secondary tabular">{{ lp.quoteAmount ? store.fmtCurrency(lp.quoteAmount) : '—' }}</td>
-                <td class="text-tertiary text-xs" style="max-width:240px;">{{ lp.quoteNotes || 'Client postponed budget.' }}</td>
+                <td class="text-tertiary text-xs max-w-240">{{ lp.quoteNotes || 'Client postponed budget.' }}</td>
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <div v-else class="empty-state py-8 text-center border-t mt-4" id="empty-lost-projects">
+          <div class="text-secondary text-sm fw-600">No lost engagements in this period</div>
+          <div class="text-tertiary text-xs mt-1">All client projects in this window were either converted to active jobs or are currently in progress.</div>
         </div>
       </div>
     </div>
@@ -482,20 +551,17 @@
           <div class="time-donut-area mb-4">
             <div class="time-stack-bar">
               <div
-                class="time-stack-segment"
-                style="background:var(--color-success);"
+                class="time-stack-segment bg-success"
                 :style="{ flex: currentPeriodData.paidTimeMin || 0.01 }"
                 :title="`Paid: ${currentPeriodData.paidTimeHM}`"
               ></div>
               <div
-                class="time-stack-segment"
-                style="background:#F59E0B;"
+                class="time-stack-segment bg-warning"
                 :style="{ flex: currentPeriodData.unpaidClientTimeMin || 0.01 }"
                 :title="`Unpaid Client: ${currentPeriodData.unpaidClientTimeHM}`"
               ></div>
               <div
-                class="time-stack-segment"
-                style="background:#3B82F6;"
+                class="time-stack-segment bg-blue"
                 :style="{ flex: currentPeriodData.intentionalUnpaidTimeMin || 0.01 }"
                 :title="`Intentional: ${currentPeriodData.intentionalUnpaidTimeHM}`"
               ></div>
@@ -505,21 +571,21 @@
           <div class="flex flex-col gap-2.5">
             <div class="value-row">
               <span class="value-row-label">
-                <span class="time-legend-dot" style="background:var(--color-success);"></span>
+                <span class="time-legend-dot bg-success"></span>
                 Paid Work Time
               </span>
               <span class="value-row-amount fw-600 text-success">{{ currentPeriodData.paidTimeHM }}</span>
             </div>
             <div class="value-row">
               <span class="value-row-label">
-                <span class="time-legend-dot" style="background:#F59E0B;"></span>
+                <span class="time-legend-dot bg-warning"></span>
                 Unpaid Client Discovery
               </span>
               <span class="value-row-amount fw-600 text-warning">{{ currentPeriodData.unpaidClientTimeHM }}</span>
             </div>
             <div class="value-row">
               <span class="value-row-label">
-                <span class="time-legend-dot" style="background:#3B82F6;"></span>
+                <span class="time-legend-dot bg-blue"></span>
                 Intentional Unpaid (Strategic/Learning)
               </span>
               <span class="value-row-amount fw-600 text-secondary">{{ currentPeriodData.intentionalUnpaidTimeHM }}</span>
@@ -541,8 +607,8 @@
           </div>
         </div>
 
-        <div class="card-body" style="padding-top: var(--space-2);">
-          <div v-if="currentPeriodData.typeBreakdown.length === 0" class="empty-state" style="padding: 24px;">
+        <div class="card-body pt-2">
+          <div v-if="currentPeriodData.typeBreakdown.length === 0" class="empty-state p-6">
             <div class="empty-desc">No sessions recorded in this timeframe.</div>
           </div>
 
@@ -562,7 +628,7 @@
                   {{ item.durationHM }} · <strong class="text-secondary">{{ item.pctOfTotal }}%</strong>
                 </span>
               </div>
-              <div class="progress-bar-bg" style="height: 5px;">
+              <div class="progress-bar-bg h-5">
                 <div
                   class="progress-bar-fill"
                   :style="{
@@ -635,13 +701,37 @@ import { useWelloStore } from '~/stores/wello'
 
 const store = useWelloStore()
 
+const todayStr = new Date().toISOString().slice(0, 10)
+function daysAgoStr(days) {
+  const d = new Date()
+  d.setDate(d.getDate() - days)
+  return d.toISOString().slice(0, 10)
+}
+
 // Main Period Selector
 const selectedPeriod = ref('month')
+const customStartDate = ref(daysAgoStr(30))
+const customEndDate = ref(todayStr)
+
 const periodOptions = [
-  { key: 'today', label: 'Today' },
-  { key: 'week',  label: 'This Week' },
-  { key: 'month', label: 'This Month' },
-  { key: 'all',   label: 'All Time' },
+  { key: 'today',  label: 'Today' },
+  { key: 'week',   label: 'This Week' },
+  { key: 'month',  label: 'This Month' },
+  { key: 'all',    label: 'All Time' },
+  { key: 'custom', label: 'Custom' },
+]
+
+// Conversion Period Selector (Section 4)
+const selectedConvPeriod = ref('all')
+const convCustomStart = ref(daysAgoStr(30))
+const convCustomEnd = ref(todayStr)
+
+const convPeriodOptions = [
+  { key: 'today',  label: 'Today' },
+  { key: 'week',   label: 'This Week' },
+  { key: 'month',  label: 'Month' },
+  { key: 'all',    label: 'All' },
+  { key: 'custom', label: 'Custom' },
 ]
 
 // Trend Range Selector
@@ -668,12 +758,20 @@ const typeColors = {
 
 // Current Period Analytics Data
 const currentPeriodData = computed(() => {
-  return store.getInsightsForPeriod(selectedPeriod.value)
+  return store.getInsightsForPeriod(
+    selectedPeriod.value,
+    customStartDate.value,
+    customEndDate.value
+  )
 })
 
 // Conversion Data
 const conversionData = computed(() => {
-  return store.getConversionAnalysis()
+  return store.getConversionAnalysis(
+    selectedConvPeriod.value,
+    convCustomStart.value,
+    convCustomEnd.value
+  )
 })
 
 // Value Trend Data
@@ -692,135 +790,3 @@ const dynamicInsightsList = computed(() => {
   return store.getDynamicSmartInsights(selectedPeriod.value)
 })
 </script>
-
-<style scoped>
-.insights-page {
-  max-width: 1160px;
-  margin: 0 auto;
-}
-
-.period-tabs-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-}
-
-.conversion-stat-box {
-  background: var(--color-pure-white);
-  border: var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
-}
-
-.conversion-stat-value {
-  font-family: var(--font-display);
-  font-size: var(--font-2xl);
-  font-weight: 700;
-  line-height: 1.1;
-}
-
-.conversion-callout-banner {
-  background: #F8FAFC;
-  border: 1px solid #E2E8F0;
-  border-left: 4px solid var(--color-warning);
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
-}
-
-.callout-icon-wrap {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: rgba(245, 158, 11, 0.12);
-  color: var(--color-warning);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.smart-insight-tile {
-  background: #FAFAFC;
-  border: var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
-  transition: all var(--transition-normal);
-}
-
-.smart-insight-tile:hover {
-  background: var(--color-pure-white);
-  border-color: rgba(122, 63, 246, 0.3);
-  box-shadow: var(--shadow-sm);
-}
-
-.insight-badge {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 2px 7px;
-  border-radius: var(--radius-full);
-  background: #EEF2F6;
-  color: var(--text-secondary);
-}
-
-.insight-tile-title {
-  font-size: var(--font-sm);
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 4px;
-}
-
-.insight-tile-text {
-  font-size: var(--font-xs);
-  color: var(--text-secondary);
-  line-height: 1.45;
-}
-
-.time-donut-area {
-  padding: var(--space-2) 0;
-}
-
-.time-stack-bar {
-  display: flex;
-  height: 18px;
-  border-radius: var(--radius-full);
-  overflow: hidden;
-  gap: 2px;
-  background: var(--color-soft-gray);
-}
-
-.time-stack-segment {
-  transition: flex 0.6s ease;
-  min-width: 4px;
-}
-
-.time-legend-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-right: 6px;
-  flex-shrink: 0;
-}
-
-.work-type-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.work-type-row {
-  display: flex;
-  flex-direction: column;
-}
-
-.type-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-</style>

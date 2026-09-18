@@ -1,5 +1,5 @@
 <template>
-  <div class="admin-dashboard animate-fade-in" style="display:flex;flex-direction:column;gap:24px;">
+  <div class="admin-dashboard flex flex-col gap-6 animate-fade-in">
     <!-- 5 KPI Metric Cards Grid (Matching Wello Global UI Design Style) -->
     <div class="grid-2 md:grid-5 gap-4" id="admin-stat-cards">
       <!-- Card 1: Total Users -->
@@ -150,18 +150,18 @@
             <div class="card-title text-base">Registration Funnel Overview</div>
             <div class="card-subtitle text-xs">Conversion across key user onboarding stages</div>
           </div>
-          <NuxtLink to="/admin/registration-pipeline" class="btn btn-secondary btn-sm" style="font-size:11px;">Full Pipeline →</NuxtLink>
+          <NuxtLink to="/admin/registration-pipeline" class="btn btn-secondary btn-sm text-xs">Full Pipeline →</NuxtLink>
         </div>
 
-        <div style="display:flex;flex-direction:column;gap:12px;">
-          <div v-for="stage in keyFunnelStages" :key="stage.stageName" style="display:flex;flex-direction:column;gap:4px;">
+        <div class="flex flex-col gap-3">
+          <div v-for="stage in keyFunnelStages" :key="stage.stageName" class="flex flex-col gap-1">
             <div class="flex items-center justify-between text-xs">
               <span class="font-semibold text-primary">{{ stage.stageLabel }}</span>
               <span class="text-secondary font-mono">{{ stage.count }} users ({{ stage.conversionRate }}%)</span>
             </div>
-            <div style="width:100%;height:8px;background:var(--color-off-white);border-radius:4px;overflow:hidden;border:1px solid var(--border-subtle);">
+            <div class="progress-track-sm">
               <div
-                style="height:100%;background:var(--grad-brand);border-radius:4px;transition:width 0.4s ease;"
+                class="progress-fill-gradient rounded-4 h-full transition-width"
                 :style="{ width: `${stage.conversionRate}%` }"
               ></div>
             </div>
@@ -176,18 +176,18 @@
             <div class="card-title text-base">Pending Category Requests</div>
             <div class="card-subtitle text-xs">User taxonomy submissions awaiting review</div>
           </div>
-          <NuxtLink to="/admin/category-requests" class="btn btn-secondary btn-sm" style="font-size:11px;">Manage Queue →</NuxtLink>
+          <NuxtLink to="/admin/category-requests" class="btn btn-secondary btn-sm text-xs">Manage Queue →</NuxtLink>
         </div>
 
         <div v-if="pendingRequests.length === 0" class="text-center py-8 text-tertiary text-xs">
           ✨ All category requests have been processed!
         </div>
 
-        <div v-else style="display:flex;flex-direction:column;gap:10px;">
+        <div v-else class="flex flex-col gap-2.5">
           <div
             v-for="req in pendingRequests.slice(0, 3)"
             :key="req.id"
-            style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--color-off-white);border-radius:8px;border:1px solid var(--border-color);"
+            class="flex items-center justify-between p-2.5 bg-off-white rounded-8 border-soft"
           >
             <div>
               <div class="font-bold text-sm text-primary">{{ req.requestedName }}</div>
@@ -197,8 +197,7 @@
               <button
                 type="button"
                 @click="quickApproveCategory(req.id)"
-                class="btn btn-primary btn-sm"
-                style="padding:2px 8px;font-size:11px;"
+                class="btn btn-primary btn-sm btn-xs-pad text-xs"
               >
                 Approve
               </button>
@@ -216,18 +215,17 @@
           v-for="module in consoleModules"
           :key="module.to"
           :to="module.to"
-          class="card p-3 hover-lift text-decoration-none"
-          style="border:1px solid var(--border-color);display:flex;align-items:center;gap:12px;box-shadow:var(--shadow-xs);transition:all 0.15s ease;"
+          class="card p-3 hover-lift text-decoration-none border-soft flex items-center gap-3"
         >
           <div
             :style="{ background: module.bg, color: module.color }"
-            style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;"
+            class="icon-box-40 rounded-10 flex items-center justify-center flex-shrink-0"
           >
             <component :is="module.icon" :size="18" />
           </div>
-          <div style="min-width:0;">
+          <div class="min-w-0">
             <div class="font-bold text-primary text-xs truncate">{{ module.title }}</div>
-            <div class="text-xs text-tertiary truncate" style="font-size:11px;">{{ module.desc }}</div>
+            <div class="text-xs text-tertiary truncate">{{ module.desc }}</div>
           </div>
         </NuxtLink>
       </div>
@@ -240,7 +238,7 @@
           <div class="card-title text-base">Recent Audit Trail</div>
           <div class="card-subtitle text-xs">Latest system changes and administrative security logs</div>
         </div>
-        <NuxtLink to="/admin/audit-logs" class="btn btn-secondary btn-sm" style="font-size:11px;">View All Audit Logs →</NuxtLink>
+        <NuxtLink to="/admin/audit-logs" class="btn btn-secondary btn-sm text-xs">View All Audit Logs →</NuxtLink>
       </div>
 
       <div class="table-responsive">
@@ -261,7 +259,7 @@
             <tr v-for="log in recentAuditLogs" :key="log.id">
               <td class="text-tertiary whitespace-nowrap">{{ formatTime(log.createdAt) }}</td>
               <td>
-                <span class="badge" style="background:var(--color-off-white);border:1px solid var(--border-color);color:var(--text-secondary);font-size:10px;">
+                <span class="badge bg-off-white border-soft text-secondary text-2xs">
                   {{ log.module }}
                 </span>
               </td>

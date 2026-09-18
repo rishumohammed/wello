@@ -1,5 +1,5 @@
 <template>
-  <div class="invoicing-page animate-fade-in" style="display:flex;flex-direction:column;gap:24px;">
+  <div class="invoicing-page flex flex-col gap-6 animate-fade-in">
     <!-- Page Header & Action Bar -->
     <div class="page-header flex items-center justify-between flex-wrap gap-4 mb-0">
       <div>
@@ -83,7 +83,7 @@
         </button>
       </div>
 
-      <div class="search-input-wrap" style="max-width:280px;width:100%;">
+      <div class="search-input-wrap max-w-280 w-full">
         <input
           v-model="searchQuery"
           type="text"
@@ -96,13 +96,6 @@
 
     <!-- Invoices Directory Table Card -->
     <div class="card" id="invoices-directory-card">
-      <div class="card-header flex items-center justify-between">
-        <div>
-          <div class="card-title text-base">Invoices Directory</div>
-          <div class="card-subtitle">Manage billing, print paper records, or export invoices</div>
-        </div>
-        <span class="text-xs text-tertiary">{{ filteredInvoices.length }} invoice(s) found</span>
-      </div>
 
       <div v-if="isLoading" class="text-center py-12 text-tertiary text-sm">
         Loading invoices data…
@@ -132,7 +125,7 @@
             <tr v-for="inv in filteredInvoices" :key="inv.id" :id="`invoice-row-${inv.id}`">
               <!-- Invoice Number & Link -->
               <td>
-                <NuxtLink :to="`/invoicing/${inv.id}`" class="font-bold text-primary text-sm hover:text-brand" style="text-decoration:none;">
+                <NuxtLink :to="`/invoicing/${inv.id}`" class="font-bold text-primary text-sm hover:text-brand text-decoration-none">
                   {{ inv.invoiceNumber }}
                 </NuxtLink>
               </td>
@@ -171,9 +164,8 @@
                 <select
                   v-model="inv.status"
                   @change="updateStatus(inv)"
-                  class="form-input text-xs font-bold"
+                  class="form-input text-xs font-bold invoice-status-select"
                   :style="getStatusBadgeStyle(inv.status)"
-                  style="padding:3px 8px;border-radius:12px;height:28px;cursor:pointer;"
                   :id="`select-status-${inv.id}`"
                 >
                   <option value="DRAFT">📝 DRAFT</option>
@@ -210,14 +202,14 @@
     <!-- Create / Edit Invoice Modal -->
     <Teleport to="body">
       <div v-if="showModal" class="modal-overlay" @click.self="showModal = false" id="invoice-modal">
-        <div class="modal modal-lg" role="dialog" style="max-width:740px;width:100%;">
+        <div class="modal modal-lg max-w-740 w-full" role="dialog">
           <div class="modal-header">
             <div class="modal-title">{{ modalForm.id ? 'Edit Invoice' : 'Create New Invoice' }}</div>
             <button type="button" class="modal-close" @click="showModal = false"><IconX :size="16" /></button>
           </div>
 
-          <form @submit.prevent="saveInvoiceForm" novalidate style="display:flex;flex-direction:column;gap:16px;">
-            <div class="modal-body" style="display:flex;flex-direction:column;gap:16px;max-height:75vh;overflow-y:auto;padding-right:4px;">
+          <form @submit.prevent="saveInvoiceForm" novalidate>
+            <div class="modal-body">
               <!-- Top Row: Invoice #, Date, Due Date -->
               <div class="grid-3 gap-3">
                 <div class="form-group">
@@ -265,12 +257,12 @@
                   </button>
                 </div>
 
-                <div style="display:flex;flex-direction:column;gap:8px;">
+                <div class="flex flex-col gap-2">
                   <div v-for="(item, idx) in modalForm.items" :key="idx" class="flex items-center gap-2">
-                    <input v-model="item.description" type="text" class="form-input text-xs" style="flex:3;" placeholder="Item description" required />
-                    <input v-model.number="item.quantity" type="number" step="0.5" min="0.1" class="form-input text-xs text-center" style="flex:1;" placeholder="Qty" required />
-                    <input v-model.number="item.rate" type="number" step="1" min="0" class="form-input text-xs text-right" style="flex:1.5;" placeholder="Rate" required />
-                    <div class="text-xs font-bold text-primary text-right tabular" style="flex:1.5;">
+                    <input v-model="item.description" type="text" class="form-input text-xs flex-3" placeholder="Item description" required />
+                    <input v-model.number="item.quantity" type="number" step="0.5" min="0.1" class="form-input text-xs text-center flex-1" placeholder="Qty" required />
+                    <input v-model.number="item.rate" type="number" step="1" min="0" class="form-input text-xs text-right flex-1-5" placeholder="Rate" required />
+                    <div class="text-xs font-bold text-primary text-right tabular flex-1-5">
                       {{ store.currency }}{{ ((item.quantity || 0) * (item.rate || 0)).toLocaleString('en-IN') }}
                     </div>
                     <button type="button" class="btn btn-ghost btn-xs text-error p-1" @click="removeItemLine(idx)" v-if="modalForm.items.length > 1">✕</button>
@@ -306,7 +298,7 @@
               </div>
 
               <!-- Total Calculation Display Box -->
-              <div class="p-3" style="background:var(--color-off-white);border:1px solid var(--border-color);border-radius:10px;display:flex;justify-content:space-between;align-items:center;">
+              <div class="p-3 bg-off-white border-soft rounded-10 flex justify-between items-center">
                 <div class="text-xs text-secondary">
                   Subtotal: {{ store.currency }}{{ calculatedSubtotal.toLocaleString('en-IN') }} · Tax: {{ store.currency }}{{ calculatedTax.toLocaleString('en-IN') }}
                 </div>

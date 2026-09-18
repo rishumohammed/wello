@@ -3,8 +3,8 @@
     <!-- Desktop Sidebar -->
     <aside class="app-sidebar">
       <div class="sidebar-logo">
-        <NuxtLink to="/" class="sidebar-logo-link" style="display:flex;align-items:center;text-decoration:none;">
-          <img src="~/assets/logo.png" alt="Wello" style="height:32px;width:auto;object-fit:contain;" />
+        <NuxtLink to="/" class="sidebar-logo-link flex items-center text-decoration-none">
+          <img src="~/assets/logo.png" alt="Wello" class="h-8 w-auto object-contain" />
         </NuxtLink>
       </div>
 
@@ -28,8 +28,8 @@
       <!-- Topbar -->
       <header class="app-topbar">
         <div class="topbar-left">
-          <NuxtLink to="/" class="topbar-mobile-logo" style="text-decoration:none;">
-            <img src="~/assets/logo.png" alt="Wello" style="height:26px;width:auto;object-fit:contain;" />
+          <NuxtLink to="/" class="topbar-mobile-logo text-decoration-none">
+            <img src="~/assets/logo.png" alt="Wello" class="h-26 w-auto object-contain" />
           </NuxtLink>
         </div>
         <div class="topbar-right">
@@ -43,101 +43,83 @@
             <span class="timer-running-indicator" :style="{ background: store.isTimerPaused ? '#F59E0B' : 'var(--color-success)' }"></span>
             <span class="fw-700">{{ store.timerDisplay() }}</span>
             <span class="text-tertiary">· {{ getTimerProject }}</span>
-            <span v-if="store.isTimerPaused" class="badge" style="padding:1px 5px;font-size:9px;background:rgba(245,158,11,0.15);color:#D97706;">Paused</span>
+            <span v-if="store.isTimerPaused" class="badge badge-paused">Paused</span>
           </div>
-
-          <!-- Quick link to Admin (Only visible for Admin accounts) -->
-          <NuxtLink
-            v-if="authStore.isAdmin"
-            to="/admin"
-            class="btn btn-ghost btn-sm"
-            style="display:flex;align-items:center;gap:6px;font-size:12px;text-decoration:none;height:34px;"
-            id="topbar-admin-btn"
-          >
-            <IconShield :size="14" />
-            <span>Admin</span>
-          </NuxtLink>
 
           <!-- Auth state badge / action -->
-          <div v-if="!authStore.isAuthenticated" style="display:flex;align-items:center;gap:6px;">
-            <NuxtLink to="/login" class="btn btn-secondary btn-sm" style="text-decoration:none;font-size:12px;height:34px;">Sign In</NuxtLink>
-            <NuxtLink to="/register" class="btn btn-primary btn-sm" style="text-decoration:none;font-size:12px;height:34px;">Register</NuxtLink>
+          <div v-if="!authStore.isAuthenticated" class="flex items-center gap-1.5">
+            <NuxtLink to="/login" class="btn btn-secondary btn-sm text-decoration-none text-xs h-34">Sign In</NuxtLink>
+            <NuxtLink to="/register" class="btn btn-primary btn-sm text-decoration-none text-xs h-34">Register</NuxtLink>
           </div>
-          <div v-else style="display:flex;align-items:center;gap:12px;position:relative;">
+          <div v-else class="flex items-center gap-3 relative">
             <!-- Profile Dropdown Trigger -->
-            <div ref="dropdownContainer" style="position:relative;">
+            <div ref="dropdownContainer" class="relative">
               <button
                 type="button"
                 @click.stop="showDropdown = !showDropdown"
                 class="header-user-dropdown-btn"
-                style="display:flex;align-items:center;gap:8px;background:var(--color-off-white);border:1px solid var(--border-color);padding:4px 12px 4px 6px;border-radius:24px;cursor:pointer;transition:all 0.15s ease;"
                 id="topbar-user-dropdown-trigger"
               >
-                <div class="user-avatar" style="background:var(--grad-brand);color:#FFFFFF;font-weight:700;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:0 2px 6px rgba(255,159,28,0.25);">
+                <div class="user-avatar-sm">
                   {{ displayAvatar }}
                 </div>
-                <div style="display:flex;flex-direction:column;line-height:1.2;text-align:left;">
-                  <span style="font-weight:600;font-size:13px;color:var(--text-primary);">{{ displayName }}</span>
-                  <span style="font-size:10px;color:var(--text-tertiary);font-weight:600;">{{ displayEmail || 'Independent' }}</span>
+                <div class="flex flex-col lh-tight text-left">
+                  <span class="text-xs fw-600 text-primary">{{ displayName }}</span>
+                  <span class="text-2xs text-tertiary fw-600">{{ displayEmail || 'Independent' }}</span>
                 </div>
-                <IconChevronDown :size="13" style="color:var(--text-tertiary);margin-left:2px;" />
+                <IconChevronDown :size="13" class="text-tertiary ml-0.5" />
               </button>
 
               <!-- Dropdown Menu Box -->
               <div
                 v-if="showDropdown"
                 class="profile-dropdown-menu animate-fade-in"
-                style="position:absolute;right:0;top:calc(100% + 8px);width:230px;background:white;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.12);border:1px solid var(--border-color);z-index:1000;overflow:hidden;"
                 @click.stop
               >
-                <div style="padding:12px 16px;border-bottom:1px solid var(--border-color);background:var(--color-off-white);">
-                  <div style="font-weight:700;font-size:13px;color:var(--text-primary);">{{ displayName }}</div>
-                  <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ displayEmail || 'user@example.com' }}</div>
+                <div class="p-3 border-b bg-off-white">
+                  <div class="fw-700 text-xs text-primary">{{ displayName }}</div>
+                  <div class="text-2xs text-tertiary mt-0.5 truncate">{{ displayEmail }}</div>
                 </div>
 
-                <div style="padding:6px 0;">
+                <div class="py-1.5">
                   <NuxtLink
                     v-if="authStore.isAdmin"
                     to="/admin"
                     @click="showDropdown = false"
                     class="dropdown-menu-item"
-                    style="display:flex;align-items:center;gap:10px;padding:9px 16px;font-size:13px;color:var(--text-primary);text-decoration:none;transition:background 0.12s;"
                   >
-                    <IconShield :size="15" style="color:var(--color-purple);" />
-                    <span style="font-weight:600;color:var(--color-purple);">Admin Console</span>
+                    <IconShield :size="15" class="text-purple" />
+                    <span class="fw-600 text-purple">Admin Console</span>
                   </NuxtLink>
 
                   <NuxtLink
                     to="/store"
                     @click="showDropdown = false"
                     class="dropdown-menu-item"
-                    style="display:flex;align-items:center;gap:10px;padding:9px 16px;font-size:13px;color:var(--text-primary);text-decoration:none;transition:background 0.12s;"
                     id="topbar-dropdown-store"
                   >
-                    <IconPackage :size="15" style="color:var(--color-purple);" />
-                    <span style="font-weight:600;color:var(--color-purple);">Wello Store</span>
+                    <IconPackage :size="15" class="text-purple" />
+                    <span class="fw-600 text-purple">Wello Store</span>
                   </NuxtLink>
 
                   <NuxtLink
                     to="/settings"
                     @click="showDropdown = false"
                     class="dropdown-menu-item"
-                    style="display:flex;align-items:center;gap:10px;padding:9px 16px;font-size:13px;color:var(--text-primary);text-decoration:none;transition:background 0.12s;"
                   >
-                    <IconSettings :size="15" style="color:var(--text-tertiary);" />
+                    <IconSettings :size="15" class="text-tertiary" />
                     <span>Settings & Profile</span>
                   </NuxtLink>
                 </div>
 
-                <div style="border-top:1px solid var(--border-color);padding:6px 0;background:rgba(239,68,68,0.02);">
+                <div class="border-t py-1.5 bg-danger-subtle">
                   <button
                     type="button"
                     @click="handleLogout"
-                    class="dropdown-menu-item"
-                    style="width:100%;display:flex;align-items:center;gap:10px;padding:9px 16px;font-size:13px;color:#EF4444;background:none;border:none;cursor:pointer;text-align:left;font-weight:600;"
+                    class="dropdown-menu-item text-danger fw-600"
                     id="topbar-dropdown-signout"
                   >
-                    <IconLogOut :size="15" style="color:#EF4444;" />
+                    <IconLogOut :size="15" class="text-danger" />
                     <span>Sign Out</span>
                   </button>
                 </div>
@@ -234,43 +216,32 @@ function handleLogout() {
   router.push('/login')
 }
 
-// Nav items
+// Nav items for User Account Workspace
 const navItems = [
   { id: 'home',     to: '/',          label: 'Home',     icon: resolveComponent('IconHome') },
-  { id: 'tracking', to: '/tracking',  label: 'Work',     icon: resolveComponent('IconClock') },
-  { id: 'projects', to: '/projects',  label: 'Projects', icon: resolveComponent('IconFolders') },
-  { id: 'jobs',     to: '/jobs',      label: 'Jobs',     icon: resolveComponent('IconBriefcase') },
+  { id: 'work',     to: '/work',      label: 'Work Hub', icon: resolveComponent('IconBriefcase') },
   { id: 'clients',  to: '/clients',   label: 'Clients',  icon: resolveComponent('IconUser') },
   { id: 'invoicing', to: '/invoicing', label: 'Invoices', icon: resolveComponent('IconReceipt') },
   { id: 'insights', to: '/insights',  label: 'Insights', icon: resolveComponent('IconInsights') },
-  { id: 'admin',    to: '/admin',     label: 'Admin',    icon: resolveComponent('IconShield') },
   { id: 'settings', to: '/settings',  label: 'Settings', icon: resolveComponent('IconSettings') },
 ]
 
 const mobileNavItems = [
   { id: 'home',     to: '/',          label: 'Home',     icon: resolveComponent('IconHome') },
-  { id: 'tracking', to: '/tracking',  label: 'Work',     icon: resolveComponent('IconClock') },
-  { id: 'projects', to: '/projects',  label: 'Projects', icon: resolveComponent('IconFolders') },
+  { id: 'work',     to: '/work',      label: 'Work Hub', icon: resolveComponent('IconBriefcase') },
+  { id: 'clients',  to: '/clients',   label: 'Clients',  icon: resolveComponent('IconUser') },
   { id: 'invoicing', to: '/invoicing', label: 'Invoices', icon: resolveComponent('IconReceipt') },
 ]
 
-// Filter nav items based on user role (Admin Panel requires Admin account)
-const visibleNavItems = computed(() => {
-  return navItems.filter(item => item.id !== 'admin' || authStore.isAdmin)
-})
-
-const visibleMobileNavItems = computed(() => {
-  return mobileNavItems.filter(item => item.id !== 'admin' || authStore.isAdmin)
-})
+const visibleNavItems = computed(() => navItems)
+const visibleMobileNavItems = computed(() => mobileNavItems)
 
 const pageNames = {
   '/': 'Home',
-  '/tracking': 'Work Tracking & History',
-  '/projects': 'Projects',
+  '/work': 'Work Hub',
   '/clients': 'Clients Directory',
-  '/jobs': 'Jobs',
+  '/invoicing': 'Invoices',
   '/insights': 'Insights',
-  '/admin': 'Admin & Resend Configuration',
   '/settings': 'Settings',
 }
 

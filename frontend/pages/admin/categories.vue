@@ -7,7 +7,7 @@
       </div>
 
       <div class="flex items-center gap-3">
-        <button @click="showAddModal = true" class="btn btn-primary btn-sm" style="height:36px;">
+        <button @click="showAddModal = true" class="btn btn-primary btn-sm h-36">
           <IconPlus :size="14" class="mr-1" /> Add Category
         </button>
       </div>
@@ -21,12 +21,6 @@
 
     <!-- Categories Table Card -->
     <div class="card mb-6" id="categories-table-card">
-      <div class="card-header flex items-center justify-between">
-        <div>
-          <div class="card-title">Active Platform Categories ({{ categories.length }})</div>
-          <div class="card-subtitle">Categories powering job postings and work session classifications</div>
-        </div>
-      </div>
 
       <div class="table-responsive">
         <table class="table">
@@ -44,7 +38,7 @@
             <tr v-for="cat in categories" :key="cat.id">
               <td>
                 <div class="flex items-center gap-2">
-                  <component :is="cat.icon || 'IconBriefcase'" :size="16" style="color:var(--color-purple);" />
+                  <component :is="cat.icon || 'IconBriefcase'" :size="16" class="text-purple" />
                   <span class="fw-700 text-sm text-primary">{{ cat.name }}</span>
                 </div>
               </td>
@@ -95,9 +89,9 @@
               <td class="fw-600 text-sm text-primary">{{ m.categoryName }}</td>
               <td class="table-text-right text-xs tabular fw-600">{{ m.providerCount }}</td>
               <td class="table-text-right text-xs tabular fw-600">{{ m.totalJobs }}</td>
-              <td class="table-text-right text-xs tabular" style="color:var(--color-success);">{{ m.completedJobs }}</td>
-              <td class="table-text-right text-xs tabular" style="color:var(--color-purple);">{{ m.successfulConnections }}</td>
-              <td class="table-text-right text-xs tabular fw-700" style="color:var(--color-purple);">+{{ m.growthRatePercent }}%</td>
+              <td class="table-text-right text-xs tabular text-success">{{ m.completedJobs }}</td>
+              <td class="table-text-right text-xs tabular text-purple">{{ m.successfulConnections }}</td>
+              <td class="table-text-right text-xs tabular fw-700 text-purple">+{{ m.growthRatePercent }}%</td>
             </tr>
           </tbody>
         </table>

@@ -7,7 +7,7 @@
       </div>
 
       <div class="flex items-center gap-3">
-        <select v-model="filterType" class="form-input text-xs" style="width:180px;height:36px;">
+        <select v-model="filterType" class="form-input text-xs form-select-sm h-36">
           <option value="all">All Event Types</option>
           <option value="login_success">Login Success</option>
           <option value="register_success">Register Success</option>
@@ -15,7 +15,7 @@
           <option value="verify_failed">Verification Failures</option>
           <option value="test_email">Test Email</option>
         </select>
-        <button @click="fetchLogs" class="btn btn-secondary btn-sm" style="height:36px;">
+        <button @click="fetchLogs" class="btn btn-secondary btn-sm h-36">
           🔄 Refresh Logs
         </button>
       </div>
@@ -23,12 +23,6 @@
 
     <!-- Logs Table Card -->
     <div class="card" id="admin-auth-logs-card">
-      <div class="card-header flex items-center justify-between">
-        <div>
-          <div class="card-title">Activity Logs ({{ filteredLogs.length }})</div>
-          <div class="card-subtitle">Showing in-memory server audit trail events</div>
-        </div>
-      </div>
 
       <div class="table-responsive">
         <table class="table">

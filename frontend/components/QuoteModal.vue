@@ -78,7 +78,7 @@
               <div class="flex items-center justify-between">
                 <div>
                   <div class="text-xs text-tertiary">Implied hourly quote rate</div>
-                  <div class="fw-700 text-brand" style="font-size:var(--font-xl);">
+                  <div class="fw-700 text-brand text-xl">
                     {{ store.fmtHourly(form.amount / form.estHours) }}
                   </div>
                 </div>
@@ -173,12 +173,3 @@ async function handleSubmit() {
   }
 }
 </script>
-
-<style scoped>
-.implied-rate-box {
-  background: var(--color-off-white);
-  border: var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
-}
-</style>

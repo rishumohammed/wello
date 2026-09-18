@@ -6,8 +6,8 @@ function request(urlPath, method = 'GET', data = null) {
     const payload = data ? JSON.stringify(data) : null;
     const req = http.request(
       {
-        hostname: 'localhost',
-        port: 3000,
+        hostname: process.env.API_HOST || 'localhost',
+        port: process.env.API_PORT || 3001,
         path: urlPath,
         method: method,
         headers: {

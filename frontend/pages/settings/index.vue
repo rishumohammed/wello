@@ -1,5 +1,5 @@
 <template>
-  <div class="settings-page animate-fade-in" style="display:flex;flex-direction:column;gap:20px;">
+  <div class="settings-page animate-fade-in flex flex-col gap-5">
     <!-- Page Header -->
     <div class="page-header flex items-center justify-between flex-wrap gap-4 mb-0">
       <div>
@@ -34,7 +34,7 @@
       <div class="card" id="settings-profile-card">
         <div class="card-header flex items-center justify-between">
           <div class="flex items-center gap-2">
-            <div class="metric-icon-box purple" style="width:32px;height:32px;">
+            <div class="metric-icon-box purple">
               <IconUser :size="16" />
             </div>
             <div>
@@ -45,14 +45,14 @@
         </div>
 
         <div class="card-body">
-          <div class="flex items-center gap-5 mb-6 p-4" style="background:var(--color-off-white);border:1px solid var(--border-subtle);border-radius:14px;">
-            <div class="user-avatar" style="width:64px;height:64px;font-size:20px;font-weight:700;border-radius:20px;box-shadow:0 4px 12px rgba(122,63,246,0.15);">
+          <div class="flex items-center gap-5 mb-6 p-4 bg-off-white border-subtle-box rounded-14">
+            <div class="user-avatar avatar-preview-box">
               {{ store.user.avatarInitials || 'U' }}
             </div>
             <div>
               <div class="fw-700 text-base text-primary">{{ profileForm.name || 'User' }}</div>
               <div class="text-tertiary text-xs mt-0.5">{{ profileForm.email }}</div>
-              <div class="badge mt-2" style="background:rgba(122,63,246,0.1);color:var(--color-purple);font-size:11px;font-weight:600;">
+              <div class="badge badge-purple text-xs font-semibold mt-2">
                 Wello {{ authStore.isAdmin ? 'Administrator' : 'Account Owner' }}
               </div>
             </div>
@@ -84,7 +84,7 @@
         <div class="card" id="settings-business-card">
           <div class="card-header flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <div class="metric-icon-box success" style="width:32px;height:32px;">
+              <div class="metric-icon-box success">
                 <IconReceipt :size="16" />
               </div>
               <div>
@@ -96,12 +96,12 @@
 
           <div class="card-body">
             <!-- Logo Uploader & Preview Block -->
-            <div class="flex items-start gap-4 mb-6 p-4" style="background:var(--color-off-white);border:1px solid var(--border-subtle);border-radius:14px;">
-              <div style="width:110px;height:70px;border:2px dashed var(--border-color);border-radius:10px;display:flex;align-items:center;justify-content:center;background:white;overflow:hidden;position:relative;flex-shrink:0;">
-                <img v-if="bizForm.businessLogo" :src="bizForm.businessLogo" alt="Logo Preview" style="max-width:100%;max-height:100%;object-fit:contain;padding:4px;" />
+            <div class="flex items-start gap-4 mb-6 p-4 bg-off-white border-subtle-box rounded-14">
+              <div class="logo-preview-box">
+                <img v-if="bizForm.businessLogo" :src="bizForm.businessLogo" alt="Logo Preview" class="max-w-full max-h-full object-contain p-1" />
                 <div v-else class="text-center p-2 text-tertiary">
-                  <IconPackage :size="20" style="margin:0 auto;opacity:0.5;" />
-                  <span style="font-size:10px;display:block;margin-top:2px;">No Logo</span>
+                  <IconPackage :size="20" class="mx-auto opacity-50" />
+                  <span class="text-xs block mt-1">No Logo</span>
                 </div>
               </div>
 
@@ -109,10 +109,10 @@
                 <div class="fw-700 text-sm">Invoice Logo Header</div>
                 <div class="text-xs text-tertiary">PNG, JPG, or SVG logo. Automatically formatted at the top of client invoices.</div>
                 <div class="flex items-center gap-2 mt-1">
-                  <label class="btn btn-secondary btn-sm" style="cursor:pointer;" id="btn-upload-logo">
+                  <label class="btn btn-secondary btn-sm cursor-pointer" id="btn-upload-logo">
                     <IconPackage :size="13" />
                     <span>{{ bizForm.businessLogo ? 'Replace Logo' : 'Upload Logo' }}</span>
-                    <input type="file" accept="image/*" @change="handleLogoUpload" style="display:none;" />
+                    <input type="file" accept="image/*" @change="handleLogoUpload" class="hidden" />
                   </label>
                   <button v-if="bizForm.businessLogo" type="button" class="btn btn-ghost btn-sm text-error" @click="bizForm.businessLogo = ''" id="btn-remove-logo">
                     Remove
@@ -164,27 +164,27 @@
         </div>
 
         <!-- Live Invoice Preview Card -->
-        <div class="card" id="settings-invoice-preview-card" style="background:var(--color-off-white);">
+        <div class="card bg-off-white" id="settings-invoice-preview-card">
           <div class="card-header flex items-center justify-between">
             <div class="card-title text-sm flex items-center gap-2">
-              <IconReceipt :size="16" style="color:var(--color-purple);" />
+              <IconReceipt :size="16" class="text-purple" />
               <span>Live Client Invoice Header Preview</span>
             </div>
-            <span class="badge" style="background:rgba(16,185,129,0.1);color:var(--color-success);font-size:10px;font-weight:700;">Live Preview</span>
+            <span class="badge badge-success text-xs font-bold">Live Preview</span>
           </div>
 
           <div class="card-body">
             <!-- Simulated Paper Invoice Box -->
-            <div class="p-5" style="background:white;border:1px solid var(--border-color);border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,0.03);">
+            <div class="p-5 bg-card border-card rounded-12 shadow-soft-card">
               <!-- Top Row: Logo & Issuer Details -->
               <div class="flex items-start justify-between flex-wrap gap-4 pb-4 border-b">
                 <div>
-                  <img v-if="bizForm.businessLogo" :src="bizForm.businessLogo" alt="Logo" style="max-height:44px;object-fit:contain;margin-bottom:8px;" />
+                  <img v-if="bizForm.businessLogo" :src="bizForm.businessLogo" alt="Logo" class="max-h-11 object-contain mb-2" />
                   <div class="fw-800 text-lg text-primary">{{ bizForm.businessName || 'Your Business Name' }}</div>
                   <div class="text-xs text-tertiary" v-if="bizForm.businessTaxId">Tax ID: {{ bizForm.businessTaxId }}</div>
                 </div>
                 <div class="text-right">
-                  <div class="fw-800 text-xl text-purple" style="letter-spacing:-0.5px;">INVOICE</div>
+                  <div class="fw-800 text-xl text-purple">INVOICE</div>
                   <div class="text-xs text-tertiary">#INV-2025-001</div>
                   <div class="text-xs text-tertiary">Date: Sept 16, 2025</div>
                 </div>
@@ -193,7 +193,7 @@
               <!-- Issuer Address & Contact -->
               <div class="py-3 border-b text-xs text-secondary">
                 <div class="fw-700 text-primary mb-1">Billed From:</div>
-                <div style="white-space:pre-line;" class="text-tertiary">{{ bizForm.businessAddress || 'Street Address, City, State, Pincode' }}</div>
+                <div class="text-tertiary whitespace-pre-line">{{ bizForm.businessAddress || 'Street Address, City, State, Pincode' }}</div>
                 <div class="mt-1 text-tertiary">
                   <span v-if="bizForm.businessEmail">📧 {{ bizForm.businessEmail }}</span>
                   <span v-if="bizForm.businessPhone" class="ml-2">📞 {{ bizForm.businessPhone }}</span>
@@ -229,7 +229,7 @@
       <div class="card" id="settings-work-prefs-card">
         <div class="card-header flex items-center justify-between">
           <div class="flex items-center gap-2">
-            <div class="metric-icon-box warning" style="width:32px;height:32px;">
+            <div class="metric-icon-box warning">
               <IconClock :size="16" />
             </div>
             <div>
@@ -277,24 +277,24 @@
             </div>
 
             <!-- Target Rate Target Calculator Preview Card -->
-            <div class="p-5" style="background:var(--color-off-white);border:1px solid var(--border-subtle);border-radius:14px;display:flex;flex-direction:column;justify-content:space-between;gap:12px;">
+            <div class="p-5 bg-off-white border-subtle-box rounded-14 flex flex-col justify-between gap-3">
               <div class="fw-700 text-sm text-primary flex items-center justify-between">
                 <span>Calculated Value Benchmarks</span>
-                <span class="badge" style="background:rgba(245,158,11,0.12);color:#D97706;font-weight:700;">Rate Targets</span>
+                <span class="badge badge-warning font-bold">Rate Targets</span>
               </div>
 
               <div class="grid-3 gap-2">
-                <div class="p-3" style="background:white;border-radius:10px;border:1px solid var(--border-color);text-align:center;">
+                <div class="p-3 bg-card rounded-10 border-card text-center">
                   <div class="text-xs text-tertiary uppercase fw-600">Hourly Target</div>
                   <div class="fw-800 text-base text-primary mt-1">{{ prefForm.currency }}{{ (prefForm.targetHourly || 0).toLocaleString('en-IN') }}</div>
                 </div>
 
-                <div class="p-3" style="background:white;border-radius:10px;border:1px solid var(--border-color);text-align:center;">
+                <div class="p-3 bg-card rounded-10 border-card text-center">
                   <div class="text-xs text-tertiary uppercase fw-600">Daily (8 hrs)</div>
                   <div class="fw-800 text-base text-success mt-1">{{ prefForm.currency }}{{ ((prefForm.targetHourly || 0) * 8).toLocaleString('en-IN') }}</div>
                 </div>
 
-                <div class="p-3" style="background:white;border-radius:10px;border:1px solid var(--border-color);text-align:center;">
+                <div class="p-3 bg-card rounded-10 border-card text-center">
                   <div class="text-xs text-tertiary uppercase fw-600">Monthly (160h)</div>
                   <div class="fw-800 text-base text-purple mt-1">{{ prefForm.currency }}{{ ((prefForm.targetHourly || 0) * 160).toLocaleString('en-IN') }}</div>
                 </div>
@@ -314,7 +314,7 @@
       <div class="card" id="settings-account-card">
         <div class="card-header flex items-center justify-between">
           <div class="flex items-center gap-2">
-            <div class="metric-icon-box pink" style="width:32px;height:32px;">
+            <div class="metric-icon-box pink">
               <IconShield :size="16" />
             </div>
             <div>
@@ -326,17 +326,17 @@
 
         <div class="card-body">
           <div class="grid-1 md:grid-3 gap-4 mb-6">
-            <div class="p-4" style="background:var(--color-off-white);border-radius:12px;border:1px solid var(--border-subtle);">
+            <div class="p-4 bg-off-white rounded-12 border-subtle-box">
               <div class="text-xs text-tertiary uppercase fw-600">Signed In As</div>
               <div class="fw-700 text-sm text-primary mt-1 truncate">{{ authStore.user?.email || store.user.email }}</div>
             </div>
 
-            <div class="p-4" style="background:var(--color-off-white);border-radius:12px;border:1px solid var(--border-subtle);">
+            <div class="p-4 bg-off-white rounded-12 border-subtle-box">
               <div class="text-xs text-tertiary uppercase fw-600">Authentication Method</div>
               <div class="fw-700 text-sm text-success mt-1">OTP Authenticated</div>
             </div>
 
-            <div class="p-4" style="background:var(--color-off-white);border-radius:12px;border:1px solid var(--border-subtle);">
+            <div class="p-4 bg-off-white rounded-12 border-subtle-box">
               <div class="text-xs text-tertiary uppercase fw-600">Account Access Role</div>
               <div class="fw-700 text-sm text-purple mt-1">{{ authStore.isAdmin ? 'Administrator' : 'Standard User' }}</div>
             </div>
@@ -347,7 +347,7 @@
               <div class="fw-700 text-sm text-primary">End Authenticated Session</div>
               <div class="text-xs text-tertiary">Sign out of your Wello account on this browser.</div>
             </div>
-            <button class="btn btn-secondary btn-sm" @click="authStore.logout()" id="btn-settings-signout" style="color:#DC2626; border-color:rgba(239,68,68,0.3);">
+            <button class="btn btn-secondary btn-sm text-error border-error-subtle" @click="authStore.logout()" id="btn-settings-signout">
               <IconLogOut :size="14" />
               <span>Sign Out</span>
             </button>
@@ -361,7 +361,7 @@
       <div class="card" id="settings-app-info-card">
         <div class="card-header flex items-center justify-between">
           <div class="flex items-center gap-2">
-            <div class="metric-icon-box blue" style="width:32px;height:32px;">
+            <div class="metric-icon-box blue">
               <IconPackage :size="16" />
             </div>
             <div>
@@ -369,33 +369,33 @@
               <div class="card-subtitle text-xs">Wello platform version, data stats, and database storage engines</div>
             </div>
           </div>
-          <span class="badge" style="background:rgba(0,123,255,0.1);color:var(--color-blue);font-size:11px;font-weight:700;">v1.0.0</span>
+          <span class="badge badge-info text-xs font-bold">v1.0.0</span>
         </div>
 
         <div class="card-body">
           <div class="grid-2 md:grid-4 gap-4 mb-4">
-            <div class="p-4" style="background:var(--color-off-white);border-radius:12px;border:1px solid var(--border-subtle);">
+            <div class="p-4 bg-off-white rounded-12 border-subtle-box">
               <div class="text-xs text-tertiary uppercase fw-600">Total Projects</div>
               <div class="fw-800 text-xl text-primary mt-1">{{ store.projects.length }}</div>
             </div>
 
-            <div class="p-4" style="background:var(--color-off-white);border-radius:12px;border:1px solid var(--border-subtle);">
+            <div class="p-4 bg-off-white rounded-12 border-subtle-box">
               <div class="text-xs text-tertiary uppercase fw-600">Work Sessions</div>
               <div class="fw-800 text-xl text-primary mt-1">{{ store.sessions.length }}</div>
             </div>
 
-            <div class="p-4" style="background:var(--color-off-white);border-radius:12px;border:1px solid var(--border-subtle);">
+            <div class="p-4 bg-off-white rounded-12 border-subtle-box">
               <div class="text-xs text-tertiary uppercase fw-600">Total Tracked Time</div>
               <div class="fw-800 text-xl text-purple mt-1">{{ totalTimeTracked }}</div>
             </div>
 
-            <div class="p-4" style="background:var(--color-off-white);border-radius:12px;border:1px solid var(--border-subtle);">
+            <div class="p-4 bg-off-white rounded-12 border-subtle-box">
               <div class="text-xs text-tertiary uppercase fw-600">Core Pricing</div>
               <div class="fw-800 text-xl text-success mt-1">100% FREE</div>
             </div>
           </div>
 
-          <div class="p-4 text-xs text-tertiary" style="background:var(--color-off-white);border-radius:12px;border:1px solid var(--border-subtle);">
+          <div class="p-4 text-xs text-tertiary bg-off-white rounded-12 border-subtle-box">
             💡 <strong>Storage Engine Notice:</strong> Wello stores user state locally in Pinia reactive stores with optional MySQL backend synchronisation. Configure MySQL credentials in your <code>.env</code> file to enable server persistence.
           </div>
         </div>
@@ -405,17 +405,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useWelloStore } from '~/stores/wello'
 import { useAuthStore } from '~/stores/auth'
 import { useToast } from '~/composables/useToast'
-import IconUser from '~/components/IconUser.vue'
-import IconReceipt from '~/components/IconReceipt.vue'
-import IconClock from '~/components/IconClock.vue'
-import IconShield from '~/components/IconShield.vue'
-import IconPackage from '~/components/IconPackage.vue'
-import IconCheck from '~/components/IconCheck.vue'
-import IconLogOut from '~/components/IconLogOut.vue'
 
 const store = useWelloStore()
 const authStore = useAuthStore()
@@ -424,70 +417,89 @@ const toast = useToast()
 const activeTab = ref('profile')
 
 const tabs = [
-  { id: 'profile',  label: 'Personal Profile', icon: IconUser },
-  { id: 'business', label: 'Business & Invoicing', icon: IconReceipt },
-  { id: 'work',     label: 'Work & Currency', icon: IconClock },
-  { id: 'account',  label: 'Account & Security', icon: IconShield },
-  { id: 'about',    label: 'System Info', icon: IconPackage }
+  { id: 'profile', label: 'Profile', icon: resolveComponent('IconUser') },
+  { id: 'business', label: 'Business & Invoice', icon: resolveComponent('IconReceipt') },
+  { id: 'work', label: 'Rate Targets & Value', icon: resolveComponent('IconClock') },
+  { id: 'account', label: 'Account & Security', icon: resolveComponent('IconShield') },
+  { id: 'about', label: 'System Info', icon: resolveComponent('IconPackage') },
 ]
 
-const profileForm = reactive({ name: store.user.name, email: store.user.email })
-const prefForm    = reactive({ targetHourly: store.user.targetHourly, currency: store.user.currency })
-const bizForm     = reactive({
-  businessName: store.user.businessName || store.user.name || '',
+// Personal Profile Form
+const profileForm = ref({
+  name: authStore.user?.name || store.user.name || '',
+  email: authStore.user?.email || store.user.email || '',
+})
+
+// Business Profile Form
+const bizForm = ref({
+  businessName: store.user.businessName || '',
   businessLogo: store.user.businessLogo || '',
+  businessTaxId: store.user.businessTaxId || '',
   businessAddress: store.user.businessAddress || '',
   businessPhone: store.user.businessPhone || '',
   businessEmail: store.user.businessEmail || store.user.email || '',
-  businessTaxId: store.user.businessTaxId || '',
-  defaultInvoiceNotes: store.user.defaultInvoiceNotes || 'Payment is due within 14 days of invoice date. Thank you for your business!',
+  defaultInvoiceNotes: store.user.defaultInvoiceNotes || '',
+})
+
+// Work Preferences Form
+const prefForm = ref({
+  targetHourly: store.user.targetHourly || 350,
+  currency: store.user.currency || '₹',
 })
 
 const totalTimeTracked = computed(() => {
-  const total = store.sessions.reduce((s, x) => s + (x.durationMin || 0), 0)
-  const h = Math.floor(total / 60)
-  const m = total % 60
-  return `${h}h ${m}m`
+  const totalMin = store.sessions.reduce((acc, s) => acc + (s.durationMin || 0), 0)
+  return store.minutesToHM(totalMin)
 })
 
-function saveProfile() {
-  store.user.name  = profileForm.name
-  store.user.email = profileForm.email
-  const parts = profileForm.name.split(' ')
-  store.user.avatarInitials = ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase()
-  toast.success('Personal profile updated successfully.')
-}
-
-function savePrefs() {
-  store.user.targetHourly = prefForm.targetHourly
-  store.user.currency     = prefForm.currency
-  toast.success('Work preferences & currency saved successfully.')
-}
-
-function handleLogoUpload(event) {
-  const file = event.target.files?.[0]
+function handleLogoUpload(e) {
+  const file = e.target.files?.[0]
   if (!file) return
-  if (file.size > 3 * 1024 * 1024) {
-    toast.error('Logo image must be under 3MB.')
+
+  if (file.size > 2 * 1024 * 1024) {
+    toast.error('Logo file size must be less than 2MB.')
     return
   }
+
   const reader = new FileReader()
-  reader.onload = (e) => {
-    bizForm.businessLogo = e.target.result
-    toast.success('Logo uploaded! Click "Save Business Profile" to apply.')
+  reader.onload = (ev) => {
+    bizForm.value.businessLogo = ev.target.result
+    toast.success('Logo uploaded and preview generated!')
   }
   reader.readAsDataURL(file)
 }
 
+function saveProfile() {
+  if (!profileForm.value.name.trim()) {
+    toast.error('Full Name is required.')
+    return
+  }
+  store.updateUser({
+    name: profileForm.value.name.trim(),
+    email: profileForm.value.email.trim(),
+  })
+  toast.success('Personal profile saved!')
+}
+
 function saveBusinessProfile() {
-  store.user.businessName = bizForm.businessName
-  store.user.businessLogo = bizForm.businessLogo
-  store.user.businessAddress = bizForm.businessAddress
-  store.user.businessPhone = bizForm.businessPhone
-  store.user.businessEmail = bizForm.businessEmail
-  store.user.businessTaxId = bizForm.businessTaxId
-  store.user.defaultInvoiceNotes = bizForm.defaultInvoiceNotes
-  toast.success('Business profile & invoice branding saved successfully!')
+  store.updateUser({
+    businessName: bizForm.value.businessName.trim(),
+    businessLogo: bizForm.value.businessLogo,
+    businessTaxId: bizForm.value.businessTaxId.trim(),
+    businessAddress: bizForm.value.businessAddress.trim(),
+    businessPhone: bizForm.value.businessPhone.trim(),
+    businessEmail: bizForm.value.businessEmail.trim(),
+    defaultInvoiceNotes: bizForm.value.defaultInvoiceNotes.trim(),
+  })
+  toast.success('Business & Invoice profile updated!')
+}
+
+function savePrefs() {
+  store.updateUser({
+    targetHourly: Number(prefForm.value.targetHourly) || 350,
+    currency: prefForm.value.currency,
+  })
+  toast.success('Rate target & currency preferences saved!')
 }
 
 function saveAll() {
@@ -497,13 +509,3 @@ function saveAll() {
   toast.success('All settings saved successfully!')
 }
 </script>
-
-<style scoped>
-.settings-section {
-  animation: fadeIn 0.2s ease-in-out;
-}
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-</style>

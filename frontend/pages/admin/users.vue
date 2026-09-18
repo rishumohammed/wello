@@ -11,12 +11,11 @@
           <input
             v-model="searchQuery"
             type="text"
-            class="form-input text-xs"
+            class="form-input text-xs w-240 h-36"
             placeholder="Search users by name or email…"
-            style="width:240px;height:36px;"
           />
         </div>
-        <button @click="fetchUsers" class="btn btn-secondary btn-sm" style="height:36px;">
+        <button @click="fetchUsers" class="btn btn-secondary btn-sm h-36">
           🔄 Refresh
         </button>
       </div>
@@ -30,12 +29,6 @@
 
     <!-- Users Table Card -->
     <div class="card" id="admin-users-card">
-      <div class="card-header flex items-center justify-between">
-        <div>
-          <div class="card-title">Registered Accounts ({{ filteredUsers.length }})</div>
-          <div class="card-subtitle">Showing all active user profiles across Wello platform</div>
-        </div>
-      </div>
 
       <div class="table-responsive">
         <table class="table">
@@ -60,7 +53,7 @@
             <tr v-for="u in filteredUsers" :key="u.id" :id="`user-row-${u.id}`">
               <td>
                 <div class="flex items-center gap-2">
-                  <div class="user-avatar" style="width:32px; height:32px; font-size:12px; background:linear-gradient(135deg, #7A3FF6 0%, #FF387D 100%); color:#FFF;">
+                  <div class="user-avatar">
                     {{ u.avatarInitials }}
                   </div>
                   <span class="fw-600 text-sm text-primary">{{ u.name }}</span>
