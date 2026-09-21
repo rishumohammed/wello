@@ -10,8 +10,9 @@ const startTimerSchema = z.object({
   title: z.string().min(1).max(255).optional().default('Work session'),
   type: z.enum(['meeting', 'call', 'discussion', 'planning', 'proposal', 'travel', 'production', 'revision', 'delivery', 'other']).optional().default('production'),
   paymentType: z.enum(['paid', 'unpaid', 'intentional_unpaid']).optional().default('paid'),
-  unpaidReason: z.enum(['learning', 'portfolio', 'charity', 'strategic', 'personal', 'client_work']).nullable().optional(),
+  unpaidReason: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
+  forceSwitch: z.boolean().optional().default(false),
 })
 
 export default defineEventHandler(async (event) => {
@@ -37,14 +38,50 @@ export default defineEventHandler(async (event) => {
     return sendError(event, 400, 'INVALID_PROJECT', 'Specified project does not exist or does not belong to you.')
   }
 
-  // Finalize any currently running active timer first
+  // Check for currently running active timer
   const existingActive = await db('work_sessions')
     .where({ user_id: user.id })
     .whereNull('ended_at')
     .whereNull('deleted_at')
 
+  if (existingActive.length > 0 && !data.forceSwitch) {
+    const active = existingActive[0]
+    const activeProj = await db('projects').where({ id: active.project_id }).first()
+    const activePause = await db('work_session_pauses')
+      .where({ work_session_id: active.id })
+      .whereNull('resumed_at')
+      .first()
+
+    const startedTime = new Date(active.started_at).getTime()
+    const pausedSec = Number(active.paused_seconds || 0)
+    let elapsed = 0
+    if (activePause) {
+      elapsed = Math.max(0, Math.floor((new Date(activePause.paused_at).getTime() - startedTime) / 1000) - pausedSec)
+    } else {
+      elapsed = Math.max(0, Math.floor((now.getTime() - startedTime) / 1000) - pausedSec)
+    }
+
+    return sendError(
+      event,
+      409,
+      'ACTIVE_TIMER_EXISTS',
+      `You already have an active timer running on "${activeProj?.name || 'another project'}". Please stop or switch the active timer.`,
+      {
+        activeTimer: {
+          id: active.id,
+          projectId: active.project_id,
+          projectName: activeProj?.name || 'Project',
+          title: active.title,
+          elapsedSeconds: elapsed,
+          isPaused: Boolean(activePause),
+          startedAt: active.started_at,
+        },
+      }
+    )
+  }
+
+  // If forceSwitch is true, cleanly stop and finalize previous active timer(s)
   for (const prev of existingActive) {
-    // Close any open pause
     const openPause = await db('work_session_pauses')
       .where({ work_session_id: prev.id })
       .whereNull('resumed_at')
@@ -70,6 +107,7 @@ export default defineEventHandler(async (event) => {
         ended_at: now,
         duration_seconds: rawDur,
         paused_seconds: totalPaused,
+        last_activity_at: now,
         updated_at: now,
       })
   }
@@ -87,6 +125,9 @@ export default defineEventHandler(async (event) => {
     ended_at: null,
     duration_seconds: 0,
     paused_seconds: 0,
+    is_overlapping: false,
+    is_flagged_forgotten: false,
+    last_activity_at: now,
     created_at: now,
     updated_at: now,
   })

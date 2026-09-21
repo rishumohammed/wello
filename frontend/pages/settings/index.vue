@@ -341,6 +341,28 @@
                 </span>
               </div>
 
+              <!-- Forgotten-Timer Max Hours Limit -->
+              <div class="form-group">
+                <label class="form-label" for="settings-max-timer-hours">
+                  Max Active Timer Duration (Forgotten-Timer Protection)
+                </label>
+                <div class="flex items-center gap-3">
+                  <input
+                    id="settings-max-timer-hours"
+                    v-model.number="prefForm.maxTimerHours"
+                    class="form-input max-w-xs"
+                    type="number"
+                    min="1"
+                    max="24"
+                    step="1"
+                    placeholder="8"
+                  />
+                  <span class="text-sm font-semibold text-secondary">hours</span>
+                </div>
+                <span class="form-hint">
+                  If an active timer exceeds this threshold, Wello will flag it as potentially forgotten and offer one-click trimming to your last active time. Default is 8 hours.
+                </span>
+              </div>
 
               <!-- Calculated Value Benchmarks -->
               <div class="p-4 bg-off-white border-subtle-box rounded-12 flex flex-col gap-2">
@@ -634,6 +656,7 @@ const prefForm = ref({
   targetHourly: store.user.targetHourly || 100,
   baseCurrency: store.user.baseCurrency || store.user.currencyCode || 'USD',
   headlineRateMetric: store.user.headlineRateMetric || 'client_work',
+  maxTimerHours: store.user.maxTimerHours || 8,
 })
 
 // New Tax Rate Form
@@ -745,6 +768,7 @@ async function savePrefs() {
       currency: prefForm.value.baseCurrency,
       currencyCode: prefForm.value.baseCurrency,
       headlineRateMetric: prefForm.value.headlineRateMetric,
+      maxTimerHours: Number(prefForm.value.maxTimerHours) || 8,
     })
     if (ok) {
       await store.fetchFxRates(prefForm.value.baseCurrency)

@@ -46,6 +46,7 @@ export default defineEventHandler(async (event) => {
 
   await db('work_sessions').where({ id: activeSession.id }).update({
     paused_seconds: newTotalPaused,
+    last_activity_at: now,
     updated_at: now,
   })
 

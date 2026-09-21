@@ -43,6 +43,9 @@ export default defineEventHandler(async (event) => {
     elapsedSeconds = Math.max(0, Math.floor((now.getTime() - startedTime) / 1000) - pausedSec)
   }
 
+  const maxTimerHours = Number(user.max_timer_hours || 8)
+  const isStale = elapsedSeconds > maxTimerHours * 3600
+
   const project = await db('projects').where({ id: activeSession.project_id }).first()
 
   return sendSuccess(event, {
@@ -57,10 +60,15 @@ export default defineEventHandler(async (event) => {
       unpaidReason: activeSession.unpaid_reason,
       notes: activeSession.notes,
       startedAt: activeSession.started_at,
+      lastActivityAt: activeSession.last_activity_at || activeSession.started_at,
       isPaused,
       pausedAt: activePause ? activePause.paused_at : null,
       elapsedSeconds,
       elapsedMinutes: Math.floor(elapsedSeconds / 60),
+      maxTimerHours,
+      isStale,
+      isForgotten: isStale,
+      suggestedTrimSeconds: maxTimerHours * 3600,
     },
   })
 })

@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS users (
   business_name   VARCHAR(200) DEFAULT NULL,
   business_address TEXT DEFAULT NULL,
   business_tax_id VARCHAR(100) DEFAULT NULL,
+  max_timer_hours INT NOT NULL DEFAULT 8,
   created_at      DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at      DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   deleted_at      DATETIME(3) DEFAULT NULL,
@@ -119,6 +120,10 @@ CREATE TABLE IF NOT EXISTS work_sessions (
   ended_at         DATETIME(3) DEFAULT NULL,
   duration_seconds INT NOT NULL DEFAULT 0,
   paused_seconds   INT NOT NULL DEFAULT 0,
+  is_overlapping   BOOLEAN NOT NULL DEFAULT FALSE,
+  is_flagged_forgotten BOOLEAN NOT NULL DEFAULT FALSE,
+  last_activity_at DATETIME(3) DEFAULT NULL,
+  raw_duration_seconds INT DEFAULT NULL,
   created_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   deleted_at       DATETIME(3) DEFAULT NULL,
@@ -140,6 +145,22 @@ CREATE TABLE IF NOT EXISTS work_session_pauses (
   created_at             DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   FOREIGN KEY (work_session_id) REFERENCES work_sessions(id) ON DELETE CASCADE,
   INDEX idx_pauses_session (work_session_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS work_session_edits (
+  id               INT AUTO_INCREMENT PRIMARY KEY,
+  work_session_id  INT NOT NULL,
+  user_id          INT NOT NULL,
+  editor_user_id   INT NOT NULL,
+  change_summary   VARCHAR(255) NOT NULL,
+  old_values       JSON NOT NULL,
+  new_values       JSON NOT NULL,
+  created_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  FOREIGN KEY (work_session_id) REFERENCES work_sessions(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (editor_user_id) REFERENCES users(id),
+  INDEX idx_session_edits_session_time (work_session_id, created_at),
+  INDEX idx_session_edits_user_id (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================

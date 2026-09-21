@@ -359,6 +359,7 @@ async function runTestSuite() {
         unpaidReason: 'strategic',
         durationMinutes: 90,
         notes: 'Roadmap alignment.',
+        allowOverlap: true,
       },
     })
     assert(createManualSession.status === 201, 'POST manual session returns 201 Created')

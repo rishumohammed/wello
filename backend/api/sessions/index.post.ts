@@ -20,6 +20,7 @@ const createSessionSchema = z.object({
   endedAt: z.string().optional(),
   durationMinutes: z.number().min(1).max(99999).optional(),
   durationSeconds: z.number().min(1).max(5999999).optional(),
+  allowOverlap: z.boolean().optional().default(false),
 })
 
 export default defineEventHandler(async (event) => {
@@ -55,26 +56,85 @@ export default defineEventHandler(async (event) => {
   }
 
   const now = new Date()
-  let startedAt = data.startedAt ? new Date(data.startedAt) : now
-  let endedAt = data.endedAt ? new Date(data.endedAt) : now
-
+  let startedAt: Date
+  let endedAt: Date
   let durationSeconds = 0
+
   if (data.durationSeconds) {
     durationSeconds = data.durationSeconds
-    if (!data.startedAt && data.endedAt) {
-      startedAt = new Date(endedAt.getTime() - durationSeconds * 1000)
-    } else if (data.startedAt && !data.endedAt) {
-      endedAt = new Date(startedAt.getTime() + durationSeconds * 1000)
-    }
   } else if (data.durationMinutes) {
     durationSeconds = Math.round(data.durationMinutes * 60)
-    if (!data.startedAt && data.endedAt) {
-      startedAt = new Date(endedAt.getTime() - durationSeconds * 1000)
-    } else if (data.startedAt && !data.endedAt) {
-      endedAt = new Date(startedAt.getTime() + durationSeconds * 1000)
+  }
+
+  if (data.startedAt && data.endedAt) {
+    startedAt = new Date(data.startedAt)
+    endedAt = new Date(data.endedAt)
+    if (!durationSeconds) {
+      durationSeconds = Math.max(60, Math.round((endedAt.getTime() - startedAt.getTime()) / 1000))
     }
+  } else if (data.startedAt && !data.endedAt) {
+    startedAt = new Date(data.startedAt)
+    durationSeconds = durationSeconds || 3600
+    endedAt = new Date(startedAt.getTime() + durationSeconds * 1000)
+  } else if (!data.startedAt && data.endedAt) {
+    endedAt = new Date(data.endedAt)
+    durationSeconds = durationSeconds || 3600
+    startedAt = new Date(endedAt.getTime() - durationSeconds * 1000)
   } else {
-    durationSeconds = Math.max(60, Math.round((endedAt.getTime() - startedAt.getTime()) / 1000))
+    durationSeconds = durationSeconds || 3600
+    endedAt = now
+    startedAt = new Date(now.getTime() - durationSeconds * 1000)
+  }
+
+  // Validate dates: end must be after start
+  if (endedAt.getTime() <= startedAt.getTime()) {
+    return sendError(event, 400, 'INVALID_DATE_RANGE', 'Session end time must be after the start time.')
+  }
+
+  // Future tolerance validation: max 5 minutes ahead of server clock
+  const maxFutureAllowed = now.getTime() + 5 * 60 * 1000
+  if (startedAt.getTime() > maxFutureAllowed) {
+    return sendError(event, 400, 'FUTURE_TIMESTAMP_NOT_ALLOWED', 'Session start time cannot be in the future.')
+  }
+  if (endedAt.getTime() > maxFutureAllowed) {
+    return sendError(event, 400, 'FUTURE_TIMESTAMP_NOT_ALLOWED', 'Session end time cannot be in the future.')
+  }
+
+  // Overlap detection: Check if interval [startedAt, endedAt] overlaps with any existing non-deleted session
+  const overlappingSessions = await db('work_sessions')
+    .leftJoin('projects', 'work_sessions.project_id', 'projects.id')
+    .where('work_sessions.user_id', user.id)
+    .whereNull('work_sessions.deleted_at')
+    .whereNotNull('work_sessions.ended_at')
+    .where('work_sessions.started_at', '<', endedAt)
+    .where('work_sessions.ended_at', '>', startedAt)
+    .select(
+      'work_sessions.id',
+      'work_sessions.title',
+      'work_sessions.started_at',
+      'work_sessions.ended_at',
+      'work_sessions.duration_seconds',
+      'projects.name as project_name'
+    )
+
+  let isOverlapping = overlappingSessions.length > 0
+  if (isOverlapping && !data.allowOverlap) {
+    return sendError(
+      event,
+      409,
+      'SESSION_OVERLAP_DETECTED',
+      `This session overlaps with ${overlappingSessions.length} existing logged session(s). Please confirm if you wish to allow overlap.`,
+      {
+        overlappingSessions: overlappingSessions.map((s: any) => ({
+          id: s.id,
+          title: s.title,
+          projectName: s.project_name || 'Project',
+          startedAt: s.started_at,
+          endedAt: s.ended_at,
+          durationMinutes: Math.round(Number(s.duration_seconds || 0) / 60),
+        })),
+      }
+    )
   }
 
   const unpaidReason = data.paymentType !== 'paid' ? data.unpaidReason || 'client_friction' : null
@@ -93,6 +153,8 @@ export default defineEventHandler(async (event) => {
     ended_at: endedAt,
     duration_seconds: durationSeconds,
     paused_seconds: 0,
+    is_overlapping: isOverlapping,
+    is_flagged_forgotten: false,
     created_at: now,
     updated_at: now,
   })
@@ -113,6 +175,8 @@ export default defineEventHandler(async (event) => {
     durationSeconds: newSession.duration_seconds,
     durationMinutes: Math.round((newSession.duration_seconds || 0) / 60),
     pausedSeconds: newSession.paused_seconds,
+    isOverlapping: Boolean(newSession.is_overlapping),
+    isFlaggedForgotten: Boolean(newSession.is_flagged_forgotten),
     createdAt: newSession.created_at,
     updatedAt: newSession.updated_at,
   }

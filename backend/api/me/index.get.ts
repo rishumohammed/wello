@@ -45,6 +45,7 @@ export default defineEventHandler(async (event) => {
     businessTaxId: dbUser.business_tax_id,
     businessLogo: dbUser.business_logo,
     defaultInvoiceNotes: dbUser.default_invoice_notes,
+    maxTimerHours: dbUser.max_timer_hours !== undefined && dbUser.max_timer_hours !== null ? Number(dbUser.max_timer_hours) : 8,
     createdAt: dbUser.created_at,
     updatedAt: dbUser.updated_at,
   })

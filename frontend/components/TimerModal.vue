@@ -5,8 +5,10 @@
         <div class="modal modal-sm" id="modal-timer" role="dialog" aria-modal="true">
           <div class="modal-header">
             <div>
-              <div class="modal-title">{{ store.activeTimer ? 'Running Work Timer' : 'Start Work' }}</div>
-              <div class="modal-subtitle" v-if="store.activeTimer">
+              <div class="modal-title">
+                {{ conflictActiveTimer ? 'Switch Active Timer' : (store.activeTimer ? 'Running Work Timer' : 'Start Work') }}
+              </div>
+              <div class="modal-subtitle" v-if="store.activeTimer && !conflictActiveTimer">
                 {{ timerProjectName }}
               </div>
             </div>
@@ -16,8 +18,90 @@
           </div>
 
           <div class="modal-body">
+            <!-- CONFLICT CONFIRMATION VIEW -->
+            <div v-if="conflictActiveTimer" class="timer-conflict-state" id="timer-conflict-view">
+              <div class="alert alert-warning mb-4 p-3 rounded-lg border flex gap-3 items-start">
+                <span class="text-xl">⚠️</span>
+                <div>
+                  <div class="fw-700 text-sm">Active Timer Already Running</div>
+                  <div class="text-xs mt-1 text-secondary">
+                    You currently have an active timer running on
+                    <strong class="text-primary">{{ conflictActiveTimer.projectName }}</strong>
+                    ({{ store.fmtDuration(Math.round(conflictActiveTimer.elapsedSeconds / 60)) }}).
+                  </div>
+                  <div class="text-xs mt-1 text-tertiary">
+                    Wello enforces one active timer per user to prevent accidental double counting.
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex flex-col gap-2 pt-2">
+                <button
+                  type="button"
+                  class="btn btn-primary w-full justify-center"
+                  @click="handleForceSwitchTimer"
+                  id="btn-confirm-switch-timer"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+                  <span>Stop Previous & Switch to {{ newProjectName }}</span>
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary w-full justify-center"
+                  @click="conflictActiveTimer = null"
+                  id="btn-goto-running-timer"
+                >
+                  <span>Stay with Running Timer</span>
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost w-full justify-center text-secondary text-xs"
+                  @click="$emit('close')"
+                  id="btn-cancel-conflict"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+
             <!-- ACTIVE TIMER RUNNING STATE -->
-            <div v-if="store.activeTimer" class="timer-active-state" id="timer-running-view">
+            <div v-else-if="store.activeTimer" class="timer-active-state" id="timer-running-view">
+              <!-- STALE / FORGOTTEN TIMER WARNING BANNER -->
+              <div v-if="isStaleTimer && !dismissedStale" class="alert alert-warning mb-3 p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-xs">
+                <div class="fw-700 text-amber-500 flex items-center gap-1.5 mb-1">
+                  <span>⚠️</span>
+                  <span>Long Running Timer (> {{ maxTimerHours }}h)</span>
+                </div>
+                <div class="text-secondary mb-2.5">
+                  This timer has been running for {{ store.timerDisplay() }}. If you forgot to stop it, you can trim it to your last activity.
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-secondary text-amber-500 border-amber-500/40"
+                    @click="handleStopAndTrimActivity"
+                    id="btn-trim-last-activity"
+                  >
+                    Stop & Trim to Last Activity
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-secondary text-amber-500 border-amber-500/40"
+                    @click="handleStopAndTrimHours"
+                    id="btn-trim-max-hours"
+                  >
+                    Trim to {{ maxTimerHours }}h
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-ghost text-tertiary"
+                    @click="dismissedStale = true"
+                  >
+                    Keep Running
+                  </button>
+                </div>
+              </div>
+
               <!-- Project Name & Task -->
               <div class="text-center mb-1">
                 <div class="fw-700 text-base text-primary">{{ timerProjectName }}</div>
@@ -185,12 +269,21 @@ import { useToast } from '~/composables/useToast'
 import { categorizeUnpaidReason } from '~/utils/metricsEngine'
 
 const props = defineProps({
-  projectId: { type: String, default: '' },
+  projectId: { type: [String, Number], default: '' },
 })
 
 const emit = defineEmits(['close', 'started', 'stopped'])
 const store = useWelloStore()
 const toast = useToast()
+
+const conflictActiveTimer = ref(null)
+const dismissedStale = ref(false)
+
+const maxTimerHours = computed(() => Number(store.user?.maxTimerHours || 8))
+const isStaleTimer = computed(() => {
+  if (!store.activeTimer) return false
+  return store.timerElapsed > maxTimerHours.value * 3600 || Boolean(store.activeTimer.isForgotten) || Boolean(store.activeTimer.isStale)
+})
 
 const availableProjects = computed(() =>
   store.projects.filter(p => p.status !== 'lost')
@@ -221,6 +314,10 @@ const timerProjectName = computed(() => {
   return store.getProject(store.activeTimer.projectId)?.name || 'Project'
 })
 
+const newProjectName = computed(() => {
+  return store.getProject(form.projectId)?.name || 'New Project'
+})
+
 function validate() {
   errors.projectId = ''
   errors.title = ''
@@ -243,8 +340,8 @@ async function handleStartTimer() {
 
   const unpaidCat = categorizeUnpaidReason(form.unpaidReason, form.paymentType)
 
-  await store.startTimer({
-    projectId: form.projectId,
+  const result = await store.startTimer({
+    projectId: Number(form.projectId),
     title: form.title.trim(),
     type: form.type,
     paymentType: form.paymentType,
@@ -252,7 +349,34 @@ async function handleStartTimer() {
     unpaidCategory: unpaidCat,
   })
 
+  if (result?.conflict) {
+    conflictActiveTimer.value = result.activeTimer || {
+      projectName: 'Another Project',
+      elapsedSeconds: 0,
+    }
+    return
+  }
+
   toast.success(`Work timer started for ${store.getProject(form.projectId)?.name || 'project'}.`)
+  emit('started')
+  emit('close')
+}
+
+async function handleForceSwitchTimer() {
+  const unpaidCat = categorizeUnpaidReason(form.unpaidReason, form.paymentType)
+
+  const result = await store.startTimer({
+    projectId: Number(form.projectId),
+    title: form.title.trim(),
+    type: form.type,
+    paymentType: form.paymentType,
+    unpaidReason: form.paymentType === 'paid' ? null : form.unpaidReason,
+    unpaidCategory: unpaidCat,
+    forceSwitch: true,
+  })
+
+  conflictActiveTimer.value = null
+  toast.success(`Switched active timer to ${store.getProject(form.projectId)?.name || 'project'}.`)
   emit('started')
   emit('close')
 }
@@ -262,6 +386,26 @@ async function handleStopTimer() {
   if (result) {
     const mins = result.session?.durationMin || result.session?.durationMinutes || 1
     toast.success(`Work session saved (${store.minutesToHM(mins)}).`)
+  }
+  emit('stopped')
+  emit('close')
+}
+
+async function handleStopAndTrimActivity() {
+  const result = await store.stopTimer({ trimToLastActivity: true })
+  if (result) {
+    const mins = result.session?.durationMin || result.session?.durationMinutes || 1
+    toast.success(`Work session trimmed to last activity and saved (${store.minutesToHM(mins)}).`)
+  }
+  emit('stopped')
+  emit('close')
+}
+
+async function handleStopAndTrimHours() {
+  const result = await store.stopTimer({ trimToHours: maxTimerHours.value })
+  if (result) {
+    const mins = result.session?.durationMin || result.session?.durationMinutes || 1
+    toast.success(`Work session trimmed to ${maxTimerHours.value}h and saved.`)
   }
   emit('stopped')
   emit('close')

@@ -28,6 +28,8 @@ const updateProfileSchema = z.object({
   defaultInvoiceNotes: z.string().nullable().optional(),
   headlineRateMetric: z.enum(['client_work', 'all_in']).optional(),
   headline_rate_metric: z.enum(['client_work', 'all_in']).optional(),
+  maxTimerHours: z.number().int().min(1).max(24).optional(),
+  max_timer_hours: z.number().int().min(1).max(24).optional(),
 })
 
 export default defineEventHandler(async (event) => {
@@ -82,6 +84,8 @@ export default defineEventHandler(async (event) => {
   if (data.defaultInvoiceNotes !== undefined) updates.default_invoice_notes = data.defaultInvoiceNotes
   if (data.headlineRateMetric !== undefined) updates.headline_rate_metric = data.headlineRateMetric
   else if (data.headline_rate_metric !== undefined) updates.headline_rate_metric = data.headline_rate_metric
+  if (data.maxTimerHours !== undefined) updates.max_timer_hours = data.maxTimerHours
+  else if (data.max_timer_hours !== undefined) updates.max_timer_hours = data.max_timer_hours
 
   await db('users')
     .where({ id: user.id })
@@ -118,6 +122,7 @@ export default defineEventHandler(async (event) => {
     businessTaxId: updatedUser.business_tax_id,
     businessLogo: updatedUser.business_logo,
     defaultInvoiceNotes: updatedUser.default_invoice_notes,
+    maxTimerHours: updatedUser.max_timer_hours !== undefined && updatedUser.max_timer_hours !== null ? Number(updatedUser.max_timer_hours) : 8,
     createdAt: updatedUser.created_at,
     updatedAt: updatedUser.updated_at,
   })

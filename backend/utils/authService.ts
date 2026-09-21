@@ -46,6 +46,7 @@ export interface DbUser {
   business_name: string | null
   business_address: string | null
   business_tax_id: string | null
+  max_timer_hours?: number
   created_at: string
   updated_at: string
   deleted_at: string | null

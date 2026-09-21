@@ -33,12 +33,16 @@
     </div>
 
     <!-- Active timer banner (if running) -->
-    <div v-if="store.activeTimer" class="card mb-6 timer-running-card" id="home-running-timer-card">
+    <div v-if="store.activeTimer" class="card mb-6 timer-running-card" :class="{ 'border-warning': isTimerForgotten }" id="home-running-timer-card">
       <div class="card-padded flex items-center justify-between gap-4">
         <div class="flex items-center gap-3">
-          <span class="timer-running-indicator"></span>
+          <span class="timer-running-indicator" :class="{ 'warning-pulse': isTimerForgotten, 'paused': store.isTimerPaused }"></span>
           <div>
-            <div class="fw-700 text-base text-brand">{{ store.timerDisplay() }}</div>
+            <div class="flex items-center gap-2">
+              <span class="fw-700 text-base text-brand">{{ store.timerDisplay() }}</span>
+              <span v-if="isTimerForgotten" class="badge badge-warning text-xs font-semibold">⚠️ Exceeds Max Hours</span>
+              <span v-else-if="store.isTimerPaused" class="badge badge-secondary text-xs">Paused</span>
+            </div>
             <div class="text-tertiary text-xs">Running: {{ store.activeTimer.title }} · {{ timerProjectName }}</div>
           </div>
         </div>
@@ -644,6 +648,10 @@ const formattedDate = computed(() => {
 const timerProjectName = computed(() => {
   if (!store.activeTimer) return ''
   return store.getProject(store.activeTimer.projectId)?.name || 'Project'
+})
+
+const isTimerForgotten = computed(() => {
+  return !!(store.activeTimer?.isForgotten || store.activeTimer?.isStale)
 })
 
 // Current dynamic insight

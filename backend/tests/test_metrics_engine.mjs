@@ -363,6 +363,7 @@ async function testServerApiEndpoints() {
       type: 'production',
       paymentType: 'paid',
       durationMinutes: 600,
+      allowOverlap: true,
     }),
   })
 
@@ -377,6 +378,7 @@ async function testServerApiEndpoints() {
       paymentType: 'unpaid',
       unpaidReason: 'scope_creep',
       durationMinutes: 120,
+      allowOverlap: true,
     }),
   })
 
@@ -391,6 +393,7 @@ async function testServerApiEndpoints() {
       paymentType: 'intentional_unpaid',
       unpaidReason: 'learning',
       durationMinutes: 180,
+      allowOverlap: true,
     }),
   })
 

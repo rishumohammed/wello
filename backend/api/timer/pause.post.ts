@@ -43,6 +43,11 @@ export default defineEventHandler(async (event) => {
     created_at: now,
   })
 
+  await db('work_sessions').where({ id: activeSession.id }).update({
+    last_activity_at: now,
+    updated_at: now,
+  })
+
   // Calculate elapsed up to pause time
   const startedMs = new Date(activeSession.started_at).getTime()
   const pausedSec = Number(activeSession.paused_seconds || 0)

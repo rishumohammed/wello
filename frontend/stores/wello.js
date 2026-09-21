@@ -402,7 +402,52 @@ export const useWelloStore = defineStore('wello', () => {
     }
   }
 
-  // ── Server-Synchronized Timer Engine ──────────────────────────────────────
+  // ── Server-Synchronized & Trustworthy Timer Engine ────────────────────────
+  let _timerBroadcastChannel = null
+  let _heartbeatInterval = null
+
+  if (typeof window !== 'undefined') {
+    try {
+      if ('BroadcastChannel' in window) {
+        _timerBroadcastChannel = new BroadcastChannel('wello_timer_channel')
+        _timerBroadcastChannel.onmessage = (ev) => {
+          if (ev?.data?.type) {
+            fetchActiveTimer(false)
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Wello BroadcastChannel] Not available', e)
+    }
+
+    window.addEventListener('focus', () => {
+      fetchActiveTimer(false)
+    })
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        fetchActiveTimer(false)
+      }
+    })
+  }
+
+  function broadcastTimerEvent(type, payload = {}) {
+    if (_timerBroadcastChannel) {
+      try {
+        _timerBroadcastChannel.postMessage({ type, payload, timestamp: Date.now() })
+      } catch (_) {}
+    }
+  }
+
+  function startHeartbeat() {
+    if (_heartbeatInterval) clearInterval(_heartbeatInterval)
+    _heartbeatInterval = setInterval(async () => {
+      if (activeTimer.value && !isTimerPaused.value && authStore.isAuthenticated) {
+        try {
+          await apiFetch('/api/timer/heartbeat', { method: 'POST' })
+        } catch (_) {}
+      }
+    }, 30000)
+  }
 
   function initTimerTicker() {
     if (_timerInterval) clearInterval(_timerInterval)
@@ -420,9 +465,11 @@ export const useWelloStore = defineStore('wello', () => {
         _lastTickerTimestamp = Date.now()
       }
     }, 1000)
+
+    startHeartbeat()
   }
 
-  async function fetchActiveTimer() {
+  async function fetchActiveTimer(showToastOnError = false) {
     if (!authStore.isAuthenticated) return
     try {
       const res = await apiFetch('/api/timer/active')
@@ -440,24 +487,18 @@ export const useWelloStore = defineStore('wello', () => {
           clearInterval(_timerInterval)
           _timerInterval = null
         }
+        if (_heartbeatInterval) {
+          clearInterval(_heartbeatInterval)
+          _heartbeatInterval = null
+        }
       }
     } catch (err) {
-      console.warn('[Wello Timer] Could not check active timer', err)
+      if (showToastOnError) console.warn('[Wello Timer] Could not check active timer', err)
     }
   }
 
   async function startTimer(payload) {
-    // Optimistic local start
-    const optimisticStartedAt = new Date().toISOString()
     const previousTimer = activeTimer.value
-
-    activeTimer.value = {
-      ...payload,
-      startedAt: optimisticStartedAt,
-    }
-    timerElapsed.value = 0
-    isTimerPaused.value = false
-    initTimerTicker()
 
     try {
       const res = await apiFetch('/api/timer/start', {
@@ -468,9 +509,19 @@ export const useWelloStore = defineStore('wello', () => {
         activeTimer.value = res.data.timer
         isTimerPaused.value = res.data.timer.isPaused
         timerElapsed.value = res.data.timer.elapsedSeconds || 0
+        initTimerTicker()
+        broadcastTimerEvent('TIMER_STARTED', res.data.timer)
       }
-      return activeTimer.value
+      return { success: true, timer: activeTimer.value }
     } catch (err) {
+      // If 409 Conflict (active timer already running on another project)
+      if (err?.statusCode === 409 || err?.data?.error?.code === 'ACTIVE_TIMER_EXISTS') {
+        return {
+          conflict: true,
+          error: err?.data?.error || { message: err?.message },
+          activeTimer: err?.data?.error?.details?.activeTimer || null,
+        }
+      }
       activeTimer.value = previousTimer
       toast.error(err?.data?.message || err?.message || 'Failed to start timer on server.')
       throw err
@@ -484,6 +535,7 @@ export const useWelloStore = defineStore('wello', () => {
 
     try {
       await apiFetch('/api/timer/pause', { method: 'POST' })
+      broadcastTimerEvent('TIMER_PAUSED')
     } catch (err) {
       isTimerPaused.value = prevPaused
       toast.error('Failed to pause timer on server.')
@@ -498,17 +550,22 @@ export const useWelloStore = defineStore('wello', () => {
 
     try {
       await apiFetch('/api/timer/resume', { method: 'POST' })
+      broadcastTimerEvent('TIMER_RESUMED')
     } catch (err) {
       isTimerPaused.value = prevPaused
       toast.error('Failed to resume timer on server.')
     }
   }
 
-  async function stopTimer(notes = '') {
+  async function stopTimer(options = {}) {
     if (!activeTimer.value) return null
     if (_timerInterval) {
       clearInterval(_timerInterval)
       _timerInterval = null
+    }
+    if (_heartbeatInterval) {
+      clearInterval(_heartbeatInterval)
+      _heartbeatInterval = null
     }
 
     const stoppingTimer = { ...activeTimer.value }
@@ -517,10 +574,20 @@ export const useWelloStore = defineStore('wello', () => {
     timerElapsed.value = 0
     isTimerPaused.value = false
 
+    const body = typeof options === 'string'
+      ? { notes: options, title: stoppingTimer.title }
+      : {
+          notes: options.notes || '',
+          title: options.title || stoppingTimer.title,
+          trimToLastActivity: Boolean(options.trimToLastActivity),
+          trimToHours: options.trimToHours ? Number(options.trimToHours) : undefined,
+          customEndedAt: options.customEndedAt,
+        }
+
     try {
       const res = await apiFetch('/api/timer/stop', {
         method: 'POST',
-        body: { notes, title: stoppingTimer.title },
+        body,
       })
 
       if (res?.data?.session) {
@@ -530,6 +597,7 @@ export const useWelloStore = defineStore('wello', () => {
         }
         sessions.value.unshift(sess)
         saveCachedState()
+        broadcastTimerEvent('TIMER_STOPPED', sess)
         return { ...stoppingTimer, session: sess }
       }
     } catch (err) {
@@ -549,6 +617,16 @@ export const useWelloStore = defineStore('wello', () => {
     const sec = s % 60
     const pad = (n) => String(n).padStart(2, '0')
     return `${pad(h)}:${pad(m)}:${pad(sec)}`
+  }
+
+  async function fetchSessionHistory(sessionId) {
+    try {
+      const res = await apiFetch(`/api/sessions/${sessionId}/history`)
+      return res?.data?.edits || []
+    } catch (err) {
+      console.warn('[Wello] Could not fetch session history', err)
+      return []
+    }
   }
 
   // ── One-Time Legacy LocalStorage Migration Flow ────────────────────────────
@@ -1849,24 +1927,7 @@ export const useWelloStore = defineStore('wello', () => {
     const durationMin = data.durationMin ?? Math.max(1, Math.round((new Date(endedAt) - new Date(startedAt)) / 60000))
     const tempId = 'temp_s_' + uid()
 
-    const optimisticSess = {
-      id: tempId,
-      projectId: data.projectId,
-      title: data.title || 'Work session',
-      type: data.type || 'production',
-      paymentType: data.paymentType || 'paid',
-      unpaidReason: data.unpaidReason || null,
-      notes: data.notes || '',
-      startedAt,
-      endedAt,
-      durationMin,
-      createdAt: now(),
-      updatedAt: now(),
-    }
-
     const snapshot = [...sessions.value]
-    sessions.value.unshift(optimisticSess)
-    saveCachedState()
 
     try {
       const res = await apiFetch('/api/sessions', {
@@ -1877,20 +1938,32 @@ export const useWelloStore = defineStore('wello', () => {
           type: data.type || 'production',
           paymentType: data.paymentType || 'paid',
           unpaidReason: data.unpaidReason,
+          unpaidCategory: data.unpaidCategory,
           notes: data.notes,
           startedAt,
           endedAt,
           durationMinutes: durationMin,
+          allowOverlap: Boolean(data.allowOverlap),
         },
       })
       if (res?.data) {
-        const idx = sessions.value.findIndex((s) => s.id === tempId)
-        if (idx !== -1) sessions.value[idx] = { ...optimisticSess, ...res.data, durationMin: res.data.durationMinutes || durationMin }
+        const sess = {
+          ...res.data,
+          durationMin: res.data.durationMinutes || durationMin,
+        }
+        sessions.value.unshift(sess)
         saveCachedState()
-        return res.data
+        return { success: true, session: sess }
       }
-      return optimisticSess
+      return { success: true }
     } catch (err) {
+      if (err?.statusCode === 409 || err?.data?.error?.code === 'SESSION_OVERLAP_DETECTED') {
+        return {
+          conflict: true,
+          error: err?.data?.error || { message: err?.message },
+          overlappingSessions: err?.data?.error?.details?.overlappingSessions || [],
+        }
+      }
       sessions.value = snapshot
       saveCachedState()
       toast.error(err?.data?.message || err?.message || 'Failed to save session.')
@@ -1903,23 +1976,36 @@ export const useWelloStore = defineStore('wello', () => {
     if (idx === -1) return false
 
     const previous = { ...sessions.value[idx] }
-    sessions.value[idx] = { ...previous, ...data, updatedAt: now() }
-    saveCachedState()
 
     try {
       const res = await apiFetch(`/api/sessions/${id}`, {
         method: 'PATCH',
-        body: data,
+        body: {
+          ...data,
+          allowOverlap: Boolean(data.allowOverlap),
+        },
       })
       if (res?.data) {
-        sessions.value[idx] = { ...sessions.value[idx], ...res.data }
+        sessions.value[idx] = {
+          ...sessions.value[idx],
+          ...res.data,
+          durationMin: res.data.durationMinutes || sessions.value[idx].durationMin,
+        }
         saveCachedState()
+        return { success: true, session: sessions.value[idx] }
       }
-      return true
+      return { success: true }
     } catch (err) {
+      if (err?.statusCode === 409 || err?.data?.error?.code === 'SESSION_OVERLAP_DETECTED') {
+        return {
+          conflict: true,
+          error: err?.data?.error || { message: err?.message },
+          overlappingSessions: err?.data?.error?.details?.overlappingSessions || [],
+        }
+      }
       sessions.value[idx] = previous
       saveCachedState()
-      toast.error('Failed to update session.')
+      toast.error(err?.data?.message || err?.message || 'Failed to update session.')
       return false
     }
   }
@@ -1940,6 +2026,22 @@ export const useWelloStore = defineStore('wello', () => {
       saveCachedState()
       toast.error('Failed to delete session on server.')
       return false
+    }
+  }
+
+  async function fetchSessionHistory(id) {
+    try {
+      const res = await apiFetch(`/api/sessions/${id}/history`)
+      if (res?.data?.edits) {
+        return res.data.edits
+      }
+      if (Array.isArray(res?.data)) {
+        return res.data
+      }
+      return []
+    } catch (err) {
+      console.warn('[Wello Audit] Failed to fetch session history:', err)
+      return []
     }
   }
 
@@ -2355,6 +2457,7 @@ export const useWelloStore = defineStore('wello', () => {
     addSession,
     updateSession,
     deleteSession,
+    fetchSessionHistory,
     createClient,
     updateClient,
     deleteClient,
