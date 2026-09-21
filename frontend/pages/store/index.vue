@@ -214,9 +214,12 @@ async function toggleAddon(addon) {
   }
 }
 
+import IconReceipt from '~/components/IconReceipt.vue'
+import IconPackage from '~/components/IconPackage.vue'
+
 function getIconComponent(iconName) {
-  if (iconName === 'IconReceipt') return resolveComponent('IconReceipt')
-  return resolveComponent('IconPackage')
+  if (iconName === 'IconReceipt') return IconReceipt
+  return IconPackage
 }
 
 onMounted(() => {

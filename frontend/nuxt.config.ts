@@ -1,6 +1,10 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   compatibilityDate: '2024-04-03',
+  devtools: { enabled: false },
+  experimental: {
+    appManifest: false,
+  },
   modules: [
     '@pinia/nuxt',
     '@vueuse/nuxt',
@@ -16,7 +20,7 @@ export default defineNuxtConfig({
     public: {
       appName: 'Wello',
       appVersion: '1.0.0',
-      currencySymbol: process.env.CURRENCY_SYMBOL || '₹',
+      currencySymbol: process.env.CURRENCY_SYMBOL || '$',
       apiBaseUrl: process.env.BACKEND_API_URL || 'http://localhost:3001/api',
     }
   },

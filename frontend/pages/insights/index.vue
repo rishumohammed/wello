@@ -299,35 +299,147 @@
       </div>
     </div>
 
-    <!-- SECTION 2: USEFUL SMART INSIGHTS (Truthful & Data-Backed) -->
+    <!-- SECTION 2: AUTHORITATIVE INTELLIGENCE & PATTERNS -->
     <div class="card mb-6" id="insights-smart-cards">
-      <div class="card-header">
+      <div class="card-header flex items-center justify-between flex-wrap gap-2">
         <div>
-          <div class="card-title">Useful Insights</div>
-          <div class="card-subtitle">Automated work-value patterns derived strictly from your active records</div>
+          <div class="card-title">Work Intelligence & Diagnostics</div>
+          <div class="card-subtitle">Authoritative mathematical patterns derived from sessions, payments, and quotes</div>
         </div>
+        <span class="badge badge-purple text-xs font-semibold">Authoritative Engine</span>
       </div>
 
       <div class="card-body">
-        <div class="grid-3 gap-4" id="smart-insights-grid">
-          <div
-            v-for="ins in dynamicInsightsList"
-            :key="ins.id"
-            class="smart-insight-tile"
-            :class="`insight-${ins.type}`"
-            :id="`insight-tile-${ins.id}`"
-          >
-            <div class="flex items-center justify-between mb-2">
-              <span class="insight-badge" :class="`badge-${ins.type}`">{{ ins.tag }}</span>
+        <!-- Top 3 Intelligence Metric Tiles -->
+        <div class="grid-3 gap-4 mb-6" id="intelligence-top-grid">
+          <!-- 1. Velocity: Time-to-Money -->
+          <div class="metric-card bg-off-white" id="intel-velocity-card">
+            <div class="metric-header">
+              <span class="metric-label">Time-to-Money Velocity</span>
+              <div class="metric-icon-box kpi-icon-1">
+                <IconClock :size="16" />
+              </div>
+            </div>
+            <div class="metric-value kpi-val-1">
+              {{ intelligence.velocity.avgDaysToFirstPayment ? `${intelligence.velocity.avgDaysToFirstPayment} days` : '—' }}
+            </div>
+            <div class="metric-secondary">from initial kickoff session to first payment</div>
+            <div class="flex justify-between text-xs pt-3 mt-3 border-t">
+              <span class="text-tertiary">Projects evaluated:</span>
+              <span class="fw-600">{{ intelligence.velocity.evaluatedProjects }} projects</span>
+            </div>
+          </div>
+
+          <!-- 2. Quote Win Rate -->
+          <div class="metric-card bg-off-white" id="intel-quote-win-card">
+            <div class="metric-header">
+              <span class="metric-label">Quote Win Rate</span>
+              <div class="metric-icon-box kpi-icon-2">
+                <IconCheck :size="16" />
+              </div>
+            </div>
+            <div class="metric-value kpi-val-2">{{ intelligence.quotes.winRatePct }}%</div>
+            <div class="metric-secondary">{{ intelligence.quotes.acceptedCount }} accepted of {{ intelligence.quotes.totalSubmitted }} submitted</div>
+            <div class="flex justify-between text-xs pt-3 mt-3 border-t">
+              <span class="text-tertiary">Declined proposals:</span>
+              <span class="fw-600 text-danger">{{ intelligence.quotes.declinedCount }}</span>
+            </div>
+          </div>
+
+          <!-- 3. Effort vs Quote Variance -->
+          <div class="metric-card bg-off-white" id="intel-variance-card">
+            <div class="metric-header">
+              <span class="metric-label">Effort-to-Quote Variance</span>
+              <div class="metric-icon-box kpi-icon-3">
+                <IconInsights :size="16" />
+              </div>
+            </div>
+            <div class="metric-value" :class="intelligence.effortVariance.varianceRatio <= 1 ? 'kpi-val-2' : 'kpi-val-3'">
+              {{ intelligence.effortVariance.varianceRatio }}x
+            </div>
+            <div class="metric-secondary">
+              {{ intelligence.effortVariance.actualHours }}h actual vs {{ intelligence.effortVariance.estimatedHours }}h estimated
+            </div>
+            <div class="flex justify-between text-xs pt-3 mt-3 border-t">
+              <span class="text-tertiary">Estimation accuracy:</span>
+              <span class="fw-600" :class="intelligence.effortVariance.isOverBudget ? 'text-danger' : 'text-success'">
+                {{ intelligence.effortVariance.isOverBudget ? 'Over estimate' : 'Within budget' }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2-Column Diagnostics: Unpaid Leakage & Category Yield -->
+        <div class="grid-2 gap-4">
+          <!-- Unpaid Leakage Breakdown -->
+          <div class="card p-4 border" id="intel-unpaid-leakage-card">
+            <div class="fw-700 text-sm text-primary mb-1 flex items-center justify-between">
+              <span>Unpaid Client Leakage by Reason</span>
+              <span class="text-xs text-danger font-semibold">
+                {{ store.fmtCurrency(intelligence.unpaidLeakage.totalEstimatedLeakage) }} leakage
+              </span>
+            </div>
+            <p class="text-tertiary text-xs mb-3">
+              Distribution of unbilled time across client friction and scope expansion.
+            </p>
+
+            <div v-if="intelligence.unpaidLeakage.reasons.length === 0" class="text-tertiary text-xs py-4 text-center">
+              No unpaid leakage recorded.
             </div>
 
-            <div class="insight-hero-stat-row" v-if="ins.stat">
-              <span class="insight-hero-stat" :class="`stat-${ins.type}`">{{ ins.stat }}</span>
-              <span class="insight-hero-sub" v-if="ins.statSub">{{ ins.statSub }}</span>
+            <div v-else class="flex flex-col gap-2.5">
+              <div
+                v-for="r in intelligence.unpaidLeakage.reasons"
+                :key="r.reason"
+                class="p-2.5 bg-off-white rounded-8"
+              >
+                <div class="flex items-center justify-between text-xs mb-1">
+                  <span class="fw-600 text-primary capitalize">{{ formatReasonName(r.reason) }}</span>
+                  <span class="text-tertiary">
+                    <strong>{{ r.hours }}h</strong> ({{ store.fmtCurrency(r.estimatedCost) }}) · {{ r.percentage }}%
+                  </span>
+                </div>
+                <div class="progress-bar-bg h-4">
+                  <div class="progress-bar-fill bg-danger" :style="{ width: `${Math.max(4, r.percentage)}%` }"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Category Yield Breakdown -->
+          <div class="card p-4 border" id="intel-category-yield-card">
+            <div class="fw-700 text-sm text-primary mb-1 flex items-center justify-between">
+              <span>Category Work Yield</span>
+              <span class="text-xs text-brand font-semibold">Effective Rate</span>
+            </div>
+            <p class="text-tertiary text-xs mb-3">
+              Effective hourly yield per service discipline in {{ store.user?.baseCurrency || 'USD' }}.
+            </p>
+
+            <div v-if="intelligence.categoryYield.categories.length === 0" class="text-tertiary text-xs py-4 text-center">
+              No category data recorded.
             </div>
 
-            <div class="insight-tile-title">{{ ins.title }}</div>
-            <div class="insight-tile-desc">{{ ins.description || ins.text }}</div>
+            <div v-else class="flex flex-col gap-2.5">
+              <div
+                v-for="cat in intelligence.categoryYield.categories"
+                :key="cat.category"
+                class="p-2.5 bg-off-white rounded-8 flex items-center justify-between"
+              >
+                <div>
+                  <div class="fw-700 text-xs text-primary">{{ cat.category }}</div>
+                  <div class="text-tertiary text-2xs mt-0.5">
+                    {{ cat.hours }}h worked · {{ store.fmtCurrency(cat.netIncome) }} net
+                  </div>
+                </div>
+                <div class="text-right">
+                  <div class="fw-800 text-sm text-brand">{{ store.fmtHourly(cat.effectiveHourly) }}</div>
+                  <div class="text-tertiary text-2xs" v-if="cat.clientWorkRate > 0">
+                    Client: {{ store.fmtHourly(cat.clientWorkRate) }}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -698,8 +810,127 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useWelloStore } from '~/stores/wello'
+import { computeIntelligenceInsights } from '~/utils/metricsEngine'
 
 const store = useWelloStore()
+
+const intelligence = computed(() => {
+  const sessions = store.sessions || []
+  const payments = store.payments || []
+  const expenses = store.expenses || []
+  const projects = store.projects || []
+  const clients = store.clients || []
+  const target = Number(store.user?.targetHourly) || 100
+  const curr = store.user?.baseCurrency || store.user?.currencyCode || 'USD'
+
+  const raw = computeIntelligenceInsights(
+    sessions,
+    payments,
+    expenses,
+    projects,
+    clients,
+    target,
+    curr
+  )
+
+  const timeToMoney = raw?.timeToMoney || {}
+  const proposalWinRate = raw?.proposalWinRate || {}
+  const unpaidLeakage = raw?.unpaidLeakage || []
+  const categoryYield = raw?.categoryYield || []
+  const effortQuoteVariance = raw?.effortQuoteVariance || []
+
+  // Velocity
+  const velocity = {
+    avgDaysToFirstPayment: timeToMoney.avgDaysToPayment || 0,
+    evaluatedProjects: timeToMoney.completedCycleCount || 0,
+    fastestPaymentDays: timeToMoney.fastestPaymentDays || 0,
+    slowestPaymentDays: timeToMoney.slowestPaymentDays || 0,
+  }
+
+  // Quotes
+  const quotes = {
+    winRatePct: proposalWinRate.winRatePct || 0,
+    acceptedCount: proposalWinRate.wonQuotes || 0,
+    declinedCount: proposalWinRate.lostQuotes || 0,
+    totalSubmitted: proposalWinRate.totalQuotes || 0,
+    draftCount: proposalWinRate.draftQuotes || 0,
+    wonTotalValue: proposalWinRate.wonTotalValue || 0,
+    lostTotalValue: proposalWinRate.lostTotalValue || 0,
+    lostPitchHours: proposalWinRate.lostPitchHours || 0,
+    lostPitchValue: proposalWinRate.lostPitchValue || 0,
+  }
+
+  // Effort Variance
+  const totalActualHrs = effortQuoteVariance.reduce((acc, p) => acc + (Number(p.actualHours) || 0), 0)
+  const totalEstHrs = effortQuoteVariance.reduce((acc, p) => acc + (Number(p.estimatedHours) || 0), 0)
+  const varianceRatio = totalEstHrs > 0 ? Math.round((totalActualHrs / totalEstHrs) * 100) / 100 : 1.0
+
+  const effortVariance = {
+    varianceRatio,
+    actualHours: Math.round(totalActualHrs * 10) / 10,
+    estimatedHours: Math.round(totalEstHrs * 10) / 10,
+    isOverBudget: totalActualHrs > totalEstHrs,
+    projects: effortQuoteVariance,
+  }
+
+  // Unpaid Leakage
+  const totalEstimatedLeakage = unpaidLeakage.reduce((acc, r) => acc + (Number(r.estimatedOpportunityCost) || 0), 0)
+  const leakageReasons = unpaidLeakage.map((r) => ({
+    reason: r.reasonKey,
+    label: r.label,
+    category: r.category,
+    hours: r.hours,
+    percentage: r.pctOfUnpaid,
+    estimatedCost: r.estimatedOpportunityCost,
+  }))
+
+  const leakage = {
+    totalEstimatedLeakage,
+    reasons: leakageReasons,
+  }
+
+  // Category Yield
+  const categories = categoryYield.map((c) => ({
+    category: c.category,
+    hours: c.totalHours,
+    netIncome: c.netIncome,
+    effectiveHourly: c.effectiveHourlyRate,
+    clientWorkRate: c.effectiveHourlyRate,
+    projectCount: c.projectCount,
+  }))
+
+  return {
+    raw,
+    velocity,
+    timeToMoney,
+    quotes,
+    proposalWinRate,
+    effortVariance,
+    effortQuoteVariance,
+    leakage,
+    unpaidLeakage: {
+      totalEstimatedLeakage,
+      reasons: leakageReasons,
+    },
+    categoryYield: {
+      categories,
+    },
+    clientProfitability: raw?.clientProfitability || [],
+  }
+})
+
+function formatReasonName(reason) {
+  if (!reason) return ''
+  const map = {
+    scope_creep: 'Scope Creep',
+    revisions_beyond_scope: 'Revisions Beyond Scope',
+    pitching: 'Pitching & Discovery',
+    client_friction: 'Client Friction',
+    admin_overhead: 'Admin & Contracts',
+    uncollectible: 'Uncollectible Work',
+  }
+  return map[reason] || reason.replace(/_/g, ' ')
+}
 
 const todayStr = new Date().toISOString().slice(0, 10)
 function daysAgoStr(days) {
@@ -780,8 +1011,8 @@ const trendData = computed(() => {
 })
 
 const maxTrendRate = computed(() => {
-  if (!trendData.value.points || trendData.value.points.length === 0) return 400
-  const highest = Math.max(...trendData.value.points.map(p => p.rate), trendData.value.targetRate || 350)
+  if (!trendData.value?.points || trendData.value.points.length === 0) return 400
+  const highest = Math.max(...trendData.value.points.map(p => p.rate || 0), trendData.value.targetRate || 350, 0)
   return Math.ceil((highest * 1.15) / 50) * 50
 })
 

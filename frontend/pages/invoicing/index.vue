@@ -40,7 +40,7 @@
             </svg>
           </div>
         </div>
-        <div class="metric-value kpi-val-2">{{ store.currency }} {{ (analytics.totalBilled || 0).toLocaleString('en-IN') }}</div>
+        <div class="metric-value kpi-val-2">{{ fmtCurrency(analytics.totalBilled || 0) }}</div>
         <div class="metric-secondary">{{ analytics.paidCount || 0 }} fully settled invoice(s)</div>
       </div>
       <div class="metric-card hover-lift" id="metric-inv-outstanding">
@@ -50,7 +50,7 @@
             <IconAlert :size="18" />
           </div>
         </div>
-        <div class="metric-value kpi-val-3">{{ store.currency }} {{ (analytics.totalOutstanding || 0).toLocaleString('en-IN') }}</div>
+        <div class="metric-value kpi-val-3">{{ fmtCurrency(analytics.totalOutstanding || 0) }}</div>
         <div class="metric-secondary">{{ (analytics.sentCount || 0) + (analytics.overdueCount || 0) }} pending / sent invoice(s)</div>
       </div>
       <div class="metric-card hover-lift" id="metric-inv-drafts">
@@ -154,9 +154,17 @@
               <!-- Total Amount -->
               <td class="table-text-right">
                 <div class="font-extrabold text-sm text-primary">
-                  {{ store.currency }} {{ inv.total.toLocaleString('en-IN') }}
+                  {{ fmtCurrency(inv.total, inv.currency) }}
                 </div>
-                <div class="text-xs text-tertiary" v-if="inv.taxAmount > 0">+{{ store.currency }}{{ inv.taxAmount.toLocaleString('en-IN') }} GST</div>
+                <div class="text-xs text-tertiary" v-if="inv.taxAmount > 0">
+                  +{{ fmtCurrency(inv.taxAmount, inv.currency) }} {{ inv.taxIdLabel || 'Tax' }}
+                </div>
+                <div class="text-xs text-info font-semibold" v-if="inv.isReverseCharge">
+                  Reverse Charge
+                </div>
+                <div class="text-xs text-tertiary" v-if="inv.currency && inv.currency !== store.user.baseCurrency">
+                  ≈ {{ fmtCurrency(inv.baseTotal || store.convertToBaseCurrency(inv.total, inv.currency)) }}
+                </div>
               </td>
 
               <!-- Status Dropdown (Manual Payment Status Switcher) -->
@@ -263,22 +271,30 @@
                     <input v-model.number="item.quantity" type="number" step="0.5" min="0.1" class="form-input text-xs text-center flex-1" placeholder="Qty" required />
                     <input v-model.number="item.rate" type="number" step="1" min="0" class="form-input text-xs text-right flex-1-5" placeholder="Rate" required />
                     <div class="text-xs font-bold text-primary text-right tabular flex-1-5">
-                      {{ store.currency }}{{ ((item.quantity || 0) * (item.rate || 0)).toLocaleString('en-IN') }}
+                      {{ fmtCurrency((item.quantity || 0) * (item.rate || 0), modalForm.currency) }}
                     </div>
                     <button type="button" class="btn btn-ghost btn-xs text-error p-1" @click="removeItemLine(idx)" v-if="modalForm.items.length > 1">✕</button>
                   </div>
                 </div>
               </div>
 
-              <!-- Discount, Tax, Status & Totals Summary -->
-              <div class="grid-3 gap-3">
+              <!-- Currency, Discount, Tax & Status -->
+              <div class="grid-4 gap-3">
                 <div class="form-group">
-                  <label class="form-label text-xs">Discount ({{ store.currency }})</label>
+                  <label class="form-label text-xs">Invoice Currency</label>
+                  <select v-model="modalForm.currency" class="form-input text-xs">
+                    <option v-for="c in ISO_CURRENCIES" :key="c.code" :value="c.code">
+                      {{ c.code }} ({{ c.symbol }})
+                    </option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label text-xs">Discount ({{ modalForm.currency }})</label>
                   <input v-model.number="modalForm.discount" type="number" min="0" class="form-input text-xs" placeholder="0" />
                 </div>
                 <div class="form-group">
-                  <label class="form-label text-xs">Tax / GST (%)</label>
-                  <input v-model.number="modalForm.taxPercent" type="number" min="0" max="100" class="form-input text-xs" placeholder="18" />
+                  <label class="form-label text-xs">Tax Rate (%)</label>
+                  <input v-model.number="modalForm.taxPercent" type="number" min="0" max="100" class="form-input text-xs" placeholder="0" />
                 </div>
                 <div class="form-group">
                   <label class="form-label text-xs">Invoice Status</label>
@@ -292,6 +308,24 @@
                 </div>
               </div>
 
+              <!-- Reverse Charge & Tax Label -->
+              <div class="grid-2 gap-3 mb-2">
+                <div class="form-group">
+                  <label class="form-label text-xs">Tax Label (e.g. VAT, GST, Sales Tax)</label>
+                  <input v-model="modalForm.taxIdLabel" type="text" class="form-input text-xs" placeholder="e.g. VAT, GST, Sales Tax" />
+                </div>
+                <div class="flex items-center gap-4 pt-5">
+                  <label class="flex items-center gap-2 text-xs cursor-pointer">
+                    <input type="checkbox" v-model="modalForm.isReverseCharge" />
+                    <span>Reverse-Charge (Cross-Border)</span>
+                  </label>
+                  <label class="flex items-center gap-2 text-xs cursor-pointer">
+                    <input type="checkbox" v-model="modalForm.isZeroRated" />
+                    <span>Zero-Rated / Exempt</span>
+                  </label>
+                </div>
+              </div>
+
               <div class="form-group">
                 <label class="form-label text-xs">Notes / Payment Terms</label>
                 <textarea v-model="modalForm.notes" class="form-input text-xs" rows="2" placeholder="Payment due within 15 days. Bank transfer details..."></textarea>
@@ -300,10 +334,10 @@
               <!-- Total Calculation Display Box -->
               <div class="p-3 bg-off-white border-soft rounded-10 flex justify-between items-center">
                 <div class="text-xs text-secondary">
-                  Subtotal: {{ store.currency }}{{ calculatedSubtotal.toLocaleString('en-IN') }} · Tax: {{ store.currency }}{{ calculatedTax.toLocaleString('en-IN') }}
+                  Subtotal: {{ fmtCurrency(calculatedSubtotal, modalForm.currency) }} · Tax: {{ fmtCurrency(calculatedTax, modalForm.currency) }}
                 </div>
                 <div class="text-base font-extrabold text-primary">
-                  Total: {{ store.currency }}{{ calculatedTotal.toLocaleString('en-IN') }}
+                  Total: {{ fmtCurrency(calculatedTotal, modalForm.currency) }}
                 </div>
               </div>
             </div>
@@ -324,9 +358,10 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
 import { useWelloStore } from '~/stores/wello'
 import { useAuthStore } from '~/stores/auth'
+import { useFormatters } from '~/composables/useFormatters'
+import { ISO_CURRENCIES } from '~/utils/currencyUtils'
 import IconReceipt from '~/components/IconReceipt.vue'
 import IconAlert from '~/components/IconAlert.vue'
 import IconPlus from '~/components/IconPlus.vue'
@@ -339,6 +374,7 @@ const store = useWelloStore()
 const authStore = useAuthStore()
 const route = useRoute()
 const router = useRouter()
+const { fmtCurrency } = useFormatters()
 
 const invoices = ref([])
 const analytics = ref({})
@@ -354,6 +390,7 @@ const showModal = ref(false)
 const modalForm = ref({
   id: '',
   invoiceNumber: '',
+  currency: store.user.baseCurrency || 'USD',
   invoiceDate: new Date().toISOString().split('T')[0],
   dueDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
   customerName: '',
@@ -362,8 +399,11 @@ const modalForm = ref({
   serviceDescription: '',
   items: [{ description: 'Service Line Item', quantity: 1, rate: 1000 }],
   discount: 0,
-  taxPercent: 18,
-  notes: 'Thank you for choosing Wello services. Payment due upon receipt.',
+  taxPercent: 0,
+  taxIdLabel: store.user.taxIdLabel || 'VAT',
+  isReverseCharge: false,
+  isZeroRated: false,
+  notes: 'Thank you for choosing our services. Payment due upon receipt.',
   status: 'DRAFT',
 })
 

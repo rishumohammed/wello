@@ -47,7 +47,7 @@
           />
         </div>
 
-        <div class="reg-fields-grid mb-6">
+        <div class="reg-fields-grid mb-4">
           <div class="form-field-group">
             <label class="form-field-label" for="reg-service">Profession / Service</label>
             <input
@@ -55,23 +55,43 @@
               v-model="serviceCategory"
               type="text"
               class="form-field-input"
-              placeholder="e.g. UX Designer"
+              placeholder="e.g. UX Designer, Software Engineer"
               :disabled="isLoading"
             />
           </div>
 
           <div class="form-field-group">
-            <label class="form-field-label" for="reg-target">Target Rate (₹/hr)</label>
+            <label class="form-field-label" for="reg-currency">Base Currency</label>
+            <select id="reg-currency" v-model="baseCurrency" class="form-field-input" :disabled="isLoading">
+              <option v-for="c in ISO_CURRENCIES" :key="c.code" :value="c.code">
+                {{ c.code }} – {{ c.name }} ({{ c.symbol }})
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div class="reg-fields-grid mb-6">
+          <div class="form-field-group">
+            <label class="form-field-label" for="reg-target">Target Rate ({{ baseCurrency }}/hr)</label>
             <input
               id="reg-target"
               v-model="targetHourly"
               type="number"
-              min="50"
-              step="10"
+              min="1"
+              step="5"
               class="form-field-input"
-              placeholder="350"
+              placeholder="100"
               :disabled="isLoading"
             />
+          </div>
+
+          <div class="form-field-group">
+            <label class="form-field-label" for="reg-tz">Timezone (IANA)</label>
+            <select id="reg-tz" v-model="timezone" class="form-field-input" :disabled="isLoading">
+              <option v-for="tz in IANA_TIMEZONES" :key="tz.value" :value="tz.value">
+                {{ tz.label }}
+              </option>
+            </select>
           </div>
         </div>
 
@@ -183,9 +203,10 @@ definePageMeta({
 })
 
 import { ref, computed, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
 import { useAuthStore } from '~/stores/auth'
 import { useWelloStore } from '~/stores/wello'
+import { ISO_CURRENCIES } from '~/utils/currencyUtils'
+import { IANA_TIMEZONES, getBrowserTimezone } from '~/utils/dateUtils'
 
 const authStore = useAuthStore()
 const welloStore = useWelloStore()
@@ -195,7 +216,9 @@ const step = ref(1)
 const name = ref('')
 const email = ref('')
 const serviceCategory = ref('Consulting & Services')
-const targetHourly = ref(350)
+const targetHourly = ref(100)
+const baseCurrency = ref('USD')
+const timezone = ref(getBrowserTimezone())
 const otpDigits = ref(['', '', '', '', '', ''])
 const inputRefs = ref([])
 const isLoading = ref(false)
@@ -332,13 +355,19 @@ async function handleVerifyOtp() {
       code: fullOtp.value,
       name: name.value,
       serviceCategory: serviceCategory.value,
-      targetHourly: Number(targetHourly.value) || 350,
+      targetHourly: Number(targetHourly.value) || 100,
+      baseCurrency: baseCurrency.value,
+      timezone: timezone.value,
     })
 
     if (res.success) {
       if (welloStore.user) {
         welloStore.user.name = name.value
-        welloStore.user.targetHourly = Number(targetHourly.value) || 350
+        welloStore.user.targetHourly = Number(targetHourly.value) || 100
+        welloStore.user.baseCurrency = baseCurrency.value
+        welloStore.user.currency = baseCurrency.value
+        welloStore.user.currencyCode = baseCurrency.value
+        welloStore.user.timezone = timezone.value
         const parts = name.value.trim().split(' ')
         welloStore.user.avatarInitials = parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : parts[0].slice(0, 2).toUpperCase()
       }

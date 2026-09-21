@@ -4,12 +4,12 @@
     <div class="page-header flex items-center justify-between flex-wrap gap-4 mb-0">
       <div>
         <h1 class="page-title">Settings</h1>
-        <p class="page-subtitle">Manage your personal profile, business branding, target hourly rates, and app defaults.</p>
+        <p class="page-subtitle">Manage your personal profile, global timezones, base currency, tax regime, and business invoicing identity.</p>
       </div>
       <div class="flex items-center gap-2">
-        <button class="btn btn-primary btn-sm" @click="saveAll" id="btn-save-all-settings">
+        <button class="btn btn-primary btn-sm" @click="saveAll" id="btn-save-all-settings" :disabled="isSaving">
           <IconCheck :size="14" />
-          <span>Save All Settings</span>
+          <span>{{ isSaving ? 'Saving...' : 'Save All Settings' }}</span>
         </button>
       </div>
     </div>
@@ -29,7 +29,7 @@
       </button>
     </div>
 
-    <!-- TAB 1: PERSONAL PROFILE -->
+    <!-- TAB 1: PERSONAL PROFILE & TIMEZONE -->
     <div v-if="activeTab === 'profile'" class="settings-section">
       <div class="card" id="settings-profile-card">
         <div class="card-header flex items-center justify-between">
@@ -38,8 +38,8 @@
               <IconUser :size="16" />
             </div>
             <div>
-              <div class="card-title text-base">Personal Profile</div>
-              <div class="card-subtitle text-xs">Your account credentials and display name</div>
+              <div class="card-title text-base">Personal Profile & Timezone</div>
+              <div class="card-subtitle text-xs">Your account credentials, display name, and IANA timezone for date math</div>
             </div>
           </div>
         </div>
@@ -70,8 +70,30 @@
             </div>
           </div>
 
-          <div class="form-actions mt-4 pt-4 border-t flex justify-end">
-            <button class="btn btn-primary btn-sm" @click="saveProfile" id="btn-save-profile">Save Profile</button>
+          <!-- Timezone Configuration -->
+          <div class="mt-4 pt-4 border-t">
+            <div class="flex items-center justify-between mb-2">
+              <label class="form-label mb-0" for="settings-timezone">
+                Account Timezone (IANA) <span class="required">*</span>
+              </label>
+              <button type="button" class="btn btn-ghost btn-xs text-primary" @click="detectBrowserTz" id="btn-detect-tz">
+                Auto-detect ({{ browserTz }})
+              </button>
+            </div>
+            <select id="settings-timezone" v-model="profileForm.timezone" class="form-select">
+              <option v-for="tz in IANA_TIMEZONES" :key="tz.value" :value="tz.value">
+                {{ tz.label }}
+              </option>
+            </select>
+            <span class="form-hint mt-1">
+              All "today/this week/this month" boundaries, work timer logs, and reports are calculated in this timezone.
+            </span>
+          </div>
+
+          <div class="form-actions mt-6 pt-4 border-t flex justify-end">
+            <button class="btn btn-primary btn-sm" @click="saveProfile" id="btn-save-profile" :disabled="isSaving">
+              Save Profile
+            </button>
           </div>
         </div>
       </div>
@@ -89,7 +111,7 @@
               </div>
               <div>
                 <div class="card-title text-base">Business & Invoice Profile</div>
-                <div class="card-subtitle text-xs">Custom logo, tax details & issuer contact information</div>
+                <div class="card-subtitle text-xs">Custom branding, international address & tax registration</div>
               </div>
             </div>
           </div>
@@ -124,29 +146,61 @@
             <div class="flex flex-col gap-4">
               <div class="form-group">
                 <label class="form-label" for="settings-biz-name">Business / Freelancer Display Name</label>
-                <input id="settings-biz-name" v-model="bizForm.businessName" class="form-input" type="text" placeholder="e.g. Rahul Mehta Studio" />
+                <input id="settings-biz-name" v-model="bizForm.businessName" class="form-input" type="text" placeholder="e.g. Morgan Global Consulting" />
+              </div>
+
+              <!-- Tax ID & Custom Tax Label -->
+              <div class="grid-2 gap-4">
+                <div class="form-group">
+                  <label class="form-label" for="settings-biz-tax-label">Tax ID Label</label>
+                  <input id="settings-biz-tax-label" v-model="bizForm.taxIdLabel" class="form-input" type="text" placeholder="e.g. VAT ID, TRN, GSTIN, EIN" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="settings-biz-tax">Tax Registration Number</label>
+                  <input id="settings-biz-tax" v-model="bizForm.businessTaxId" class="form-input" type="text" placeholder="e.g. 100234567800003" />
+                </div>
               </div>
 
               <div class="grid-2 gap-4">
                 <div class="form-group">
-                  <label class="form-label" for="settings-biz-tax">Tax / GST / VAT ID</label>
-                  <input id="settings-biz-tax" v-model="bizForm.businessTaxId" class="form-input" type="text" placeholder="e.g. GSTIN: 29AAAAA0000A1Z5" />
+                  <label class="form-label" for="settings-biz-phone">Billing Contact Phone (E.164)</label>
+                  <input id="settings-biz-phone" v-model="bizForm.businessPhone" class="form-input" type="text" placeholder="+1 415 555 0199" />
                 </div>
-
                 <div class="form-group">
-                  <label class="form-label" for="settings-biz-phone">Billing Contact Phone</label>
-                  <input id="settings-biz-phone" v-model="bizForm.businessPhone" class="form-input" type="text" placeholder="+91 98765 43210" />
+                  <label class="form-label" for="settings-biz-email">Billing Contact Email</label>
+                  <input id="settings-biz-email" v-model="bizForm.businessEmail" class="form-input" type="email" placeholder="billing@yourdomain.com" />
                 </div>
               </div>
 
-              <div class="form-group">
-                <label class="form-label" for="settings-biz-email">Billing Contact Email</label>
-                <input id="settings-biz-email" v-model="bizForm.businessEmail" class="form-input" type="email" placeholder="billing@yourdomain.com" />
-              </div>
-
-              <div class="form-group">
-                <label class="form-label" for="settings-biz-address">Issuer Business Address</label>
-                <textarea id="settings-biz-address" v-model="bizForm.businessAddress" class="form-input text-xs" rows="2" placeholder="Suite #, Building, Street Address, City, State, Pincode"></textarea>
+              <!-- Generic International Address Fields -->
+              <div class="border-t pt-3">
+                <div class="fw-700 text-xs text-primary mb-2 uppercase">Business Registered Address</div>
+                <div class="form-group mb-2">
+                  <label class="form-label" for="settings-addr-line1">Address Line 1</label>
+                  <input id="settings-addr-line1" v-model="bizForm.addressLine1" class="form-input" type="text" placeholder="Suite #, Building, Street Address" />
+                </div>
+                <div class="form-group mb-2">
+                  <label class="form-label" for="settings-addr-line2">Address Line 2 (Optional)</label>
+                  <input id="settings-addr-line2" v-model="bizForm.addressLine2" class="form-input" type="text" placeholder="Apartment, Floor, Unit" />
+                </div>
+                <div class="grid-3 gap-2 mb-2">
+                  <div class="form-group">
+                    <label class="form-label" for="settings-addr-city">City</label>
+                    <input id="settings-addr-city" v-model="bizForm.city" class="form-input" type="text" placeholder="City" />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="settings-addr-state">State / Province / Region</label>
+                    <input id="settings-addr-state" v-model="bizForm.stateProvince" class="form-input" type="text" placeholder="State/Region" />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="settings-addr-zip">Postal / Zip Code</label>
+                    <input id="settings-addr-zip" v-model="bizForm.postalCode" class="form-input" type="text" placeholder="Postal Code" />
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="settings-addr-country">Country</label>
+                  <input id="settings-addr-country" v-model="bizForm.country" class="form-input" type="text" placeholder="e.g. United States, Germany, UAE" />
+                </div>
               </div>
 
               <div class="form-group">
@@ -155,7 +209,7 @@
               </div>
 
               <div class="form-actions mt-2 pt-4 border-t flex justify-end">
-                <button class="btn btn-primary btn-sm" @click="saveBusinessProfile" id="btn-save-biz-profile">
+                <button class="btn btn-primary btn-sm" @click="saveBusinessProfile" id="btn-save-biz-profile" :disabled="isSaving">
                   Save Business Profile
                 </button>
               </div>
@@ -181,19 +235,21 @@
                 <div>
                   <img v-if="bizForm.businessLogo" :src="bizForm.businessLogo" alt="Logo" class="max-h-11 object-contain mb-2" />
                   <div class="fw-800 text-lg text-primary">{{ bizForm.businessName || 'Your Business Name' }}</div>
-                  <div class="text-xs text-tertiary" v-if="bizForm.businessTaxId">Tax ID: {{ bizForm.businessTaxId }}</div>
+                  <div class="text-xs text-tertiary" v-if="bizForm.businessTaxId">
+                    {{ bizForm.taxIdLabel || 'Tax ID' }}: {{ bizForm.businessTaxId }}
+                  </div>
                 </div>
                 <div class="text-right">
                   <div class="fw-800 text-xl text-purple">INVOICE</div>
-                  <div class="text-xs text-tertiary">#INV-2025-001</div>
-                  <div class="text-xs text-tertiary">Date: Sept 16, 2025</div>
+                  <div class="text-xs text-tertiary">#INV-2026-001</div>
+                  <div class="text-xs text-tertiary">Date: {{ fmtDate(new Date()) }}</div>
                 </div>
               </div>
 
               <!-- Issuer Address & Contact -->
               <div class="py-3 border-b text-xs text-secondary">
                 <div class="fw-700 text-primary mb-1">Billed From:</div>
-                <div class="text-tertiary whitespace-pre-line">{{ bizForm.businessAddress || 'Street Address, City, State, Pincode' }}</div>
+                <div class="text-tertiary whitespace-pre-line">{{ formattedAddress || 'Street Address, City, Country' }}</div>
                 <div class="mt-1 text-tertiary">
                   <span v-if="bizForm.businessEmail">📧 {{ bizForm.businessEmail }}</span>
                   <span v-if="bizForm.businessPhone" class="ml-2">📞 {{ bizForm.businessPhone }}</span>
@@ -203,10 +259,10 @@
               <!-- Sample Line Item -->
               <div class="py-3 border-b">
                 <div class="flex justify-between text-xs font-bold text-primary mb-1">
-                  <span>UI/UX & Web Development Services</span>
-                  <span>₹25,000.00</span>
+                  <span>Technical & Strategic Consulting Services</span>
+                  <span>{{ fmtCurrency(2500) }}</span>
                 </div>
-                <div class="text-xs text-tertiary">Frontend engineering, responsiveness, and performance optimization</div>
+                <div class="text-xs text-tertiary">Architecture review, optimization, and implementation</div>
               </div>
 
               <!-- Footer Notes -->
@@ -224,84 +280,154 @@
       </div>
     </div>
 
-    <!-- TAB 3: WORK VALUE & CURRENCY -->
+    <!-- TAB 3: WORK VALUE, BASE CURRENCY & TAX RATES -->
     <div v-if="activeTab === 'work'" class="settings-section">
-      <div class="card" id="settings-work-prefs-card">
-        <div class="card-header flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <div class="metric-icon-box warning">
-              <IconClock :size="16" />
+      <div class="grid-1 lg:grid-2 gap-6">
+        <!-- Work Value & Base Currency Card -->
+        <div class="card" id="settings-work-prefs-card">
+          <div class="card-header flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <div class="metric-icon-box warning">
+                <IconClock :size="16" />
+              </div>
+              <div>
+                <div class="card-title text-base">Rate Targets & Base Currency</div>
+                <div class="card-subtitle text-xs">Target hourly rate benchmark and ISO 4217 reporting currency</div>
+              </div>
             </div>
-            <div>
-              <div class="card-title text-base">Work Value Preferences</div>
-              <div class="card-subtitle text-xs">Target hourly rate goals and system currency unit</div>
+          </div>
+
+          <div class="card-body">
+            <div class="flex flex-col gap-4">
+              <div class="form-group">
+                <label class="form-label" for="settings-currency">Account Base Currency (ISO 4217)</label>
+                <select id="settings-currency" v-model="prefForm.baseCurrency" class="form-select">
+                  <option v-for="c in ISO_CURRENCIES" :key="c.code" :value="c.code">
+                    {{ c.code }} – {{ c.name }} ({{ c.symbol }}) · {{ c.decimals }} decimals
+                  </option>
+                </select>
+                <span class="form-hint">
+                  All multi-currency projects, payments, expenses, and dashboard aggregates are automatically converted into this currency.
+                </span>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="settings-target-hourly">
+                  Target Hourly Benchmark ({{ prefForm.baseCurrency }})
+                </label>
+                <input
+                  id="settings-target-hourly"
+                  v-model.number="prefForm.targetHourly"
+                  class="form-input"
+                  type="number"
+                  min="0"
+                  step="10"
+                  placeholder="e.g. 100"
+                />
+                <span class="form-hint">Used as your benchmark to calculate target progress and unpaid value.</span>
+              </div>
+
+              <!-- Headline Rate Metric Preference -->
+              <div class="form-group">
+                <label class="form-label" for="settings-headline-metric">
+                  Headline Rate Metric Preference
+                </label>
+                <select id="settings-headline-metric" v-model="prefForm.headlineRateMetric" class="form-select">
+                  <option value="client_work">Client-Work Rate (Net income / Paid + Unpaid client hours)</option>
+                  <option value="all_in">All-In Rate (Net income / All hours including intentional unpaid)</option>
+                </select>
+                <span class="form-hint">
+                  Determines the primary hourly rate displayed on your dashboard hero and overview cards.
+                </span>
+              </div>
+
+
+              <!-- Calculated Value Benchmarks -->
+              <div class="p-4 bg-off-white border-subtle-box rounded-12 flex flex-col gap-2">
+                <div class="fw-700 text-xs text-primary uppercase">Calculated Benchmarks</div>
+                <div class="grid-3 gap-2">
+                  <div class="p-2.5 bg-card rounded-8 text-center">
+                    <div class="text-xs text-tertiary">Hourly Target</div>
+                    <div class="fw-800 text-sm text-primary mt-0.5">{{ fmtCurrency(prefForm.targetHourly || 0, prefForm.baseCurrency) }}</div>
+                  </div>
+                  <div class="p-2.5 bg-card rounded-8 text-center">
+                    <div class="text-xs text-tertiary">Daily (8h)</div>
+                    <div class="fw-800 text-sm text-success mt-0.5">{{ fmtCurrency((prefForm.targetHourly || 0) * 8, prefForm.baseCurrency) }}</div>
+                  </div>
+                  <div class="p-2.5 bg-card rounded-8 text-center">
+                    <div class="text-xs text-tertiary">Monthly (160h)</div>
+                    <div class="fw-800 text-sm text-purple mt-0.5">{{ fmtCurrency((prefForm.targetHourly || 0) * 160, prefForm.baseCurrency) }}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-actions pt-4 border-t flex justify-end">
+                <button class="btn btn-primary btn-sm" @click="savePrefs" id="btn-save-prefs" :disabled="isSaving">
+                  Save Currency & Rate Targets
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
-        <div class="card-body">
-          <div class="grid-1 md:grid-2 gap-6">
-            <div class="flex flex-col gap-4">
-              <div class="form-group">
-                <label class="form-label" for="settings-target-hourly">Target Hourly Value ({{ prefForm.currency }})</label>
-                <div class="relative">
-                  <input
-                    id="settings-target-hourly"
-                    v-model.number="prefForm.targetHourly"
-                    class="form-input"
-                    type="number"
-                    min="0"
-                    step="100"
-                    placeholder="e.g. 1500"
-                  />
-                </div>
-                <span class="form-hint">Used as your benchmark to calculate target progress and unpaid value.</span>
+        <!-- Tax Rates Management Card -->
+        <div class="card" id="settings-tax-card">
+          <div class="card-header flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <div class="metric-icon-box purple">
+                <IconReceipt :size="16" />
               </div>
-
-              <div class="form-group">
-                <label class="form-label" for="settings-currency">System Currency Symbol</label>
-                <select id="settings-currency" v-model="prefForm.currency" class="form-select">
-                  <option value="₹">₹ Indian Rupee (INR)</option>
-                  <option value="$">$ US Dollar (USD)</option>
-                  <option value="€">€ Euro (EUR)</option>
-                  <option value="£">£ British Pound (GBP)</option>
-                  <option value="¥">¥ Japanese Yen (JPY)</option>
-                  <option value="AED">AED UAE Dirham</option>
-                  <option value="SGD">SGD Singapore Dollar</option>
-                </select>
+              <div>
+                <div class="card-title text-base">Configured Tax Rates</div>
+                <div class="card-subtitle text-xs">Generic global tax presets (VAT, GST, Sales Tax, Zero-Rated)</div>
               </div>
+            </div>
+            <button class="btn btn-secondary btn-xs" @click="showAddTaxModal = true" id="btn-add-tax-rate">
+              + Add Tax Rate
+            </button>
+          </div>
 
-              <div class="form-actions pt-4 border-t flex justify-end">
-                <button class="btn btn-primary btn-sm" @click="savePrefs" id="btn-save-prefs">Save Preferences</button>
+          <div class="card-body">
+            <!-- Preset Quick-Fill Bar -->
+            <div class="mb-4 p-3 bg-off-white border-subtle-box rounded-10 flex items-center justify-between flex-wrap gap-2">
+              <div class="text-xs text-tertiary">Quick-add global tax standard:</div>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <button type="button" class="btn btn-ghost btn-xs" @click="addPresetTax('UAE VAT', 5, 'AE')">UAE VAT 5%</button>
+                <button type="button" class="btn btn-ghost btn-xs" @click="addPresetTax('EU Standard VAT', 20, 'DE')">EU VAT 20%</button>
+                <button type="button" class="btn btn-ghost btn-xs" @click="addPresetTax('UK VAT', 20, 'GB')">UK VAT 20%</button>
+                <button type="button" class="btn btn-ghost btn-xs" @click="addPresetTax('US Sales Tax', 8.25, 'US')">US Tax 8.25%</button>
+                <button type="button" class="btn btn-ghost btn-xs" @click="addPresetTax('Australia GST', 10, 'AU')">AU GST 10%</button>
               </div>
             </div>
 
-            <!-- Target Rate Target Calculator Preview Card -->
-            <div class="p-5 bg-off-white border-subtle-box rounded-14 flex flex-col justify-between gap-3">
-              <div class="fw-700 text-sm text-primary flex items-center justify-between">
-                <span>Calculated Value Benchmarks</span>
-                <span class="badge badge-warning font-bold">Rate Targets</span>
-              </div>
+            <!-- Tax Rates List -->
+            <div v-if="store.taxRates.length === 0" class="p-6 text-center text-tertiary text-xs">
+              No custom tax rates configured yet. Click "+ Add Tax Rate" or choose a quick preset above.
+            </div>
 
-              <div class="grid-3 gap-2">
-                <div class="p-3 bg-card rounded-10 border-card text-center">
-                  <div class="text-xs text-tertiary uppercase fw-600">Hourly Target</div>
-                  <div class="fw-800 text-base text-primary mt-1">{{ prefForm.currency }}{{ (prefForm.targetHourly || 0).toLocaleString('en-IN') }}</div>
+            <div v-else class="flex flex-col gap-2">
+              <div
+                v-for="tax in store.taxRates"
+                :key="tax.id"
+                class="p-3 bg-card border-card rounded-10 flex items-center justify-between flex-wrap gap-2"
+              >
+                <div>
+                  <div class="fw-700 text-sm text-primary flex items-center gap-2">
+                    <span>{{ tax.name }}</span>
+                    <span class="badge badge-purple text-xs">{{ Number(tax.rate).toFixed(2) }}%</span>
+                    <span v-if="tax.isDefault" class="badge badge-success text-xs">Default</span>
+                    <span v-if="tax.isInclusive" class="badge badge-info text-xs">Inclusive</span>
+                  </div>
+                  <div class="text-xs text-tertiary mt-0.5">
+                    {{ tax.countryCode ? `Region: ${tax.countryCode} · ` : '' }}{{ tax.isCompound ? 'Compound Tax' : 'Simple Tax' }}
+                  </div>
                 </div>
 
-                <div class="p-3 bg-card rounded-10 border-card text-center">
-                  <div class="text-xs text-tertiary uppercase fw-600">Daily (8 hrs)</div>
-                  <div class="fw-800 text-base text-success mt-1">{{ prefForm.currency }}{{ ((prefForm.targetHourly || 0) * 8).toLocaleString('en-IN') }}</div>
+                <div class="flex items-center gap-2">
+                  <button class="btn btn-ghost btn-xs text-error" @click="removeTaxRate(tax.id)">
+                    Delete
+                  </button>
                 </div>
-
-                <div class="p-3 bg-card rounded-10 border-card text-center">
-                  <div class="text-xs text-tertiary uppercase fw-600">Monthly (160h)</div>
-                  <div class="fw-800 text-base text-purple mt-1">{{ prefForm.currency }}{{ ((prefForm.targetHourly || 0) * 160).toLocaleString('en-IN') }}</div>
-                </div>
-              </div>
-
-              <div class="text-xs text-tertiary">
-                Your effective hourly value on the Home dashboard is compared against this benchmark rate.
               </div>
             </div>
           </div>
@@ -365,11 +491,11 @@
               <IconPackage :size="16" />
             </div>
             <div>
-              <div class="card-title text-base">System & Application Info</div>
-              <div class="card-subtitle text-xs">Wello platform version, data stats, and database storage engines</div>
+              <div class="card-title text-base">System & Global Architecture Info</div>
+              <div class="card-subtitle text-xs">Wello platform version, multi-currency engine, and storage backend</div>
             </div>
           </div>
-          <span class="badge badge-info text-xs font-bold">v1.0.0</span>
+          <span class="badge badge-info text-xs font-bold">v1.0.0 Global</span>
         </div>
 
         <div class="card-body">
@@ -390,14 +516,57 @@
             </div>
 
             <div class="p-4 bg-off-white rounded-12 border-subtle-box">
-              <div class="text-xs text-tertiary uppercase fw-600">Core Pricing</div>
-              <div class="fw-800 text-xl text-success mt-1">100% FREE</div>
+              <div class="text-xs text-tertiary uppercase fw-600">Base Currency</div>
+              <div class="fw-800 text-xl text-success mt-1">{{ store.user.baseCurrency || 'USD' }}</div>
             </div>
           </div>
 
           <div class="p-4 text-xs text-tertiary bg-off-white rounded-12 border-subtle-box">
-            💡 <strong>Storage Engine Notice:</strong> Wello stores user state locally in Pinia reactive stores with optional MySQL backend synchronisation. Configure MySQL credentials in your <code>.env</code> file to enable server persistence.
+            🌐 <strong>Global Engine:</strong> Wello supports all ISO 4217 currencies, real-time triangular FX conversion, IANA timezone boundaries, and configurable tax regimes without region-specific assumptions.
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Add Tax Rate -->
+    <div v-if="showAddTaxModal" class="modal-backdrop">
+      <div class="modal-box p-6 bg-card rounded-14 max-w-md w-full shadow-soft-xl">
+        <div class="flex items-center justify-between mb-4">
+          <div class="fw-700 text-base text-primary">Add Custom Tax Rate</div>
+          <button class="btn btn-ghost btn-xs" @click="showAddTaxModal = false">✕</button>
+        </div>
+
+        <div class="flex flex-col gap-3">
+          <div class="form-group">
+            <label class="form-label" for="new-tax-name">Tax Name <span class="required">*</span></label>
+            <input id="new-tax-name" v-model="newTaxForm.name" class="form-input" type="text" placeholder="e.g. Standard VAT, Sales Tax" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="new-tax-rate">Rate Percentage (%) <span class="required">*</span></label>
+            <input id="new-tax-rate" v-model.number="newTaxForm.rate" class="form-input" type="number" step="0.01" min="0" max="100" placeholder="e.g. 20.00" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="new-tax-country">Country Code (Optional)</label>
+            <input id="new-tax-country" v-model="newTaxForm.countryCode" class="form-input" type="text" maxlength="2" placeholder="e.g. US, DE, AE, GB" />
+          </div>
+
+          <div class="flex items-center gap-4 mt-2">
+            <label class="flex items-center gap-2 text-xs cursor-pointer">
+              <input type="checkbox" v-model="newTaxForm.isInclusive" />
+              <span>Tax is inclusive in quoted prices</span>
+            </label>
+            <label class="flex items-center gap-2 text-xs cursor-pointer">
+              <input type="checkbox" v-model="newTaxForm.isDefault" />
+              <span>Set as default tax</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 mt-6 pt-4 border-t">
+          <button class="btn btn-secondary btn-sm" @click="showAddTaxModal = false">Cancel</button>
+          <button class="btn btn-primary btn-sm" @click="saveNewTaxRate">Save Tax Rate</button>
         </div>
       </div>
     </div>
@@ -409,33 +578,52 @@ import { ref, computed } from 'vue'
 import { useWelloStore } from '~/stores/wello'
 import { useAuthStore } from '~/stores/auth'
 import { useToast } from '~/composables/useToast'
+import { useFormatters } from '~/composables/useFormatters'
+import { ISO_CURRENCIES } from '~/utils/currencyUtils'
+import { IANA_TIMEZONES, getBrowserTimezone } from '~/utils/dateUtils'
+import IconUser from '~/components/IconUser.vue'
+import IconReceipt from '~/components/IconReceipt.vue'
+import IconClock from '~/components/IconClock.vue'
+import IconShield from '~/components/IconShield.vue'
+import IconPackage from '~/components/IconPackage.vue'
 
 const store = useWelloStore()
 const authStore = useAuthStore()
 const toast = useToast()
+const { formatMoney } = useFormatters()
 
 const activeTab = ref('profile')
+const isSaving = ref(false)
+const showAddTaxModal = ref(false)
+const browserTz = computed(() => getBrowserTimezone())
 
 const tabs = [
-  { id: 'profile', label: 'Profile', icon: resolveComponent('IconUser') },
-  { id: 'business', label: 'Business & Invoice', icon: resolveComponent('IconReceipt') },
-  { id: 'work', label: 'Rate Targets & Value', icon: resolveComponent('IconClock') },
-  { id: 'account', label: 'Account & Security', icon: resolveComponent('IconShield') },
-  { id: 'about', label: 'System Info', icon: resolveComponent('IconPackage') },
+  { id: 'profile', label: 'Profile & Timezone', icon: IconUser },
+  { id: 'business', label: 'Business & Invoice', icon: IconReceipt },
+  { id: 'work', label: 'Rate Targets & Tax Rates', icon: IconClock },
+  { id: 'account', label: 'Account & Security', icon: IconShield },
+  { id: 'about', label: 'System Info', icon: IconPackage },
 ]
 
 // Personal Profile Form
 const profileForm = ref({
   name: authStore.user?.name || store.user.name || '',
   email: authStore.user?.email || store.user.email || '',
+  timezone: store.user.timezone || getBrowserTimezone(),
 })
 
 // Business Profile Form
 const bizForm = ref({
   businessName: store.user.businessName || '',
   businessLogo: store.user.businessLogo || '',
+  taxIdLabel: store.user.taxIdLabel || 'Tax ID',
   businessTaxId: store.user.businessTaxId || '',
-  businessAddress: store.user.businessAddress || '',
+  addressLine1: store.user.addressLine1 || store.user.businessAddress || '',
+  addressLine2: store.user.addressLine2 || '',
+  city: store.user.city || '',
+  stateProvince: store.user.stateProvince || store.user.state || '',
+  postalCode: store.user.postalCode || '',
+  country: store.user.country || store.user.countryCode || '',
   businessPhone: store.user.businessPhone || '',
   businessEmail: store.user.businessEmail || store.user.email || '',
   defaultInvoiceNotes: store.user.defaultInvoiceNotes || '',
@@ -443,14 +631,42 @@ const bizForm = ref({
 
 // Work Preferences Form
 const prefForm = ref({
-  targetHourly: store.user.targetHourly || 350,
-  currency: store.user.currency || '₹',
+  targetHourly: store.user.targetHourly || 100,
+  baseCurrency: store.user.baseCurrency || store.user.currencyCode || 'USD',
+  headlineRateMetric: store.user.headlineRateMetric || 'client_work',
+})
+
+// New Tax Rate Form
+const newTaxForm = ref({
+  name: '',
+  rate: 20,
+  countryCode: '',
+  isInclusive: false,
+  isDefault: false,
+  isCompound: false,
+})
+
+const formattedAddress = computed(() => {
+  const parts = [
+    bizForm.value.addressLine1,
+    bizForm.value.addressLine2,
+    bizForm.value.city,
+    bizForm.value.stateProvince,
+    bizForm.value.postalCode,
+    bizForm.value.country,
+  ].filter(Boolean)
+  return parts.join(', ')
 })
 
 const totalTimeTracked = computed(() => {
   const totalMin = store.sessions.reduce((acc, s) => acc + (s.durationMin || 0), 0)
   return store.minutesToHM(totalMin)
 })
+
+function detectBrowserTz() {
+  profileForm.value.timezone = getBrowserTimezone()
+  toast.info(`Timezone set to browser location: ${profileForm.value.timezone}`)
+}
 
 function handleLogoUpload(e) {
   const file = e.target.files?.[0]
@@ -469,43 +685,163 @@ function handleLogoUpload(e) {
   reader.readAsDataURL(file)
 }
 
-function saveProfile() {
+async function saveProfile() {
+  if (!profileForm.value.name.trim()) {
+    toast.error('Full Name is required.')
+    return false
+  }
+  isSaving.value = true
+  try {
+    const ok = await store.updateProfile({
+      name: profileForm.value.name.trim(),
+      email: profileForm.value.email.trim(),
+      timezone: profileForm.value.timezone,
+    })
+    if (ok) {
+      toast.success('Personal profile & timezone saved!')
+      return true
+    }
+    return false
+  } finally {
+    isSaving.value = false
+  }
+}
+
+async function saveBusinessProfile() {
+  isSaving.value = true
+  try {
+    const ok = await store.updateProfile({
+      businessName: bizForm.value.businessName.trim(),
+      businessLogo: bizForm.value.businessLogo,
+      taxIdLabel: bizForm.value.taxIdLabel.trim(),
+      businessTaxId: bizForm.value.businessTaxId.trim(),
+      businessAddress: formattedAddress.value,
+      addressLine1: bizForm.value.addressLine1.trim(),
+      addressLine2: bizForm.value.addressLine2.trim(),
+      city: bizForm.value.city.trim(),
+      stateProvince: bizForm.value.stateProvince.trim(),
+      postalCode: bizForm.value.postalCode.trim(),
+      country: bizForm.value.country.trim(),
+      businessPhone: bizForm.value.businessPhone.trim(),
+      businessEmail: bizForm.value.businessEmail.trim(),
+      defaultInvoiceNotes: bizForm.value.defaultInvoiceNotes.trim(),
+    })
+    if (ok) {
+      toast.success('Business & Invoicing profile updated!')
+      return true
+    }
+    return false
+  } finally {
+    isSaving.value = false
+  }
+}
+
+async function savePrefs() {
+  isSaving.value = true
+  try {
+    const ok = await store.updateProfile({
+      targetHourly: Number(prefForm.value.targetHourly) || 100,
+      baseCurrency: prefForm.value.baseCurrency,
+      currency: prefForm.value.baseCurrency,
+      currencyCode: prefForm.value.baseCurrency,
+      headlineRateMetric: prefForm.value.headlineRateMetric,
+    })
+    if (ok) {
+      await store.fetchFxRates(prefForm.value.baseCurrency)
+      toast.success('Base currency and rate targets saved!')
+      return true
+    }
+    return false
+  } finally {
+    isSaving.value = false
+  }
+}
+
+async function saveAll() {
   if (!profileForm.value.name.trim()) {
     toast.error('Full Name is required.')
     return
   }
-  store.updateUser({
-    name: profileForm.value.name.trim(),
-    email: profileForm.value.email.trim(),
-  })
-  toast.success('Personal profile saved!')
+  isSaving.value = true
+  try {
+    const unifiedPayload = {
+      name: profileForm.value.name.trim(),
+      email: profileForm.value.email.trim(),
+      timezone: profileForm.value.timezone,
+      businessName: bizForm.value.businessName.trim(),
+      businessLogo: bizForm.value.businessLogo,
+      taxIdLabel: bizForm.value.taxIdLabel.trim(),
+      businessTaxId: bizForm.value.businessTaxId.trim(),
+      businessAddress: formattedAddress.value,
+      addressLine1: bizForm.value.addressLine1.trim(),
+      addressLine2: bizForm.value.addressLine2.trim(),
+      city: bizForm.value.city.trim(),
+      stateProvince: bizForm.value.stateProvince.trim(),
+      postalCode: bizForm.value.postalCode.trim(),
+      country: bizForm.value.country.trim(),
+      businessPhone: bizForm.value.businessPhone.trim(),
+      businessEmail: bizForm.value.businessEmail.trim(),
+      defaultInvoiceNotes: bizForm.value.defaultInvoiceNotes.trim(),
+      targetHourly: Number(prefForm.value.targetHourly) || 100,
+      baseCurrency: prefForm.value.baseCurrency,
+      currency: prefForm.value.baseCurrency,
+      currencyCode: prefForm.value.baseCurrency,
+      headlineRateMetric: prefForm.value.headlineRateMetric,
+    }
+    const ok = await store.updateProfile(unifiedPayload)
+    if (ok) {
+      await store.fetchFxRates(prefForm.value.baseCurrency)
+      toast.success('All settings saved successfully!')
+    }
+  } finally {
+    isSaving.value = false
+  }
 }
 
-function saveBusinessProfile() {
-  store.updateUser({
-    businessName: bizForm.value.businessName.trim(),
-    businessLogo: bizForm.value.businessLogo,
-    businessTaxId: bizForm.value.businessTaxId.trim(),
-    businessAddress: bizForm.value.businessAddress.trim(),
-    businessPhone: bizForm.value.businessPhone.trim(),
-    businessEmail: bizForm.value.businessEmail.trim(),
-    defaultInvoiceNotes: bizForm.value.defaultInvoiceNotes.trim(),
-  })
-  toast.success('Business & Invoice profile updated!')
+async function addPresetTax(name, rate, countryCode) {
+  try {
+    await store.createTaxRate({
+      name,
+      rate,
+      countryCode,
+      isInclusive: false,
+      isDefault: store.taxRates.length === 0,
+      isCompound: false,
+    })
+    toast.success(`Added tax preset: ${name}`)
+  } catch (e) {
+    toast.error('Failed to add tax preset.')
+  }
 }
 
-function savePrefs() {
-  store.updateUser({
-    targetHourly: Number(prefForm.value.targetHourly) || 350,
-    currency: prefForm.value.currency,
-  })
-  toast.success('Rate target & currency preferences saved!')
+async function saveNewTaxRate() {
+  if (!newTaxForm.value.name.trim()) {
+    toast.error('Tax name is required.')
+    return
+  }
+  try {
+    await store.createTaxRate({
+      name: newTaxForm.value.name.trim(),
+      rate: Number(newTaxForm.value.rate) || 0,
+      countryCode: newTaxForm.value.countryCode.trim().toUpperCase(),
+      isInclusive: newTaxForm.value.isInclusive,
+      isDefault: newTaxForm.value.isDefault,
+      isCompound: newTaxForm.value.isCompound,
+    })
+    showAddTaxModal.value = false
+    newTaxForm.value = { name: '', rate: 20, countryCode: '', isInclusive: false, isDefault: false, isCompound: false }
+    toast.success('Custom tax rate created!')
+  } catch (e) {
+    toast.error('Failed to create tax rate.')
+  }
 }
 
-function saveAll() {
-  saveProfile()
-  saveBusinessProfile()
-  savePrefs()
-  toast.success('All settings saved successfully!')
+async function removeTaxRate(id) {
+  try {
+    await store.deleteTaxRate(id)
+    toast.success('Tax rate removed.')
+  } catch (e) {
+    toast.error('Failed to delete tax rate.')
+  }
 }
 </script>

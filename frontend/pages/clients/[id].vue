@@ -106,7 +106,7 @@
             </svg>
           </div>
         </div>
-        <div class="metric-value kpi-val-4">{{ store.currency }} {{ totalQuoted.toLocaleString('en-IN') }}</div>
+        <div class="metric-value kpi-val-4">{{ store.fmtCurrency(totalQuoted) }}</div>
         <div class="metric-secondary">Total contract pipeline</div>
       </div>
 
@@ -119,10 +119,10 @@
             </svg>
           </div>
         </div>
-        <div class="metric-value kpi-val-2">{{ store.currency }} {{ totalCollected.toLocaleString('en-IN') }}</div>
+        <div class="metric-value kpi-val-2">{{ store.fmtCurrency(totalCollected) }}</div>
         <div class="metric-secondary">
           <span v-if="outstandingBalance > 0" class="text-warning font-semibold">
-            {{ store.currency }} {{ outstandingBalance.toLocaleString('en-IN') }} pending
+            {{ store.fmtCurrency(outstandingBalance) }} pending
           </span>
           <span v-else class="text-success font-semibold">Fully settled</span>
           · {{ collectionRate }}% collected
@@ -327,7 +327,7 @@
                     id="edit-client-location"
                     v-model="editForm.location"
                     class="form-input"
-                    placeholder="e.g. Bengaluru, India"
+                    placeholder="e.g. San Francisco, USA or Berlin, Germany"
                     type="text"
                   />
                 </div>
@@ -380,7 +380,6 @@
 
 <script setup>
 import { ref, reactive, computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
 import { useWelloStore } from '~/stores/wello'
 import { useToast } from '~/composables/useToast'
 
@@ -393,26 +392,26 @@ const clientId = computed(() => route.params.id)
 const client = computed(() => store.getClient(clientId.value))
 
 const defaultPhones = {
-  c1: '+91 98201 12345',
-  c2: '+91 98334 56789',
-  c3: '+91 98112 34567',
-  c4: '+91 97690 98765',
-  c5: '+91 98450 11223',
-  c6: '+91 99001 88776',
+  c1: '+1 415 555 0123',
+  c2: '+49 30 1234567',
+  c3: '+971 4 123 4567',
+  c4: '+61 2 9876 5432',
+  c5: '+46 8 123 456',
+  c6: '+44 20 7946 0912',
 }
 
 const defaultLocations = {
-  c1: 'Bengaluru, India',
-  c2: 'Mumbai, India',
-  c3: 'Goa, India',
-  c4: 'Pune, India',
-  c5: 'Hyderabad, India',
-  c6: 'New Delhi, India',
+  c1: 'San Francisco, USA',
+  c2: 'Berlin, Germany',
+  c3: 'Dubai, UAE',
+  c4: 'Sydney, Australia',
+  c5: 'Stockholm, Sweden',
+  c6: 'London, UK',
 }
 
 const clientLocation = computed(() => {
   if (!client.value) return ''
-  return client.value.location || defaultLocations[client.value.id] || 'India'
+  return client.value.location || defaultLocations[client.value.id] || 'Global'
 })
 
 const clientPhone = computed(() => {

@@ -108,7 +108,7 @@ function formatTime(isoStr) {
   if (!isoStr) return '—'
   try {
     const d = new Date(isoStr)
-    return d.toLocaleDateString('en-IN', {
+    return d.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',

@@ -1,19 +1,39 @@
 // stores/wello.js
-// Central Pinia store — in-memory data layer with complete work value business logic
-// Auto-persists to localStorage on the client side
+// Central Wello Data Layer: API is the Database, LocalStorage is a User-Namespaced Cache
+// Supports Multi-Currency FX Engine, IANA Timezones, Generic Tax Regimes, and Optimistic UI
 
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
+import { useToast } from '~/composables/useToast'
+import { useAuthStore } from './auth'
+import {
+  formatCurrencyIntl,
+  getCurrencyDecimals,
+  roundToCurrencyDecimals,
+  ISO_CURRENCIES,
+  ISO_CURRENCY_MAP,
+} from '~/utils/currencyUtils'
+import {
+  getUserToday,
+  getUserDayRange,
+  getUserWeekRange,
+  getUserMonthRange,
+  getBrowserTimezone,
+  IANA_TIMEZONES,
+} from '~/utils/dateUtils'
+import {
+  computeSessionHours,
+  computeFinancials,
+  computeDualRates,
+  computeUnifiedMetricsSummary,
+  computeIntelligenceInsights,
+  UNPAID_TAXONOMY,
+  categorizeUnpaidReason,
+} from '~/utils/metricsEngine'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function now() { return new Date().toISOString() }
-function today() { return new Date().toISOString().slice(0, 10) }
-function daysAgo(n) {
-  const d = new Date()
-  d.setDate(d.getDate() - n)
-  return d.toISOString().slice(0, 10)
-}
 function uid() { return Math.random().toString(36).slice(2, 9) }
 
 function minutesToHM(minutes) {
@@ -25,354 +45,812 @@ function minutesToHM(minutes) {
   return `${h}h ${String(m).padStart(2, '0')}m`
 }
 
-function fmt(num, currency = '₹') {
-  if (num === null || num === undefined || isNaN(num)) return `${currency}0`
-  return `${currency}${Math.round(Number(num)).toLocaleString('en-IN')}`
+function daysAgo(n) {
+  const d = new Date()
+  d.setDate(d.getDate() - n)
+  return d.toISOString().slice(0, 10)
 }
 
-const STORAGE_KEY = 'wello_store_v1'
+const CACHE_PREFIX = 'wello_cache_'
+const LEGACY_STORAGE_KEY = 'wello_store_v1'
 
-// ─── Initial Sample Data ────────────────────────────────────────────────────
+// ─── Initial Fallback Data (International & Region-Neutral) ──────────────────
 
 const SAMPLE_CLIENTS = [
-  { id: 'c1', name: 'ABC Technologies', email: 'contact@abctech.in', company: 'ABC Technologies Pvt Ltd', phone: '+91 98201 12345', location: 'Bengaluru, India' },
-  { id: 'c2', name: 'XYZ Interior & Living', email: 'priya@xyzinterior.com', company: 'XYZ Interior Design Studio', phone: '+91 98334 56789', location: 'Mumbai, India' },
-  { id: 'c3', name: 'Coastal Realty', email: 'info@coastalrealty.in', company: 'Coastal Realty Group', phone: '+91 98112 34567', location: 'Goa, India' },
-  { id: 'c4', name: 'MindSpark Studio', email: 'hello@mindspark.io', company: 'MindSpark Studio', phone: '+91 97690 98765', location: 'Pune, India' },
-  { id: 'c5', name: 'HealthFirst Clinic', email: 'admin@healthfirst.org', company: 'HealthFirst Medical Group', phone: '+91 98450 11223', location: 'Hyderabad, India' },
-  { id: 'c6', name: 'Apex Logistics', email: 'ops@apexlogistics.com', company: 'Apex Global Logistics', phone: '+91 99001 88776', location: 'New Delhi, India' },
+  { id: 'c1', name: 'Acme Global Innovations', email: 'contact@acmeglobal.com', company: 'Acme Global Inc.', phone: '+1 415 555 0123', location: 'San Francisco, USA', currency: 'USD' },
+  { id: 'c2', name: 'Apex Studio Berlin', email: 'hello@apexstudio.de', company: 'Apex Studio GmbH', phone: '+49 30 1234567', location: 'Berlin, Germany', currency: 'EUR' },
+  { id: 'c3', name: 'Gulf Creative Ventures', email: 'info@gulfcreative.ae', company: 'Gulf Creative FZ-LLC', phone: '+971 4 123 4567', location: 'Dubai, UAE', currency: 'AED' },
+  { id: 'c4', name: 'Pacific Tech Sydney', email: 'ops@pacifictech.com.au', company: 'Pacific Tech Pty Ltd', phone: '+61 2 9876 5432', location: 'Sydney, Australia', currency: 'AUD' },
+  { id: 'c5', name: 'Nordic Digital Labs', email: 'team@nordiclabs.se', company: 'Nordic Labs AB', phone: '+46 8 123 456', location: 'Stockholm, Sweden', currency: 'SEK' },
+  { id: 'c6', name: 'Horizon Media London', email: 'contact@horizonmedia.co.uk', company: 'Horizon Media UK Ltd', phone: '+44 20 7946 0912', location: 'London, UK', currency: 'GBP' },
 ]
 
 const SAMPLE_PROJECTS = [
-  // 1. ABC Website (Job, in_progress)
   {
-    id: 'p1', clientId: 'c1', name: 'ABC Website',
-    description: 'Full corporate website redesign, estimation, and custom frontend build.',
+    id: 'p1', clientId: 'c1', name: 'Global Brand Portal',
+    description: 'Corporate website redesign, estimation, and custom frontend build.',
     serviceCategory: 'Web Development', status: 'in_progress', isJob: true,
-    quoteAmount: 85000, quoteDate: daysAgo(35), quoteEstHours: 110,
-    quoteNotes: 'Phase 1: Discovery & UI. Phase 2: Implementation.', quoteStatus: 'accepted',
-    revenue: 42000, expenses: 2800, createdAt: daysAgo(45), updatedAt: now(),
+    currency: 'USD',
+    quoteAmount: 8500, quoteDate: daysAgo(35), quoteEstHours: 85,
+    quoteNotes: 'Phase 1: Architecture & UI. Phase 2: Implementation.', quoteStatus: 'accepted',
+    revenue: 4250, expenses: 280, createdAt: daysAgo(45), updatedAt: now(),
   },
-  // 2. XYZ Interior (Job, in_progress)
   {
-    id: 'p2', clientId: 'c2', name: 'XYZ Interior',
-    description: 'Interior portfolio site and 3D space visualizer platform.',
+    id: 'p2', clientId: 'c2', name: 'Spatial 3D Studio Web',
+    description: '3D portfolio space and interactive visualizer platform.',
     serviceCategory: 'Design & Development', status: 'in_progress', isJob: true,
-    quoteAmount: 48000, quoteDate: daysAgo(25), quoteEstHours: 60,
+    currency: 'EUR',
+    quoteAmount: 4800, quoteDate: daysAgo(25), quoteEstHours: 50,
     quoteNotes: 'Design sprint + deployment.', quoteStatus: 'accepted',
-    revenue: 26000, expenses: 1800, createdAt: daysAgo(30), updatedAt: now(),
+    revenue: 2600, expenses: 180, createdAt: daysAgo(30), updatedAt: now(),
   },
-  // 3. Property Listings Portal (Job, completed)
   {
-    id: 'p3', clientId: 'c3', name: 'Property Listings Portal',
-    description: 'Real estate listing portal with map search and agent inquiries.',
-    serviceCategory: 'Web Design', status: 'completed', isJob: true,
-    quoteAmount: 42000, quoteDate: daysAgo(90), quoteEstHours: 55,
+    id: 'p3', clientId: 'c3', name: 'Dubai Luxury Real Estate App',
+    description: 'Real estate portal with interactive map search and broker inquiry flow.',
+    serviceCategory: 'Web Development', status: 'completed', isJob: true,
+    currency: 'AED',
+    quoteAmount: 22000, quoteDate: daysAgo(90), quoteEstHours: 55,
     quoteNotes: '', quoteStatus: 'accepted',
-    revenue: 42000, expenses: 1800, createdAt: daysAgo(100), updatedAt: now(),
+    revenue: 22000, expenses: 950, createdAt: daysAgo(100), updatedAt: now(),
   },
-  // 4. Brand Strategy Workshop (Potential)
   {
     id: 'p4', clientId: 'c4', name: 'Brand Strategy Workshop',
-    description: 'Positioning and customer discovery sessions.',
+    description: 'Market positioning and customer discovery sessions.',
     serviceCategory: 'Consulting', status: 'potential', isJob: false,
+    currency: 'AUD',
     quoteAmount: null, quoteDate: null, quoteEstHours: null,
     quoteNotes: '', quoteStatus: 'draft',
     revenue: 0, expenses: 0, createdAt: daysAgo(5), updatedAt: now(),
   },
-  // 5. Mobile App Audit (Lost) - 4h 30m unbilled (270 min)
   {
     id: 'p5', clientId: 'c1', name: 'Mobile App Audit',
     description: 'Performance and UX audit for iOS application.',
     serviceCategory: 'Consulting', status: 'lost', isJob: false,
-    quoteAmount: 22000, quoteDate: daysAgo(40), quoteEstHours: 30,
-    quoteNotes: 'Client postponed budget cycle to next fiscal year.', quoteStatus: 'rejected',
+    currency: 'USD',
+    quoteAmount: 2500, quoteDate: daysAgo(40), quoteEstHours: 25,
+    quoteNotes: 'Client postponed budget cycle to next fiscal year.', quoteStatus: 'declined',
     revenue: 0, expenses: 0, createdAt: daysAgo(50), updatedAt: now(),
-  },
-  // 6. E-Commerce Fashion Store (Job, completed)
-  {
-    id: 'p6', clientId: 'c2', name: 'E-Commerce Fashion Store',
-    description: 'Online store setup, payment gateway, and catalog integration.',
-    serviceCategory: 'E-Commerce', status: 'completed', isJob: true,
-    quoteAmount: 60000, quoteDate: daysAgo(75), quoteEstHours: 80,
-    quoteNotes: 'Full launch bundle.', quoteStatus: 'accepted',
-    revenue: 60000, expenses: 3200, createdAt: daysAgo(85), updatedAt: now(),
-  },
-  // 7. SaaS Onboarding Flow (Job, in_progress)
-  {
-    id: 'p7', clientId: 'c4', name: 'SaaS Onboarding Flow',
-    description: 'User activation funnel, onboarding checklist, and analytics events.',
-    serviceCategory: 'UX Design', status: 'in_progress', isJob: true,
-    quoteAmount: 35000, quoteDate: daysAgo(20), quoteEstHours: 45,
-    quoteNotes: 'Milestone 1 delivered.', quoteStatus: 'accepted',
-    revenue: 20000, expenses: 1200, createdAt: daysAgo(28), updatedAt: now(),
-  },
-  // 8. Restaurant Booking App (Job, completed)
-  {
-    id: 'p8', clientId: 'c3', name: 'Restaurant Booking App',
-    description: 'Table reservation web app with SMS notifications.',
-    serviceCategory: 'Web Development', status: 'completed', isJob: true,
-    quoteAmount: 30000, quoteDate: daysAgo(60), quoteEstHours: 40,
-    quoteNotes: 'Completed on schedule.', quoteStatus: 'accepted',
-    revenue: 30000, expenses: 1500, createdAt: daysAgo(70), updatedAt: now(),
-  },
-  // 9. Fitness Club Web App (Job, in_progress)
-  {
-    id: 'p9', clientId: 'c1', name: 'Fitness Club Web App',
-    description: 'Class schedule booking and member portal.',
-    serviceCategory: 'Web Development', status: 'in_progress', isJob: true,
-    quoteAmount: 28000, quoteDate: daysAgo(15), quoteEstHours: 35,
-    quoteNotes: 'Sprint 1 in review.', quoteStatus: 'accepted',
-    revenue: 15000, expenses: 800, createdAt: daysAgo(22), updatedAt: now(),
-  },
-  // 10. Healthcare Portal (Lost) - 4h 15m unbilled (255 min)
-  {
-    id: 'p10', clientId: 'c5', name: 'Healthcare Patient Portal',
-    description: 'Telehealth appointment scheduling and doctor directory.',
-    serviceCategory: 'Web Development', status: 'lost', isJob: false,
-    quoteAmount: 45000, quoteDate: daysAgo(35), quoteEstHours: 60,
-    quoteNotes: 'Client decided to build with internal IT team.', quoteStatus: 'rejected',
-    revenue: 0, expenses: 0, createdAt: daysAgo(42), updatedAt: now(),
-  },
-  // 11. Corporate Rebrand Consulting (Lost) - 3h 45m unbilled (225 min)
-  {
-    id: 'p11', clientId: 'c4', name: 'Corporate Rebrand Consulting',
-    description: 'Brand identity system, logo refresh, and guideline book.',
-    serviceCategory: 'Consulting', status: 'lost', isJob: false,
-    quoteAmount: 38000, quoteDate: daysAgo(55), quoteEstHours: 50,
-    quoteNotes: 'Leadership reshuffle led to initiative cancellation.', quoteStatus: 'rejected',
-    revenue: 0, expenses: 0, createdAt: daysAgo(65), updatedAt: now(),
-  },
-  // 12. FinTech Dashboard UI (Lost) - 3h 20m unbilled (200 min)
-  {
-    id: 'p12', clientId: 'c1', name: 'FinTech Investment Dashboard',
-    description: 'Portfolio tracking analytics and trading chart components.',
-    serviceCategory: 'UX Design', status: 'lost', isJob: false,
-    quoteAmount: 50000, quoteDate: daysAgo(48), quoteEstHours: 65,
-    quoteNotes: 'Project scope exceeded client seed funding budget.', quoteStatus: 'rejected',
-    revenue: 0, expenses: 0, createdAt: daysAgo(58), updatedAt: now(),
-  },
-  // 13. Logistics Mobile Tracker (Lost) - 2h 30m unbilled (150 min)
-  {
-    id: 'p13', clientId: 'c6', name: 'Logistics Driver Tracking App',
-    description: 'Fleet tracking dispatch interface and route optimization.',
-    serviceCategory: 'Mobile Design', status: 'lost', isJob: false,
-    quoteAmount: 25000, quoteDate: daysAgo(80), quoteEstHours: 35,
-    quoteNotes: 'Selected legacy offshore vendor.', quoteStatus: 'rejected',
-    revenue: 0, expenses: 0, createdAt: daysAgo(90), updatedAt: now(),
   },
 ]
 
-const tDate = today()
+const tDate = daysAgo(0)
 
 const SAMPLE_SESSIONS = [
-  // Today's sessions (8h 02m total)
-  // 1. 09:00–09:45 | ABC Website | First meeting | 45m | Unpaid
   {
     id: 's-t1', projectId: 'p1', title: 'First meeting', type: 'meeting', paymentType: 'unpaid',
-    unpaidReason: 'Discovery & initial consultation', startedAt: `${tDate}T09:00:00`, endedAt: `${tDate}T09:45:00`, durationMin: 45,
+    unpaidReason: 'client_friction', unpaidCategory: 'unpaid_client', startedAt: `${tDate}T09:00:00`, endedAt: `${tDate}T09:45:00`, durationMin: 45,
     notes: 'Initial scope alignment and project kickoff discussion.',
   },
-  // 2. 10:15–11:00 | ABC Website | Requirements discussion | 45m | Unpaid
   {
     id: 's-t2', projectId: 'p1', title: 'Requirements discussion', type: 'discussion', paymentType: 'unpaid',
-    unpaidReason: 'Specification review before signoff', startedAt: `${tDate}T10:15:00`, endedAt: `${tDate}T11:00:00`, durationMin: 45,
+    unpaidReason: 'scope_creep', unpaidCategory: 'unpaid_client', startedAt: `${tDate}T10:15:00`, endedAt: `${tDate}T11:00:00`, durationMin: 45,
     notes: 'Detailed feature checklist and API endpoint requirements.',
   },
-  // 3. 11:30–14:00 | XYZ Interior | Design work | 2h 30m | Paid
   {
     id: 's-t3', projectId: 'p2', title: 'Design work', type: 'production', paymentType: 'paid',
-    unpaidReason: null, startedAt: `${tDate}T11:30:00`, endedAt: `${tDate}T14:00:00`, durationMin: 150,
+    unpaidReason: null, unpaidCategory: null, startedAt: `${tDate}T11:30:00`, endedAt: `${tDate}T14:00:00`, durationMin: 150,
     notes: '3D gallery wireframes and high-fidelity room visualizer layouts.',
   },
-  // 4. 14:30–18:02 | ABC Website | Frontend implementation | 3h 32m | Paid
   {
     id: 's-t4', projectId: 'p1', title: 'Frontend implementation', type: 'production', paymentType: 'paid',
-    unpaidReason: null, startedAt: `${tDate}T14:30:00`, endedAt: `${tDate}T18:02:00`, durationMin: 197,
+    unpaidReason: null, unpaidCategory: null, startedAt: `${tDate}T14:30:00`, endedAt: `${tDate}T18:02:00`, durationMin: 197,
     notes: 'Responsive navigation, state management, and product catalog grid.',
   },
-  // 5. 18:30–19:15 | Brand Strategy | Strategic discovery call | 45m | Unpaid
   {
     id: 's-t5', projectId: 'p4', title: 'Strategic discovery call', type: 'call', paymentType: 'unpaid',
-    unpaidReason: 'Pre-proposal workshop planning', startedAt: `${tDate}T18:30:00`, endedAt: `${tDate}T19:15:00`, durationMin: 45,
+    unpaidReason: 'pitching', unpaidCategory: 'unpaid_client', startedAt: `${tDate}T18:30:00`, endedAt: `${tDate}T19:15:00`, durationMin: 45,
     notes: 'Customer journey mapping and workshop preparation.',
   },
-
-  // This Week's Earlier Sessions
-  { id: 's-w1', projectId: 'p1', title: 'Design system tokens & styling', type: 'production', paymentType: 'paid', startedAt: `${daysAgo(1)}T09:00:00`, endedAt: `${daysAgo(1)}T16:30:00`, durationMin: 450, notes: 'Design token setup.' },
-  { id: 's-w2', projectId: 'p2', title: 'Interactive 3D model render', type: 'production', paymentType: 'paid', startedAt: `${daysAgo(2)}T10:00:00`, endedAt: `${daysAgo(2)}T17:00:00`, durationMin: 420, notes: 'WebGL integration.' },
-  { id: 's-w3', projectId: 'p7', title: 'User activation audit', type: 'planning', paymentType: 'paid', startedAt: `${daysAgo(3)}T09:30:00`, endedAt: `${daysAgo(3)}T15:30:00`, durationMin: 360, notes: 'Funnel analytics review.' },
-  { id: 's-w4', projectId: 'p9', title: 'Trainer schedule calendar', type: 'production', paymentType: 'paid', startedAt: `${daysAgo(4)}T11:00:00`, endedAt: `${daysAgo(4)}T16:30:00`, durationMin: 330, notes: 'Calendar integration.' },
-  { id: 's-w5', projectId: 'p1', title: 'Client revision requests', type: 'revision', paymentType: 'paid', startedAt: `${daysAgo(2)}T14:00:00`, endedAt: `${daysAgo(2)}T16:30:00`, durationMin: 150, notes: 'Homepage hero copy updates.' },
-  { id: 's-w6', projectId: 'p4', title: 'Workshop pre-brief call', type: 'call', paymentType: 'unpaid', unpaidReason: 'Client onboarding call', startedAt: `${daysAgo(3)}T16:00:00`, endedAt: `${daysAgo(3)}T17:00:00`, durationMin: 60, notes: 'Agenda alignment.' },
-
-  // Earlier this month sessions
-  { id: 's-m1', projectId: 'p6', title: 'Checkout & payment gateway', type: 'production', paymentType: 'paid', startedAt: `${daysAgo(10)}T09:00:00`, endedAt: `${daysAgo(10)}T17:00:00`, durationMin: 480, notes: '' },
-  { id: 's-m2', projectId: 'p6', title: 'Catalog schema & sync', type: 'production', paymentType: 'paid', startedAt: `${daysAgo(12)}T09:30:00`, endedAt: `${daysAgo(12)}T16:30:00`, durationMin: 420, notes: '' },
-  { id: 's-m3', projectId: 'p8', title: 'Reservation widget integration', type: 'production', paymentType: 'paid', startedAt: `${daysAgo(15)}T10:00:00`, endedAt: `${daysAgo(15)}T17:00:00`, durationMin: 420, notes: '' },
-  { id: 's-m4', projectId: 'p2', title: 'Initial spatial concepts', type: 'proposal', paymentType: 'unpaid', unpaidReason: 'Pitch deck concepts', startedAt: `${daysAgo(18)}T13:00:00`, endedAt: `${daysAgo(18)}T16:00:00`, durationMin: 180, notes: '' },
-  { id: 's-m5', projectId: 'p1', title: 'Design review & feedback', type: 'revision', paymentType: 'paid', startedAt: `${daysAgo(8)}T11:00:00`, endedAt: `${daysAgo(8)}T14:00:00`, durationMin: 180, notes: '' },
-
-  // Lost project discovery & proposal sessions (Total = 18h 20m = 1100 minutes)
-  { id: 's-l1', projectId: 'p5', title: 'iOS Architecture & security audit', type: 'planning', paymentType: 'unpaid', unpaidReason: 'Audit discovery', startedAt: `${daysAgo(48)}T10:00:00`, endedAt: `${daysAgo(48)}T14:30:00`, durationMin: 270, notes: 'Codebase inspection and 24-page audit report.' },
-  { id: 's-l2', projectId: 'p10', title: 'HIPAA scope & EHR consultation', type: 'meeting', paymentType: 'unpaid', unpaidReason: 'Pre-quote requirements', startedAt: `${daysAgo(40)}T09:00:00`, endedAt: `${daysAgo(40)}T13:15:00`, durationMin: 255, notes: 'Clinic workflow review & integration spec.' },
-  { id: 's-l3', projectId: 'p11', title: 'Brand workshop & pitch presentation', type: 'proposal', paymentType: 'unpaid', unpaidReason: 'Proposal deck presentation', startedAt: `${daysAgo(62)}T14:00:00`, endedAt: `${daysAgo(62)}T17:45:00`, durationMin: 225, notes: 'Moodboards, visual territory exploration.' },
-  { id: 's-l4', projectId: 'p12', title: 'Trading UI wireframes & live demo', type: 'production', paymentType: 'unpaid', unpaidReason: 'Speculative mockups for RFP', startedAt: `${daysAgo(55)}T11:00:00`, endedAt: `${daysAgo(55)}T14:20:00`, durationMin: 200, notes: 'Complex candlestick chart components.' },
-  { id: 's-l5', projectId: 'p13', title: 'Dispatch API & telemetry discovery', type: 'call', paymentType: 'unpaid', unpaidReason: 'Technical alignment', startedAt: `${daysAgo(85)}T15:00:00`, endedAt: `${daysAgo(85)}T17:30:00`, durationMin: 150, notes: 'Fleet telematics protocol research.' },
+  { id: 's-w1', projectId: 'p1', title: 'Design system tokens & styling', type: 'production', paymentType: 'paid', unpaidReason: null, unpaidCategory: null, startedAt: `${daysAgo(1)}T09:00:00`, endedAt: `${daysAgo(1)}T16:30:00`, durationMin: 450, notes: 'Design token setup.' },
+  { id: 's-w2', projectId: 'p2', title: 'Interactive 3D model render', type: 'production', paymentType: 'paid', unpaidReason: null, unpaidCategory: null, startedAt: `${daysAgo(2)}T10:00:00`, endedAt: `${daysAgo(2)}T17:00:00`, durationMin: 420, notes: 'WebGL integration.' },
 ]
 
 const SAMPLE_PAYMENTS = [
-  { id: 'pay-today', projectId: 'p2', amount: 2300, paidDate: tDate, notes: 'Design work progress payment' },
-  { id: 'pay-w1', projectId: 'p1', amount: 12000, paidDate: daysAgo(2), notes: 'Milestone 2 payment' },
-  { id: 'pay-w2', projectId: 'p7', amount: 20000, paidDate: daysAgo(3), notes: 'Deposit advance' },
-  { id: 'pay1', projectId: 'p1', amount: 20000, paidDate: daysAgo(20), notes: 'Advance payment' },
-  { id: 'pay2', projectId: 'p1', amount: 10000, paidDate: daysAgo(10), notes: 'Sprint 1 milestone' },
-  { id: 'pay3', projectId: 'p2', amount: 23700, paidDate: daysAgo(15), notes: 'Initial deposit' },
-  { id: 'pay4', projectId: 'p3', amount: 42000, paidDate: daysAgo(85), notes: 'Full completion payment' },
-  { id: 'pay5', projectId: 'p6', amount: 60000, paidDate: daysAgo(60), notes: 'Full store delivery payment' },
-  { id: 'pay6', projectId: 'p8', amount: 30000, paidDate: daysAgo(50), notes: 'Final delivery payment' },
-  { id: 'pay7', projectId: 'p9', amount: 15000, paidDate: daysAgo(12), notes: 'Phase 1 signoff payment' },
+  { id: 'pay-today', projectId: 'p2', amount: 230, currency: 'EUR', paidDate: tDate, notes: 'Design work progress payment' },
+  { id: 'pay-w1', projectId: 'p1', amount: 1200, currency: 'USD', paidDate: daysAgo(2), notes: 'Milestone 2 payment' },
+  { id: 'pay1', projectId: 'p1', amount: 2000, currency: 'USD', paidDate: daysAgo(20), notes: 'Advance payment' },
 ]
 
 const SAMPLE_EXPENSES = [
-  { id: 'exp-today', projectId: 'p2', description: '3D Rendering asset pack', amount: 300, date: tDate, category: 'Assets' },
-  { id: 'exp-w1', projectId: 'p1', description: 'Testing cloud instance', amount: 900, date: daysAgo(2), category: 'Infrastructure' },
-  { id: 'exp1', projectId: 'p1', description: 'Server hosting & domain', amount: 1800, date: daysAgo(30), category: 'Infrastructure' },
-  { id: 'exp2', projectId: 'p1', description: 'Icon library license', amount: 1000, date: daysAgo(25), category: 'Software' },
-  { id: 'exp3', projectId: 'p2', description: 'Stock photography', amount: 1500, date: daysAgo(18), category: 'Assets' },
-  { id: 'exp4', projectId: 'p3', description: 'Map API credits', amount: 1800, date: daysAgo(90), category: 'Services' },
-  { id: 'exp5', projectId: 'p6', description: 'Payment gateway verification fee', amount: 3200, date: daysAgo(70), category: 'Services' },
-  { id: 'exp6', projectId: 'p8', description: 'SMS gateway credits', amount: 1500, date: daysAgo(55), category: 'Services' },
-  { id: 'exp7', projectId: 'p7', description: 'Analytics seat license', amount: 1200, date: daysAgo(20), category: 'Software' },
-  { id: 'exp8', projectId: 'p9', description: 'Calendar widget subscription', amount: 800, date: daysAgo(15), category: 'Software' },
+  { id: 'exp-today', projectId: 'p2', description: '3D Rendering asset pack', amount: 30, currency: 'EUR', date: tDate, category: 'Assets' },
+  { id: 'exp-w1', projectId: 'p1', description: 'Testing cloud instance', amount: 90, currency: 'USD', date: daysAgo(2), category: 'Infrastructure' },
 ]
 
 const SAMPLE_USER = {
   id: 'u1',
-  name: 'Rahul Mehta',
-  email: 'rahul@mehtatech.in',
-  avatarInitials: 'RM',
-  targetHourly: 350,
+  name: 'Alex Morgan',
+  email: 'alex@morganconsulting.com',
+  avatarInitials: 'AM',
+  targetHourly: 100,
   role: 'user',
-  currency: '₹',
-  businessName: 'Rahul Mehta Tech Consulting',
+  currency: 'USD',
+  currencyCode: 'USD',
+  baseCurrency: 'USD',
+  timezone: 'America/New_York',
+  headlineRateMetric: 'client_work',
+  countryCode: 'US',
+  businessName: 'Morgan Global Consulting',
   businessLogo: '',
-  businessAddress: '102 Tech Park, Suite 4B, Indiranagar, Bengaluru, KA 560038, India',
-  businessPhone: '+91 98765 43210',
-  businessEmail: 'rahul@mehtatech.in',
-  businessTaxId: 'GSTIN: 29AAAAA0000A1Z5',
+  businessAddress: '100 Innovation Way, Suite 400',
+  addressLine1: '100 Innovation Way, Suite 400',
+  addressLine2: '',
+  city: 'San Francisco',
+  stateProvince: 'CA',
+  postalCode: '94105',
+  country: 'United States',
+  businessPhone: '+1 415 555 0199',
+  businessEmail: 'alex@morganconsulting.com',
+  businessTaxId: '12-3456789',
+  taxIdLabel: 'EIN',
   defaultInvoiceNotes: 'Payment is due within 14 days of invoice date. Thank you for your business!',
 }
 
 // ─── Store Definition ───────────────────────────────────────────────────────
 
 export const useWelloStore = defineStore('wello', () => {
-  // Load saved state if available in browser
-  let initial = null
-  if (typeof window !== 'undefined') {
+  const toast = useToast()
+  const authStore = useAuthStore()
+
+  // Reactive State
+  const user = ref({ ...SAMPLE_USER })
+  const clients = ref([...SAMPLE_CLIENTS])
+  const projects = ref([...SAMPLE_PROJECTS])
+  const sessions = ref([...SAMPLE_SESSIONS])
+  const payments = ref([...SAMPLE_PAYMENTS])
+  const expenses = ref([...SAMPLE_EXPENSES])
+  const taxRates = ref([])
+  const fxRates = ref({})
+  const metricsSummary = ref(null)
+  const metricsInsights = ref(null)
+
+  // Timer State (Server Synchronized)
+  const activeTimer = ref(null)
+  const timerElapsed = ref(0)
+  const isTimerPaused = ref(false)
+
+  // Status & Synchronization State
+  const isLoading = ref(false)
+  const isSyncing = ref(false)
+  const isOffline = ref(false)
+  const lastSyncedAt = ref(null)
+
+  // Legacy Migration State
+  const showMigrationPrompt = ref(false)
+  const migrationData = ref(null)
+
+  // Internal Ticker Reference
+  let _timerInterval = null
+  let _lastTickerTimestamp = null
+
+  // ── Cache Key & Local Storage Helpers ─────────────────────────────────────
+
+  function getCacheKey() {
+    const userId = authStore.user?.id || authStore.user?.email || 'guest'
+    return `${CACHE_PREFIX}${userId}`
+  }
+
+  function loadCachedState() {
+    if (typeof window === 'undefined') return
     try {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored) initial = JSON.parse(stored)
+      const key = getCacheKey()
+      const raw = localStorage.getItem(key)
+      if (raw) {
+        const cached = JSON.parse(raw)
+        if (cached.user) user.value = { ...user.value, ...cached.user }
+        if (Array.isArray(cached.clients)) clients.value = cached.clients
+        if (Array.isArray(cached.projects)) projects.value = cached.projects
+        if (Array.isArray(cached.sessions)) sessions.value = cached.sessions
+        if (Array.isArray(cached.payments)) payments.value = cached.payments
+        if (Array.isArray(cached.expenses)) expenses.value = cached.expenses
+        if (Array.isArray(cached.taxRates)) taxRates.value = cached.taxRates
+        if (cached.fxRates) fxRates.value = cached.fxRates
+        if (cached.lastSyncedAt) lastSyncedAt.value = cached.lastSyncedAt
+      }
     } catch (e) {
-      console.warn('Could not parse saved wello state', e)
+      console.warn('[Wello Cache] Could not load cached state', e)
     }
   }
 
-  // Reactive State
-  const user          = ref(initial?.user || { ...SAMPLE_USER })
-  const clients       = ref(initial?.clients || [...SAMPLE_CLIENTS])
-  const projects      = ref(initial?.projects || [...SAMPLE_PROJECTS])
-  const sessions      = ref(initial?.sessions || [...SAMPLE_SESSIONS])
-  const payments      = ref(initial?.payments || [...SAMPLE_PAYMENTS])
-  const expenses      = ref(initial?.expenses || [...SAMPLE_EXPENSES])
-  const activeTimer   = ref(initial?.activeTimer || null)
-  const timerElapsed  = ref(initial?.timerElapsed || 0)
-  const isTimerPaused = ref(initial?.isTimerPaused || false)
-
-  // Auto-sync state to localStorage in browser
-  if (typeof window !== 'undefined') {
-    watch(
-      [user, clients, projects, sessions, payments, expenses, activeTimer, timerElapsed, isTimerPaused],
-      () => {
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify({
-            user: user.value,
-            clients: clients.value,
-            projects: projects.value,
-            sessions: sessions.value,
-            payments: payments.value,
-            expenses: expenses.value,
-            activeTimer: activeTimer.value,
-            timerElapsed: timerElapsed.value,
-            isTimerPaused: isTimerPaused.value,
-          }))
-        } catch (e) {
-          console.warn('LocalStorage save error', e)
-        }
-      },
-      { deep: true }
-    )
+  function saveCachedState() {
+    if (typeof window === 'undefined') return
+    try {
+      const key = getCacheKey()
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          user: user.value,
+          clients: clients.value,
+          projects: projects.value,
+          sessions: sessions.value,
+          payments: payments.value,
+          expenses: expenses.value,
+          taxRates: taxRates.value,
+          fxRates: fxRates.value,
+          lastSyncedAt: lastSyncedAt.value,
+        })
+      )
+    } catch (e) {
+      console.warn('[Wello Cache] Could not save state to cache', e)
+    }
   }
 
-  // ── Computed Helpers ──────────────────────────────────────────────────────
+  function clearCache(specificUserId = null) {
+    if (typeof window === 'undefined') return
+    try {
+      if (specificUserId) {
+        localStorage.removeItem(`${CACHE_PREFIX}${specificUserId}`)
+      } else {
+        localStorage.removeItem(getCacheKey())
+      }
+    } catch (e) {}
+  }
 
-  const currency = computed(() => user.value.currency || '₹')
+  // ── Network API Client ────────────────────────────────────────────────────
+
+  async function apiFetch(endpoint, options = {}) {
+    const token = authStore.token
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    }
+
+    try {
+      const res = await $fetch(endpoint, {
+        ...options,
+        headers,
+      })
+      isOffline.value = false
+      return res
+    } catch (err) {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        isOffline.value = true
+      }
+      throw err
+    }
+  }
+
+  // ── Server Initial Data Loader & Sync ─────────────────────────────────────
+
+  async function loadInitialData() {
+    loadCachedState()
+    checkLegacyMigration()
+
+    if (!authStore.isAuthenticated) {
+      return
+    }
+
+    isLoading.value = true
+    isSyncing.value = true
+
+    try {
+      // Parallel fetch of core user data, tax rates, and fx rates
+      const [meRes, clientsRes, projectsRes, sessionsRes, paymentsRes, expensesRes, taxesRes, fxRes] =
+        await Promise.allSettled([
+          apiFetch('/api/me'),
+          apiFetch('/api/clients?limit=100'),
+          apiFetch('/api/projects?limit=100'),
+          apiFetch('/api/sessions?limit=100'),
+          apiFetch('/api/payments?limit=100'),
+          apiFetch('/api/expenses?limit=100'),
+          apiFetch('/api/tax-rates'),
+          apiFetch('/api/fx/rates'),
+        ])
+
+      if (meRes.status === 'fulfilled' && meRes.value?.data) {
+        user.value = {
+          ...user.value,
+          ...meRes.value.data,
+          currency: meRes.value.data.baseCurrency || 'USD',
+          currencyCode: meRes.value.data.baseCurrency || 'USD',
+          baseCurrency: meRes.value.data.baseCurrency || 'USD',
+          timezone: meRes.value.data.timezone || getBrowserTimezone(),
+        }
+      }
+
+      if (clientsRes.status === 'fulfilled' && Array.isArray(clientsRes.value?.data)) {
+        clients.value = clientsRes.value.data
+      }
+
+      if (projectsRes.status === 'fulfilled' && Array.isArray(projectsRes.value?.data)) {
+        projects.value = projectsRes.value.data.map((p) => ({
+          ...p,
+          clientId: p.clientId || (p.client ? p.client.id : null),
+          revenue: p.metrics?.revenue || 0,
+          expenses: p.metrics?.expenses || 0,
+        }))
+      }
+
+      if (sessionsRes.status === 'fulfilled' && Array.isArray(sessionsRes.value?.data)) {
+        sessions.value = sessionsRes.value.data.map((s) => ({
+          ...s,
+          durationMin: s.durationMinutes || Math.round((s.durationSeconds || 0) / 60),
+        }))
+      }
+
+      if (paymentsRes.status === 'fulfilled' && Array.isArray(paymentsRes.value?.data)) {
+        payments.value = paymentsRes.value.data
+      }
+
+      if (expensesRes.status === 'fulfilled' && Array.isArray(expensesRes.value?.data)) {
+        expenses.value = expensesRes.value.data.map((e) => ({
+          ...e,
+          date: e.expenseDate || e.date,
+        }))
+      }
+
+      if (taxesRes.status === 'fulfilled' && Array.isArray(taxesRes.value?.data)) {
+        taxRates.value = taxesRes.value.data
+      }
+
+      if (fxRes.status === 'fulfilled' && fxRes.value?.data?.rates) {
+        fxRates.value = fxRes.value.data.rates
+      }
+
+      lastSyncedAt.value = now()
+      saveCachedState()
+      isOffline.value = false
+
+      // Fetch active timer state
+      await fetchActiveTimer()
+    } catch (err) {
+      console.warn('[Wello Store] Failed to load server data; using cache', err)
+      isOffline.value = true
+    } finally {
+      isLoading.value = false
+      isSyncing.value = false
+    }
+  }
+
+  // ── Server-Synchronized Timer Engine ──────────────────────────────────────
+
+  function initTimerTicker() {
+    if (_timerInterval) clearInterval(_timerInterval)
+    _lastTickerTimestamp = Date.now()
+
+    _timerInterval = setInterval(() => {
+      if (activeTimer.value && !isTimerPaused.value) {
+        const nowMs = Date.now()
+        const deltaSec = Math.round((nowMs - _lastTickerTimestamp) / 1000)
+        if (deltaSec >= 1) {
+          timerElapsed.value += deltaSec
+          _lastTickerTimestamp = nowMs
+        }
+      } else {
+        _lastTickerTimestamp = Date.now()
+      }
+    }, 1000)
+  }
+
+  async function fetchActiveTimer() {
+    if (!authStore.isAuthenticated) return
+    try {
+      const res = await apiFetch('/api/timer/active')
+      if (res?.data?.active && res.data.timer) {
+        const t = res.data.timer
+        activeTimer.value = t
+        isTimerPaused.value = t.isPaused
+        timerElapsed.value = t.elapsedSeconds || 0
+        initTimerTicker()
+      } else {
+        activeTimer.value = null
+        isTimerPaused.value = false
+        timerElapsed.value = 0
+        if (_timerInterval) {
+          clearInterval(_timerInterval)
+          _timerInterval = null
+        }
+      }
+    } catch (err) {
+      console.warn('[Wello Timer] Could not check active timer', err)
+    }
+  }
+
+  async function startTimer(payload) {
+    // Optimistic local start
+    const optimisticStartedAt = new Date().toISOString()
+    const previousTimer = activeTimer.value
+
+    activeTimer.value = {
+      ...payload,
+      startedAt: optimisticStartedAt,
+    }
+    timerElapsed.value = 0
+    isTimerPaused.value = false
+    initTimerTicker()
+
+    try {
+      const res = await apiFetch('/api/timer/start', {
+        method: 'POST',
+        body: payload,
+      })
+      if (res?.data?.timer) {
+        activeTimer.value = res.data.timer
+        isTimerPaused.value = res.data.timer.isPaused
+        timerElapsed.value = res.data.timer.elapsedSeconds || 0
+      }
+      return activeTimer.value
+    } catch (err) {
+      activeTimer.value = previousTimer
+      toast.error(err?.data?.message || err?.message || 'Failed to start timer on server.')
+      throw err
+    }
+  }
+
+  async function pauseTimer() {
+    if (!activeTimer.value) return
+    const prevPaused = isTimerPaused.value
+    isTimerPaused.value = true
+
+    try {
+      await apiFetch('/api/timer/pause', { method: 'POST' })
+    } catch (err) {
+      isTimerPaused.value = prevPaused
+      toast.error('Failed to pause timer on server.')
+    }
+  }
+
+  async function resumeTimer() {
+    if (!activeTimer.value) return
+    const prevPaused = isTimerPaused.value
+    isTimerPaused.value = false
+    initTimerTicker()
+
+    try {
+      await apiFetch('/api/timer/resume', { method: 'POST' })
+    } catch (err) {
+      isTimerPaused.value = prevPaused
+      toast.error('Failed to resume timer on server.')
+    }
+  }
+
+  async function stopTimer(notes = '') {
+    if (!activeTimer.value) return null
+    if (_timerInterval) {
+      clearInterval(_timerInterval)
+      _timerInterval = null
+    }
+
+    const stoppingTimer = { ...activeTimer.value }
+    const elapsedSnapshot = timerElapsed.value
+    activeTimer.value = null
+    timerElapsed.value = 0
+    isTimerPaused.value = false
+
+    try {
+      const res = await apiFetch('/api/timer/stop', {
+        method: 'POST',
+        body: { notes, title: stoppingTimer.title },
+      })
+
+      if (res?.data?.session) {
+        const sess = {
+          ...res.data.session,
+          durationMin: res.data.session.durationMinutes || Math.round((res.data.session.durationSeconds || 0) / 60),
+        }
+        sessions.value.unshift(sess)
+        saveCachedState()
+        return { ...stoppingTimer, session: sess }
+      }
+    } catch (err) {
+      // Revert if failed
+      activeTimer.value = stoppingTimer
+      timerElapsed.value = elapsedSnapshot
+      initTimerTicker()
+      toast.error(err?.data?.message || err?.message || 'Failed to record completed session.')
+      throw err
+    }
+  }
+
+  function timerDisplay() {
+    const s = timerElapsed.value
+    const h = Math.floor(s / 3600)
+    const m = Math.floor((s % 3600) / 60)
+    const sec = s % 60
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${pad(h)}:${pad(m)}:${pad(sec)}`
+  }
+
+  // ── One-Time Legacy LocalStorage Migration Flow ────────────────────────────
+
+  function checkLegacyMigration() {
+    if (typeof window === 'undefined') return
+    try {
+      const userId = authStore.user?.id || 'guest'
+      const migrationFlag = localStorage.getItem(`wello_migrated_${userId}`)
+      if (migrationFlag) return
+
+      const legacyStr = localStorage.getItem(LEGACY_STORAGE_KEY)
+      if (legacyStr) {
+        const parsed = JSON.parse(legacyStr)
+        const hasData =
+          (Array.isArray(parsed.clients) && parsed.clients.length > 0) ||
+          (Array.isArray(parsed.projects) && parsed.projects.length > 0) ||
+          (Array.isArray(parsed.sessions) && parsed.sessions.length > 0)
+
+        if (hasData) {
+          migrationData.value = parsed
+          showMigrationPrompt.value = true
+        }
+      }
+    } catch (e) {
+      console.warn('[Wello Migration] Error checking legacy storage', e)
+    }
+  }
+
+  async function importLegacyData() {
+    if (!migrationData.value || !authStore.isAuthenticated) return false
+    const userId = authStore.user?.id || 'guest'
+    isLoading.value = true
+
+    try {
+      const legacy = migrationData.value
+      const clientMap = {}
+      const projectMap = {}
+
+      // 1. Upload Clients
+      if (Array.isArray(legacy.clients)) {
+        for (const c of legacy.clients) {
+          try {
+            const res = await apiFetch('/api/clients', {
+              method: 'POST',
+              body: {
+                name: c.name,
+                company: c.company,
+                email: c.email,
+                phone: c.phone,
+                country: c.country || 'US',
+                notes: c.notes,
+              },
+            })
+            if (res?.data?.id) clientMap[c.id] = res.data.id
+          } catch (e) {}
+        }
+      }
+
+      // 2. Upload Projects
+      if (Array.isArray(legacy.projects)) {
+        for (const p of legacy.projects) {
+          try {
+            const res = await apiFetch('/api/projects', {
+              method: 'POST',
+              body: {
+                clientId: clientMap[p.clientId] || null,
+                name: p.name,
+                description: p.description,
+                serviceCategory: p.serviceCategory || 'General',
+                status: p.status || 'potential',
+                isJob: Boolean(p.isJob),
+                currency: p.currency || 'USD',
+                quoteAmount: p.quoteAmount ? Number(p.quoteAmount) : null,
+                quoteDate: p.quoteDate,
+                quoteEstHours: p.quoteEstHours ? Number(p.quoteEstHours) : null,
+                quoteNotes: p.quoteNotes,
+              },
+            })
+            if (res?.data?.id) projectMap[p.id] = res.data.id
+          } catch (e) {}
+        }
+      }
+
+      // 3. Upload Sessions
+      if (Array.isArray(legacy.sessions)) {
+        for (const s of legacy.sessions) {
+          const targetProjId = projectMap[s.projectId]
+          if (targetProjId) {
+            try {
+              await apiFetch('/api/sessions', {
+                method: 'POST',
+                body: {
+                  projectId: targetProjId,
+                  title: s.title || 'Work session',
+                  type: s.type || 'production',
+                  paymentType: s.paymentType || 'paid',
+                  unpaidReason: s.unpaidReason,
+                  notes: s.notes,
+                  startedAt: s.startedAt,
+                  endedAt: s.endedAt,
+                  durationMinutes: s.durationMin,
+                },
+              })
+            } catch (e) {}
+          }
+        }
+      }
+
+      // 4. Upload Payments & Expenses
+      if (Array.isArray(legacy.payments)) {
+        for (const p of legacy.payments) {
+          const targetProjId = projectMap[p.projectId]
+          if (targetProjId) {
+            try {
+              await apiFetch('/api/payments', {
+                method: 'POST',
+                body: {
+                  projectId: targetProjId,
+                  amount: Number(p.amount),
+                  paidDate: p.paidDate,
+                  notes: p.notes,
+                },
+              })
+            } catch (e) {}
+          }
+        }
+      }
+
+      if (Array.isArray(legacy.expenses)) {
+        for (const e of legacy.expenses) {
+          const targetProjId = projectMap[e.projectId]
+          if (targetProjId) {
+            try {
+              await apiFetch('/api/expenses', {
+                method: 'POST',
+                body: {
+                  projectId: targetProjId,
+                  description: e.description,
+                  category: e.category,
+                  amount: Number(e.amount),
+                  expenseDate: e.date,
+                },
+              })
+            } catch (err) {}
+          }
+        }
+      }
+
+      // Mark migration complete
+      localStorage.setItem(`wello_migrated_${userId}`, 'true')
+      localStorage.removeItem(LEGACY_STORAGE_KEY)
+      showMigrationPrompt.value = false
+      migrationData.value = null
+
+      toast.success('Successfully imported existing data to your cloud account!')
+      await loadInitialData()
+      return true
+    } catch (err) {
+      toast.error('Failed to complete data import.')
+      return false
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  function dismissMigration() {
+    const userId = authStore.user?.id || 'guest'
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`wello_migrated_${userId}`, 'dismissed')
+    }
+    showMigrationPrompt.value = false
+  }
+
+  // ── Network Status Listeners ──────────────────────────────────────────────
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('online', () => {
+      isOffline.value = false
+      toast.info('Back online! Re-synchronizing...')
+      loadInitialData()
+    })
+    window.addEventListener('offline', () => {
+      isOffline.value = true
+      toast.warning('Working offline — using local cache.')
+    })
+  }
+
+  // ── Computed Helpers & Aggregators ────────────────────────────────────────
+
+  const currency = computed(() => user.value.currency || user.value.baseCurrency || '$')
 
   function getClient(id) {
-    return clients.value.find(c => c.id === id) || null
+    return clients.value.find((c) => String(c.id) === String(id)) || null
   }
 
   function getProject(id) {
-    return projects.value.find(p => p.id === id) || null
+    return projects.value.find((p) => String(p.id) === String(id)) || null
+  }
+
+  // ── FX & Multi-Currency Engine ───────────────────────────────────────────
+
+  async function fetchFxRates(customBase = null) {
+    const base = (customBase || user.value.baseCurrency || 'USD').toUpperCase().trim()
+    try {
+      const res = await apiFetch(`/api/fx/rates?base=${base}`)
+      if (res?.data?.rates) {
+        fxRates.value = res.data.rates
+        saveCachedState()
+      }
+    } catch (e) {
+      console.warn('[Wello FX] Could not fetch rates', e)
+    }
+  }
+
+  function convertToBaseCurrency(amount, fromCurrency, txDate = null, manualRate = null) {
+    const base = (user.value.baseCurrency || user.value.currencyCode || 'USD').toUpperCase().trim()
+    const from = (fromCurrency || base).toUpperCase().trim()
+    const num = Number(amount) || 0
+    if (from === base || num === 0) return roundToCurrencyDecimals(num, base)
+
+    if (manualRate && Number(manualRate) > 0) {
+      return roundToCurrencyDecimals(num * Number(manualRate), base)
+    }
+
+    // Rate from API represents: 1 Base = quoteRate Quote
+    // Therefore 1 Quote = (1 / quoteRate) Base
+    const quoteRate = fxRates.value[from]
+    if (quoteRate && Number(quoteRate) > 0) {
+      const converted = num / Number(quoteRate)
+      return roundToCurrencyDecimals(converted, base)
+    }
+
+    return roundToCurrencyDecimals(num, base)
+  }
+
+  function userToday() {
+    return getUserToday(user.value.timezone)
   }
 
   function getProjectSessions(projectId) {
-    return sessions.value.filter(s => s.projectId === projectId)
+    return sessions.value.filter((s) => String(s.projectId) === String(projectId))
   }
 
   function getProjectPayments(projectId) {
-    return payments.value.filter(p => p.projectId === projectId)
+    return payments.value.filter((p) => String(p.projectId) === String(projectId))
   }
 
   function getProjectExpenses(projectId) {
-    return expenses.value.filter(e => e.projectId === projectId)
+    return expenses.value.filter((e) => String(e.projectId) === String(projectId))
   }
 
-  // ── Aggregations per Project ──────────────────────────────────────────────
-
   function projectTotalMinutes(projectId) {
-    return getProjectSessions(projectId)
-      .reduce((sum, s) => sum + (s.durationMin || 0), 0)
+    return getProjectSessions(projectId).reduce((sum, s) => sum + (s.durationMin || 0), 0)
   }
 
   function projectUnpaidMinutes(projectId) {
     return getProjectSessions(projectId)
-      .filter(s => s.paymentType === 'unpaid' || s.paymentType === 'intentional_unpaid')
+      .filter((s) => s.paymentType === 'unpaid' || s.paymentType === 'intentional_unpaid')
       .reduce((sum, s) => sum + (s.durationMin || 0), 0)
   }
 
   function projectPaidMinutes(projectId) {
     return getProjectSessions(projectId)
-      .filter(s => s.paymentType === 'paid')
+      .filter((s) => s.paymentType === 'paid')
       .reduce((sum, s) => sum + (s.durationMin || 0), 0)
   }
 
   function projectRevenueTotal(projectId) {
     const pmts = getProjectPayments(projectId)
     if (pmts.length > 0) {
-      return pmts.reduce((sum, p) => sum + (p.amount || 0), 0)
+      return pmts.reduce((sum, p) => {
+        const val = p.baseAmount !== undefined && p.baseAmount !== null
+          ? Number(p.baseAmount)
+          : convertToBaseCurrency(p.amount, p.currency, p.paidDate, p.fxRate)
+        return sum + (Number(val) || 0)
+      }, 0)
     }
     const proj = getProject(projectId)
-    return proj?.revenue || 0
+    if (!proj) return 0
+    if (proj.currency && proj.currency !== user.value.baseCurrency) {
+      return convertToBaseCurrency(proj.revenue || 0, proj.currency)
+    }
+    return Number(proj?.revenue) || 0
   }
 
   function projectExpenseTotal(projectId) {
     const exps = getProjectExpenses(projectId)
     if (exps.length > 0) {
-      return exps.reduce((sum, e) => sum + (e.amount || 0), 0)
+      return exps.reduce((sum, e) => {
+        const val = e.baseAmount !== undefined && e.baseAmount !== null
+          ? Number(e.baseAmount)
+          : convertToBaseCurrency(e.amount, e.currency, e.expenseDate || e.date, e.fxRate)
+        return sum + (Number(val) || 0)
+      }, 0)
     }
     const proj = getProject(projectId)
-    return proj?.expenses || 0
+    if (!proj) return 0
+    if (proj.currency && proj.currency !== user.value.baseCurrency) {
+      return convertToBaseCurrency(proj.expenses || 0, proj.currency)
+    }
+    return Number(proj?.expenses) || 0
   }
 
   function projectNetIncome(project) {
@@ -394,7 +872,7 @@ export const useWelloStore = defineStore('wello', () => {
   }
 
   function projectEffectiveHourly(projectOrId) {
-    const proj = typeof projectOrId === 'string' ? getProject(projectOrId) : projectOrId
+    const proj = typeof projectOrId === 'string' || typeof projectOrId === 'number' ? getProject(projectOrId) : projectOrId
     if (!proj) return 0
     return projectGrossHourlyValue(proj)
   }
@@ -404,12 +882,10 @@ export const useWelloStore = defineStore('wello', () => {
     return Math.round(unpaidH * (user.value.targetHourly || 0))
   }
 
-  // ── Today's Calculations ──────────────────────────────────────────────────
-
   function todaysSessions() {
-    const t = today()
+    const t = userToday()
     return sessions.value
-      .filter(s => s.startedAt && s.startedAt.startsWith(t))
+      .filter((s) => s.startedAt && s.startedAt.startsWith(t))
       .sort((a, b) => new Date(a.startedAt) - new Date(b.startedAt))
   }
 
@@ -419,38 +895,48 @@ export const useWelloStore = defineStore('wello', () => {
 
   function todaysUnpaidMinutes() {
     return todaysSessions()
-      .filter(s => s.paymentType === 'unpaid' || s.paymentType === 'intentional_unpaid')
+      .filter((s) => s.paymentType === 'unpaid' || s.paymentType === 'intentional_unpaid')
       .reduce((sum, s) => sum + (s.durationMin || 0), 0)
   }
 
   function todaysPaidMinutes() {
     return todaysSessions()
-      .filter(s => s.paymentType === 'paid')
+      .filter((s) => s.paymentType === 'paid')
       .reduce((sum, s) => sum + (s.durationMin || 0), 0)
   }
 
   function todaysRevenue() {
-    const t = today()
-    const todayPmts = payments.value.filter(p => p.paidDate === t)
+    const t = userToday()
+    const todayPmts = payments.value.filter((p) => (p.paidDate === t || (p.createdAt && p.createdAt.startsWith(t))))
     if (todayPmts.length > 0) {
-      return todayPmts.reduce((sum, p) => sum + (p.amount || 0), 0)
+      return todayPmts.reduce((sum, p) => {
+        const val = p.baseAmount !== undefined && p.baseAmount !== null
+          ? Number(p.baseAmount)
+          : convertToBaseCurrency(p.amount, p.currency, p.paidDate, p.fxRate)
+        return sum + (Number(val) || 0)
+      }, 0)
     }
-    const todaySess = todaysSessions().filter(s => s.paymentType === 'paid')
+    const todaySess = todaysSessions().filter((s) => s.paymentType === 'paid')
     let total = 0
     for (const s of todaySess) {
       const proj = getProject(s.projectId)
       if (!proj) continue
-      const rate = projectGrossHourlyValue(proj) || user.value.targetHourly || 350
+      const rate = projectGrossHourlyValue(proj) || user.value.targetHourly || 100
       total += (s.durationMin / 60) * rate
     }
     return Math.round(total)
   }
 
   function todaysExpenses() {
-    const t = today()
+    const t = userToday()
     return expenses.value
-      .filter(e => e.date === t)
-      .reduce((sum, e) => sum + (e.amount || 0), 0)
+      .filter((e) => (e.date === t || e.expenseDate === t || (e.createdAt && e.createdAt.startsWith(t))))
+      .reduce((sum, e) => {
+        const val = e.baseAmount !== undefined && e.baseAmount !== null
+          ? Number(e.baseAmount)
+          : convertToBaseCurrency(e.amount, e.currency, e.expenseDate || e.date, e.fxRate)
+        return sum + (Number(val) || 0)
+      }, 0)
   }
 
   function todaysNet() {
@@ -464,31 +950,25 @@ export const useWelloStore = defineStore('wello', () => {
     return Math.round(net / (mins / 60))
   }
 
-  // ── Date Range Work Tracking Aggregator ───────────────────────────────────
-
   function getSessionsByRange(rangeType = 'today', customStart = null, customEnd = null) {
-    const t = today()
-    const nowD = new Date()
+    const tz = user.value.timezone
+    const t = getUserToday(tz)
 
     let startDateStr = t
     let endDateStr = t
 
     if (rangeType === 'today') {
-      startDateStr = t
-      endDateStr = t
+      const dayRange = getUserDayRange(t, tz)
+      startDateStr = dayRange.startDateStr
+      endDateStr = dayRange.endDateStr
     } else if (rangeType === 'week') {
-      const day = nowD.getDay() || 7
-      const monday = new Date(nowD)
-      monday.setDate(nowD.getDate() - (day - 1))
-      startDateStr = monday.toISOString().slice(0, 10)
-      const sunday = new Date(monday)
-      sunday.setDate(monday.getDate() + 6)
-      endDateStr = sunday.toISOString().slice(0, 10)
+      const weekRange = getUserWeekRange(t, tz)
+      startDateStr = weekRange.startDateStr
+      endDateStr = weekRange.endDateStr
     } else if (rangeType === 'month') {
-      const firstDay = new Date(nowD.getFullYear(), nowD.getMonth(), 1)
-      const lastDay = new Date(nowD.getFullYear(), nowD.getMonth() + 1, 0)
-      startDateStr = firstDay.toISOString().slice(0, 10)
-      endDateStr = lastDay.toISOString().slice(0, 10)
+      const monthRange = getUserMonthRange(t, tz)
+      startDateStr = monthRange.startDateStr
+      endDateStr = monthRange.endDateStr
     } else if (rangeType === 'all') {
       startDateStr = '2000-01-01'
       endDateStr = '2099-12-31'
@@ -497,18 +977,18 @@ export const useWelloStore = defineStore('wello', () => {
       endDateStr = customEnd || t
     }
 
-    const matchedSessions = sessions.value.filter(s => {
+    const matchedSessions = sessions.value.filter((s) => {
       if (!s.startedAt) return false
       const sDate = s.startedAt.slice(0, 10)
       return sDate >= startDateStr && sDate <= endDateStr
     }).sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt))
 
     const totalMinutes = matchedSessions.reduce((sum, s) => sum + (s.durationMin || 0), 0)
-    const paidMinutes = matchedSessions.filter(s => s.paymentType === 'paid').reduce((sum, s) => sum + (s.durationMin || 0), 0)
-    const unpaidClientMinutes = matchedSessions.filter(s => s.paymentType === 'unpaid').reduce((sum, s) => sum + (s.durationMin || 0), 0)
-    const intentionalUnpaidMinutes = matchedSessions.filter(s => s.paymentType === 'intentional_unpaid').reduce((sum, s) => sum + (s.durationMin || 0), 0)
+    const paidMinutes = matchedSessions.filter((s) => s.paymentType === 'paid').reduce((sum, s) => sum + (s.durationMin || 0), 0)
+    const unpaidClientMinutes = matchedSessions.filter((s) => s.paymentType === 'unpaid').reduce((sum, s) => sum + (s.durationMin || 0), 0)
+    const intentionalUnpaidMinutes = matchedSessions.filter((s) => s.paymentType === 'intentional_unpaid').reduce((sum, s) => sum + (s.durationMin || 0), 0)
 
-    const targetRate = user.value.targetHourly || 350
+    const targetRate = user.value.targetHourly || 100
     const unpaidClientEst = Math.round((unpaidClientMinutes / 60) * targetRate)
     const intentionalUnpaidEst = Math.round((intentionalUnpaidMinutes / 60) * targetRate)
 
@@ -529,24 +1009,9 @@ export const useWelloStore = defineStore('wello', () => {
     }
   }
 
-  // ── Weekly & Monthly Calculations for Charts ──────────────────────────────
-
-  function weekDates() {
-    const now = new Date()
-    const day = now.getDay() || 7 // 1=Mon ... 7=Sun
-    const monday = new Date(now)
-    monday.setDate(now.getDate() - (day - 1))
-    const dates = []
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(monday)
-      d.setDate(monday.getDate() + i)
-      dates.push(d.toISOString().slice(0, 10))
-    }
-    return dates
-  }
-
   function getPeriodChartData(periodType = 'week') {
-    const target = user.value.targetHourly || 350
+    const tz = user.value.timezone
+    const target = user.value.targetHourly || 100
 
     if (periodType === 'day') {
       const todayList = todaysSessions()
@@ -562,7 +1027,7 @@ export const useWelloStore = defineStore('wello', () => {
         const proj = getProject(s.projectId)
         const isPaid = s.paymentType === 'paid'
         const projRate = proj ? projectNetHourlyValue(proj) : 0
-        const rate = isPaid ? (projRate > 0 ? projRate : 750) : 0
+        const rate = isPaid ? (projRate > 0 ? projRate : target) : 0
         const timeStr = s.startedAt ? s.startedAt.slice(11, 16) : `Sess ${idx + 1}`
         return {
           label: `${timeStr} · ${s.title.slice(0, 18)}`,
@@ -579,17 +1044,21 @@ export const useWelloStore = defineStore('wello', () => {
 
     if (periodType === 'week') {
       const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-      const wDates = weekDates()
-      const t = today()
-
-      const benchmarkRates = [180, 240, 210, 320, 287, 0, 0]
-      const benchmarkHours = [6.5, 7.2, 5.8, 8.0, 8.0, 0, 0]
+      const weekRange = getUserWeekRange(userToday(), tz)
+      const startDate = new Date(weekRange.startDateStr)
+      const wDates = []
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(startDate)
+        d.setDate(startDate.getDate() + i)
+        wDates.push(d.toISOString().slice(0, 10))
+      }
+      const t = userToday()
 
       return wDates.map((dateStr, index) => {
         const isToday = dateStr === t
         if (isToday) {
-          const rate = todaysEffectiveHourly() || benchmarkRates[index]
-          const hours = Number((todaysTotalMinutes() / 60).toFixed(1)) || benchmarkHours[index]
+          const rate = todaysEffectiveHourly() || target
+          const hours = Number((todaysTotalMinutes() / 60).toFixed(1)) || 0
           return {
             label: dayNames[index],
             dateStr,
@@ -600,21 +1069,15 @@ export const useWelloStore = defineStore('wello', () => {
           }
         }
 
-        const daySess = sessions.value.filter(s => s.startedAt && s.startedAt.startsWith(dateStr))
-        let hours = daySess.reduce((sum, s) => sum + s.durationMin, 0) / 60
-        let rate = benchmarkRates[index]
-
-        if (daySess.length > 0) {
-          hours = Number(hours.toFixed(1))
-        } else {
-          hours = benchmarkHours[index]
-        }
+        const daySess = sessions.value.filter((s) => s.startedAt && s.startedAt.startsWith(dateStr))
+        const hours = daySess.reduce((sum, s) => sum + s.durationMin, 0) / 60
+        const rate = target
 
         return {
           label: dayNames[index],
           dateStr,
           isToday: false,
-          hours,
+          hours: Number(hours.toFixed(1)),
           rate,
           isTargetMet: rate >= target,
         }
@@ -623,28 +1086,20 @@ export const useWelloStore = defineStore('wello', () => {
 
     if (periodType === 'month') {
       return [
-        { label: 'Week 1', dateRange: '1st – 7th', hours: 38.5, rate: 260, isTargetMet: false },
-        { label: 'Week 2', dateRange: '8th – 14th', hours: 41.0, rate: 310, isTargetMet: false },
-        { label: 'Week 3', dateRange: '15th – 21st', hours: 36.0, rate: 380, isTargetMet: true },
-        { label: 'Week 4 (Current)', dateRange: '22nd – 28th', hours: 35.5, rate: todaysEffectiveHourly() || 287, isToday: true, isTargetMet: (todaysEffectiveHourly() || 287) >= target },
+        { label: 'Week 1', dateRange: '1st – 7th', hours: 38.5, rate: target, isTargetMet: true },
+        { label: 'Week 2', dateRange: '8th – 14th', hours: 41.0, rate: target + 10, isTargetMet: true },
+        { label: 'Week 3', dateRange: '15th – 21st', hours: 36.0, rate: target + 25, isTargetMet: true },
+        { label: 'Week 4 (Current)', dateRange: '22nd – 28th', hours: 35.5, rate: todaysEffectiveHourly() || target, isToday: true, isTargetMet: (todaysEffectiveHourly() || target) >= target },
       ]
     }
 
     return []
   }
 
-  // ── Dynamic Recent Insights Generator ─────────────────────────────────────
-
-  const recentInsights = computed(() => {
-    return getDynamicSmartInsights('month')
-  })
-
-  // ── Comprehensive Period Insights Engine ──────────────────────────────────
-
   function getInsightsForPeriod(periodKey = 'month', customStart = null, customEnd = null) {
-    const t = today()
-    const nowD = new Date()
-    const targetRate = user.value.targetHourly || 350
+    const tz = user.value.timezone
+    const t = userToday()
+    const targetRate = user.value.targetHourly || 100
 
     let startDateStr = t
     let endDateStr = t
@@ -655,24 +1110,19 @@ export const useWelloStore = defineStore('wello', () => {
       startDateStr = t
       endDateStr = t
       periodLabel = 'Today'
-      dateRangeLabel = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+      dateRangeLabel = t
     } else if (periodKey === 'week') {
-      const day = nowD.getDay() || 7
-      const monday = new Date(nowD)
-      monday.setDate(nowD.getDate() - (day - 1))
-      startDateStr = monday.toISOString().slice(0, 10)
-      const sunday = new Date(monday)
-      sunday.setDate(monday.getDate() + 6)
-      endDateStr = sunday.toISOString().slice(0, 10)
+      const weekRange = getUserWeekRange(t, tz)
+      startDateStr = weekRange.startDateStr
+      endDateStr = weekRange.endDateStr
       periodLabel = 'This Week'
-      dateRangeLabel = `${new Date(startDateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${new Date(endDateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+      dateRangeLabel = `${startDateStr} – ${endDateStr}`
     } else if (periodKey === 'month') {
-      const firstDay = new Date(nowD.getFullYear(), nowD.getMonth(), 1)
-      const lastDay = new Date(nowD.getFullYear(), nowD.getMonth() + 1, 0)
-      startDateStr = firstDay.toISOString().slice(0, 10)
-      endDateStr = lastDay.toISOString().slice(0, 10)
+      const monthRange = getUserMonthRange(t, tz)
+      startDateStr = monthRange.startDateStr
+      endDateStr = monthRange.endDateStr
       periodLabel = 'This Month'
-      dateRangeLabel = nowD.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+      dateRangeLabel = `${startDateStr} – ${endDateStr}`
     } else if (periodKey === 'all') {
       startDateStr = '2000-01-01'
       endDateStr = '2099-12-31'
@@ -682,117 +1132,113 @@ export const useWelloStore = defineStore('wello', () => {
       startDateStr = customStart || daysAgo(30)
       endDateStr = customEnd || t
       periodLabel = 'Custom Range'
-      dateRangeLabel = `${new Date(startDateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} – ${new Date(endDateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+      dateRangeLabel = `${startDateStr} – ${endDateStr}`
     }
 
-    // Filter sessions strictly within range (no duplication)
-    const periodSessions = sessions.value.filter(s => {
+    const periodSessions = sessions.value.filter((s) => {
       if (!s.startedAt) return false
       const sDate = s.startedAt.slice(0, 10)
       return sDate >= startDateStr && sDate <= endDateStr
     }).sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt))
 
     const totalWorkTimeMin = periodSessions.reduce((sum, s) => sum + (s.durationMin || 0), 0)
-    const paidTimeMin = periodSessions.filter(s => s.paymentType === 'paid').reduce((sum, s) => sum + (s.durationMin || 0), 0)
-    const unpaidClientTimeMin = periodSessions.filter(s => s.paymentType === 'unpaid').reduce((sum, s) => sum + (s.durationMin || 0), 0)
-    const intentionalUnpaidTimeMin = periodSessions.filter(s => s.paymentType === 'intentional_unpaid').reduce((sum, s) => sum + (s.durationMin || 0), 0)
+    const paidTimeMin = periodSessions.filter((s) => s.paymentType === 'paid').reduce((sum, s) => sum + (s.durationMin || 0), 0)
+    const unpaidClientTimeMin = periodSessions.filter((s) => s.paymentType === 'unpaid').reduce((sum, s) => sum + (s.durationMin || 0), 0)
+    const intentionalUnpaidTimeMin = periodSessions.filter((s) => s.paymentType === 'intentional_unpaid').reduce((sum, s) => sum + (s.durationMin || 0), 0)
     const totalUnpaidMin = unpaidClientTimeMin + intentionalUnpaidTimeMin
 
-    // Filter payments received in this period
-    const periodPayments = payments.value.filter(p => {
-      if (!p.paidDate) return false
-      return p.paidDate >= startDateStr && p.paidDate <= endDateStr
+    const periodPayments = payments.value.filter((p) => {
+      const pDate = p.paidDate || (p.createdAt ? p.createdAt.slice(0, 10) : null)
+      if (!pDate) return false
+      return pDate >= startDateStr && pDate <= endDateStr
     })
-    let revenue = periodPayments.reduce((sum, p) => sum + (p.amount || 0), 0)
+    let revenue = periodPayments.reduce((sum, p) => {
+      const val = p.baseAmount !== undefined && p.baseAmount !== null
+        ? Number(p.baseAmount)
+        : convertToBaseCurrency(p.amount, p.currency, p.paidDate, p.fxRate)
+      return sum + (Number(val) || 0)
+    }, 0)
 
-    // If no direct payment recorded in today/week, estimate earned portion from paid sessions
     if (revenue === 0 && paidTimeMin > 0) {
-      for (const s of periodSessions.filter(s => s.paymentType === 'paid')) {
+      for (const s of periodSessions.filter((s) => s.paymentType === 'paid')) {
         const proj = getProject(s.projectId)
-        const rate = proj ? (projectGrossHourlyValue(proj) || targetRate) : targetRate
+        const rate = proj ? projectGrossHourlyValue(proj) || targetRate : targetRate
         revenue += Math.round((s.durationMin / 60) * rate)
       }
     }
 
-    // Filter expenses recorded in this period
-    const periodExpenses = expenses.value.filter(e => {
-      if (!e.date) return false
-      return e.date >= startDateStr && e.date <= endDateStr
+    const periodExpenses = expenses.value.filter((e) => {
+      const eDate = e.date || e.expenseDate || (e.createdAt ? e.createdAt.slice(0, 10) : null)
+      if (!eDate) return false
+      return eDate >= startDateStr && eDate <= endDateStr
     })
-    const expensesTotal = periodExpenses.reduce((sum, e) => sum + (e.amount || 0), 0)
+    const expensesTotal = periodExpenses.reduce((sum, e) => {
+      const val = e.baseAmount !== undefined && e.baseAmount !== null
+        ? Number(e.baseAmount)
+        : convertToBaseCurrency(e.amount, e.currency, e.expenseDate || e.date, e.fxRate)
+      return sum + (Number(val) || 0)
+    }, 0)
 
     const netValue = revenue - expensesTotal
     const effectiveHourlyValue = totalWorkTimeMin > 0 ? Math.round(netValue / (totalWorkTimeMin / 60)) : 0
     const unpaidValueGivenAway = Math.round((unpaidClientTimeMin / 60) * targetRate)
     const unpaidRatioPct = totalWorkTimeMin > 0 ? Math.round((totalUnpaidMin / totalWorkTimeMin) * 100) : 0
 
-    // Project breakdown for this period
-    const projectMinutesMap = {}
+    // Type Breakdown across 10 activity categories
+    const typeMap = new Map()
     for (const s of periodSessions) {
-      if (!projectMinutesMap[s.projectId]) {
-        projectMinutesMap[s.projectId] = {
-          projectId: s.projectId,
-          totalMin: 0,
-          paidMin: 0,
-          unpaidMin: 0,
-        }
+      const type = s.type || 'production'
+      const dur = s.durationMin || s.durationMinutes || 0
+      typeMap.set(type, (typeMap.get(type) || 0) + dur)
+    }
+    const typeBreakdown = Array.from(typeMap.entries()).map(([type, mins]) => ({
+      type,
+      durationMin: mins,
+      durationHM: minutesToHM(mins),
+      pctOfTotal: totalWorkTimeMin > 0 ? Math.round((mins / totalWorkTimeMin) * 100) : 0,
+    })).sort((a, b) => b.durationMin - a.durationMin)
+
+    // Project Breakdown & Extremes
+    const projMap = new Map()
+    for (const s of periodSessions) {
+      const pId = s.projectId
+      const p = getProject(pId)
+      const current = projMap.get(pId) || {
+        id: pId,
+        name: p?.name || 'Project',
+        isJob: p?.isJob || false,
+        clientName: getClient(p?.clientId)?.name || 'Independent Client',
+        totalMin: 0,
+        paidMin: 0,
+        unpaidMin: 0,
       }
-      projectMinutesMap[s.projectId].totalMin += s.durationMin || 0
-      if (s.paymentType === 'paid') {
-        projectMinutesMap[s.projectId].paidMin += s.durationMin || 0
-      } else {
-        projectMinutesMap[s.projectId].unpaidMin += s.durationMin || 0
-      }
+      const dur = s.durationMin || s.durationMinutes || 0
+      current.totalMin += dur
+      if (s.paymentType === 'paid') current.paidMin += dur
+      else current.unpaidMin += dur
+      projMap.set(pId, current)
     }
 
-    const projectBreakdown = Object.values(projectMinutesMap).map(item => {
-      const proj = getProject(item.projectId)
-      const projPmts = periodPayments.filter(p => p.projectId === item.projectId)
-      const projExps = periodExpenses.filter(e => e.projectId === item.projectId)
-      let pRev = projPmts.reduce((sum, p) => sum + (p.amount || 0), 0)
-      if (pRev === 0 && item.paidMin > 0) {
-        const rate = proj ? (projectGrossHourlyValue(proj) || targetRate) : targetRate
-        pRev = Math.round((item.paidMin / 60) * rate)
-      }
-      const pExp = projExps.reduce((sum, e) => sum + (e.amount || 0), 0)
-      const pNet = pRev - pExp
-      const pHourly = item.totalMin > 0 ? Math.round(pNet / (item.totalMin / 60)) : 0
-
+    const projectBreakdown = Array.from(projMap.values()).map((pb) => {
+      const p = getProject(pb.id)
+      const rev = projectRevenueTotal(pb.id)
+      const exp = projectExpenseTotal(pb.id)
+      const net = rev - exp
+      const eff = pb.totalMin > 0 ? Math.round(net / (pb.totalMin / 60)) : (p ? projectNetHourlyValue(p) : 0)
       return {
-        id: item.projectId,
-        name: proj?.name || 'Independent Project',
-        clientName: getClient(proj?.clientId)?.name || 'Client',
-        isJob: proj?.isJob || false,
-        status: proj?.status || 'potential',
-        totalMin: item.totalMin,
-        totalHM: minutesToHM(item.totalMin),
-        paidMin: item.paidMin,
-        paidHM: minutesToHM(item.paidMin),
-        unpaidMin: item.unpaidMin,
-        unpaidHM: minutesToHM(item.unpaidMin),
-        revenue: pRev,
-        expenses: pExp,
-        netIncome: pNet,
-        effectiveHourly: pHourly,
+        ...pb,
+        totalHM: minutesToHM(pb.totalMin),
+        paidHM: minutesToHM(pb.paidMin),
+        unpaidHM: minutesToHM(pb.unpaidMin),
+        revenue: rev,
+        expenses: exp,
+        netIncome: net,
+        effectiveHourly: eff,
       }
     }).sort((a, b) => b.effectiveHourly - a.effectiveHourly)
 
-    // Identify Best-Value and Lowest-Value projects
     const bestValueProject = projectBreakdown.length > 0 ? projectBreakdown[0] : null
     const lowestValueProject = projectBreakdown.length > 0 ? projectBreakdown[projectBreakdown.length - 1] : null
-
-    // Work by Type breakdown (10 types)
-    const typeMinutesMap = {}
-    for (const s of periodSessions) {
-      const t = s.type || 'other'
-      if (!typeMinutesMap[t]) typeMinutesMap[t] = { type: t, minutes: 0 }
-      typeMinutesMap[t].minutes += s.durationMin || 0
-    }
-    const typeBreakdown = Object.values(typeMinutesMap).map(item => ({
-      ...item,
-      durationHM: minutesToHM(item.minutes),
-      pctOfTotal: totalWorkTimeMin > 0 ? Math.round((item.minutes / totalWorkTimeMin) * 100) : 0,
-    })).sort((a, b) => b.minutes - a.minutes)
 
     return {
       periodKey,
@@ -819,109 +1265,39 @@ export const useWelloStore = defineStore('wello', () => {
       targetRate,
       isAboveTarget: effectiveHourlyValue >= targetRate,
       targetDeltaPct: targetRate > 0 ? Math.round(((effectiveHourlyValue - targetRate) / targetRate) * 100) : 0,
+      sessions: periodSessions,
+      typeBreakdown,
+      projectBreakdown,
       bestValueProject,
       lowestValueProject,
-      projectBreakdown,
-      typeBreakdown,
-      sessions: periodSessions,
     }
   }
 
-  // ── Project Conversion Analysis Engine ────────────────────────────────────
-
-  function getConversionAnalysis(periodKey = 'all', customStart = null, customEnd = null) {
-    const t = today()
-    const nowD = new Date()
+  function getConversionAnalysis() {
     const targetRate = user.value.targetHourly || 350
     const allProjects = projects.value
-
-    let startDateStr = null
-    let endDateStr = null
-
-    if (periodKey === 'today') {
-      startDateStr = t
-      endDateStr = t
-    } else if (periodKey === 'week') {
-      const day = nowD.getDay() || 7
-      const monday = new Date(nowD)
-      monday.setDate(nowD.getDate() - (day - 1))
-      startDateStr = monday.toISOString().slice(0, 10)
-      const sunday = new Date(monday)
-      sunday.setDate(monday.getDate() + 6)
-      endDateStr = sunday.toISOString().slice(0, 10)
-    } else if (periodKey === 'month') {
-      const firstDay = new Date(nowD.getFullYear(), nowD.getMonth(), 1)
-      const lastDay = new Date(nowD.getFullYear(), nowD.getMonth() + 1, 0)
-      startDateStr = firstDay.toISOString().slice(0, 10)
-      endDateStr = lastDay.toISOString().slice(0, 10)
-    } else if (periodKey === 'custom') {
-      startDateStr = customStart || daysAgo(30)
-      endDateStr = customEnd || t
-    }
-
-    let filteredProjects = allProjects
-    if (startDateStr && endDateStr) {
-      filteredProjects = allProjects.filter(p => {
-        const cDate = p.createdAt ? p.createdAt.slice(0, 10) : ''
-        if (cDate && cDate >= startDateStr && cDate <= endDateStr) return true
-
-        const qDate = p.quoteDate ? p.quoteDate.slice(0, 10) : ''
-        if (qDate && qDate >= startDateStr && qDate <= endDateStr) return true
-
-        const hasSessionInPeriod = sessions.value.some(s => {
-          if (s.projectId !== p.id || !s.startedAt) return false
-          const sDate = s.startedAt.slice(0, 10)
-          return sDate >= startDateStr && sDate <= endDateStr
-        })
-        return hasSessionInPeriod
-      })
-    }
-
-    const totalStarted = filteredProjects.length
-
-    // Converted to Jobs: isJob === true OR status in ['approved', 'in_progress', 'completed']
-    const convertedProjectsList = filteredProjects.filter(p => p.isJob || p.status === 'completed' || p.status === 'approved' || p.status === 'in_progress')
+    const totalStarted = allProjects.length
+    const convertedProjectsList = allProjects.filter((p) => p.isJob || ['approved', 'in_progress', 'completed'].includes(p.status))
     const convertedCount = convertedProjectsList.length
-
-    // Lost projects: status === 'lost'
-    const lostProjectsList = filteredProjects.filter(p => p.status === 'lost')
+    const lostProjectsList = allProjects.filter((p) => p.status === 'lost')
     const lostCount = lostProjectsList.length
-
-    // Potential / in proposal
-    const potentialProjectsList = filteredProjects.filter(p => p.status === 'potential' || p.status === 'quoted')
+    const potentialProjectsList = allProjects.filter((p) => p.status === 'potential' || p.status === 'quoted')
     const potentialCount = potentialProjectsList.length
-
     const conversionRatePct = totalStarted > 0 ? Math.round((convertedCount / totalStarted) * 100) : 0
 
-    // Time invested in lost projects
     let lostTimeMin = 0
-    const enrichedLost = lostProjectsList.map(p => {
+    const enrichedLost = lostProjectsList.map((p) => {
       const pSess = getProjectSessions(p.id)
-      const periodSess = (startDateStr && endDateStr)
-        ? pSess.filter(s => {
-            if (!s.startedAt) return false
-            const sDate = s.startedAt.slice(0, 10)
-            return sDate >= startDateStr && sDate <= endDateStr
-          })
-        : pSess
-
-      const pMin = (periodSess.length > 0)
-        ? periodSess.reduce((sum, s) => sum + (s.durationMin || 0), 0)
-        : pSess.reduce((sum, s) => sum + (s.durationMin || 0), 0)
-
+      const pMin = pSess.reduce((sum, s) => sum + (s.durationMin || 0), 0)
       lostTimeMin += pMin
-      const client = getClient(p.clientId)
       return {
         ...p,
-        client,
+        client: getClient(p.clientId),
         timeMin: pMin,
         timeHM: minutesToHM(pMin),
         estValue: Math.round((pMin / 60) * targetRate),
       }
     })
-
-    const lostTimeHM = minutesToHM(lostTimeMin)
-    const lostTimeEstValue = Math.round((lostTimeMin / 60) * targetRate)
 
     return {
       totalStarted,
@@ -930,97 +1306,51 @@ export const useWelloStore = defineStore('wello', () => {
       potentialCount,
       conversionRatePct,
       lostTimeMin,
-      lostTimeHM,
-      lostTimeEstValue,
+      lostTimeHM: minutesToHM(lostTimeMin),
+      lostTimeEstValue: Math.round((lostTimeMin / 60) * targetRate),
       targetRate,
-      startDateStr,
-      endDateStr,
       lostProjects: enrichedLost,
       convertedProjects: convertedProjectsList,
     }
   }
 
-  // ── Value Trend Series (7 Days / 30 Days / 90 Days) ───────────────────────
-
   function getValueTrendSeries(trendRange = '30d') {
     const target = user.value.targetHourly || 350
-    const t = today()
-
-    if (trendRange === '7d') {
-      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-      const points = []
-      for (let i = 6; i >= 0; i--) {
-        const dStr = daysAgo(i)
-        const dObj = new Date(dStr)
-        const dayLabel = i === 0 ? 'Today' : (i === 1 ? 'Yest' : dayNames[dObj.getDay()])
-        const daySess = sessions.value.filter(s => s.startedAt && s.startedAt.startsWith(dStr))
-        const dayPmts = payments.value.filter(p => p.paidDate === dStr)
-        const dayExps = expenses.value.filter(e => e.date === dStr)
-
-        const hours = Number((daySess.reduce((sum, s) => sum + (s.durationMin || 0), 0) / 60).toFixed(1))
-        let rev = dayPmts.reduce((sum, p) => sum + (p.amount || 0), 0)
-        if (rev === 0 && hours > 0) {
-          const paidMins = daySess.filter(s => s.paymentType === 'paid').reduce((sum, s) => sum + s.durationMin, 0)
-          rev = Math.round((paidMins / 60) * 350)
-        }
-        const exp = dayExps.reduce((sum, e) => sum + (e.amount || 0), 0)
-        const net = rev - exp
-        const rate = hours > 0 ? Math.round(net / hours) : 0
-
-        points.push({
-          label: dayLabel,
-          dateStr: dStr,
-          hours: hours || (i === 0 ? 8.0 : (i === 1 ? 7.5 : (i === 2 ? 7.0 : 0))),
-          rate: rate || (i === 0 ? 287 : (i === 1 ? 310 : (i === 2 ? 340 : (i === 3 ? 290 : 0)))),
-          revenue: rev,
-          isToday: i === 0,
-          isTargetMet: (rate || (i === 0 ? 287 : 300)) >= target,
-        })
-      }
-
-      const activeRates = points.filter(p => p.rate > 0).map(p => p.rate)
-      const avgRate = activeRates.length > 0 ? Math.round(activeRates.reduce((a, b) => a + b, 0) / activeRates.length) : 0
-      const maxRate = activeRates.length > 0 ? Math.max(...activeRates) : 0
-      const minRate = activeRates.length > 0 ? Math.min(...activeRates) : 0
-
-      return { points, avgRate, maxRate, minRate, targetRate: target, growthPct: 12, rangeKey: '7d', label: '7-Day Trend' }
+    return {
+      points: [
+        { label: 'Week 1', hours: 38.5, rate: 260, isTargetMet: false },
+        { label: 'Week 2', hours: 41.0, rate: 310, isTargetMet: false },
+        { label: 'Week 3', hours: 36.0, rate: 380, isTargetMet: true },
+        { label: 'Week 4', hours: 35.5, rate: todaysEffectiveHourly() || 287, isTargetMet: true },
+      ],
+      avgRate: 310,
+      maxRate: 380,
+      minRate: 260,
+      targetRate: target,
+      growthPct: 18,
+      rangeKey: trendRange,
+      label: 'Trend',
     }
-
-    if (trendRange === '30d') {
-      const points = [
-        { label: 'Week 1', dateRange: 'Days 1–7', hours: 38.5, rate: 260, revenue: 12000, isTargetMet: false, isToday: false },
-        { label: 'Week 2', dateRange: 'Days 8–14', hours: 41.0, rate: 310, revenue: 15500, isTargetMet: false, isToday: false },
-        { label: 'Week 3', dateRange: 'Days 15–21', hours: 36.0, rate: 380, revenue: 18000, isTargetMet: true, isToday: false },
-        { label: 'Week 4 (Current)', dateRange: 'Days 22–28', hours: 35.5, rate: todaysEffectiveHourly() || 287, revenue: 14200, isTargetMet: (todaysEffectiveHourly() || 287) >= target, isToday: true },
-      ]
-
-      const activeRates = points.map(p => p.rate)
-      const avgRate = Math.round(activeRates.reduce((a, b) => a + b, 0) / activeRates.length)
-      const maxRate = Math.max(...activeRates)
-      const minRate = Math.min(...activeRates)
-
-      return { points, avgRate, maxRate, minRate, targetRate: target, growthPct: 18, rangeKey: '30d', label: '30-Day Trend' }
-    }
-
-    if (trendRange === '90d') {
-      const points = [
-        { label: 'Month 1', dateRange: '60–90 days ago', hours: 142.0, rate: 245, revenue: 38000, isTargetMet: false, isToday: false },
-        { label: 'Month 2', dateRange: '30–60 days ago', hours: 155.0, rate: 310, revenue: 52000, isTargetMet: false, isToday: false },
-        { label: 'Month 3 (Recent)', dateRange: 'Past 30 days', hours: 151.0, rate: 365, revenue: 58000, isTargetMet: true, isToday: true },
-      ]
-
-      const activeRates = points.map(p => p.rate)
-      const avgRate = Math.round(activeRates.reduce((a, b) => a + b, 0) / activeRates.length)
-      const maxRate = Math.max(...activeRates)
-      const minRate = Math.min(...activeRates)
-
-      return { points, avgRate, maxRate, minRate, targetRate: target, growthPct: 24, rangeKey: '90d', label: '90-Day Trend' }
-    }
-
-    return { points: [], avgRate: 0, maxRate: 0, minRate: 0, targetRate: target, growthPct: 0, rangeKey: trendRange, label: 'Trend' }
   }
 
-  // ── Truthful Smart Dynamic Insights Generator ─────────────────────────────
+  // ── Formatters ────────────────────────────────────────────────────────────
+  function fmtCurrency(amount, currencyCode = null) {
+    const code = currencyCode || user.value.baseCurrency || user.value.currency || 'USD'
+    return formatCurrencyIntl(amount, code)
+  }
+
+  function fmt(amount, currencyCode = null) {
+    return fmtCurrency(amount, currencyCode)
+  }
+
+  function fmtHourly(amount, currencyCode = null) {
+    const code = currencyCode || user.value.baseCurrency || user.value.currency || 'USD'
+    return `${formatCurrencyIntl(amount, code)}/hr`
+  }
+
+  function fmtDuration(minutes) {
+    return minutesToHM(minutes)
+  }
 
   function getDynamicSmartInsights(periodKey = 'month') {
     const target = user.value.targetHourly || 350
@@ -1028,19 +1358,8 @@ export const useWelloStore = defineStore('wello', () => {
     const convData = getConversionAnalysis()
     const list = []
 
-    if (!periodData.hasData && sessions.value.length === 0) {
-      return [{
-        id: 'insufficient-data',
-        type: 'neutral',
-        tag: 'Getting Started',
-        title: 'Insufficient Activity Data',
-        text: 'Log work sessions or start the live timer to automatically discover economic return and time patterns.',
-      }]
-    }
-
-    // 1. Value Growth / Trend Insight
     const growthPct = 18
-    const avgRateStr = fmt(periodData.effectiveHourlyValue || 287, currency.value)
+    const avgRateStr = fmtCurrency(periodData.effectiveHourlyValue || 287, currency.value)
     list.push({
       id: 'insight-value-growth',
       type: 'positive',
@@ -1048,11 +1367,10 @@ export const useWelloStore = defineStore('wello', () => {
       stat: `+${growthPct}%`,
       statSub: `avg ${avgRateStr}/h`,
       title: 'Effective Value Growth',
-      description: `Your effective value increased ${growthPct}% this month compared to earlier baselines, averaging ${avgRateStr}/hour.`,
-      text: `Your effective value increased ${growthPct}% this month compared to earlier baselines, averaging ${avgRateStr}/hour.`,
+      description: `Your effective value increased ${growthPct}% this month, averaging ${avgRateStr}/hour.`,
+      text: `Your effective value increased ${growthPct}% this month, averaging ${avgRateStr}/hour.`,
     })
 
-    // 2. Unpaid Client Time Proportion
     const unpaidPct = periodData.unpaidRatioPct || 29
     const unpaidTimeStr = periodData.unpaidClientHM || '2h 15m'
     list.push({
@@ -1062,29 +1380,12 @@ export const useWelloStore = defineStore('wello', () => {
       stat: `${unpaidPct}%`,
       statSub: `${unpaidTimeStr} unbilled`,
       title: 'Unpaid Project Time',
-      description: `${unpaidPct}% of your project time was unpaid client work (${unpaidTimeStr} across discovery, meetings, and estimation).`,
+      description: `${unpaidPct}% of your project time was unpaid client work (${unpaidTimeStr} across discovery & estimation).`,
       text: `${unpaidPct}% of your project time was unpaid client work (${unpaidTimeStr} across discovery & estimation).`,
     })
 
-    // 3. Highest-Value Project
-    const bestProj = periodData.bestValueProject || enrichedProjects.value.find(p => p.id === 'p2') || enrichedProjects.value[0]
-    if (bestProj) {
-      const topRateStr = fmt(bestProj.effectiveHourly || bestProj.netHrVal || 750, currency.value)
-      list.push({
-        id: 'insight-top-project',
-        type: 'highlight',
-        tag: 'Highest Yield',
-        stat: `${topRateStr}/h`,
-        statSub: bestProj.name,
-        title: 'Best-Value Engagement',
-        description: `Project "${bestProj.name}" generated your highest effective return per hour at ${topRateStr}/hour.`,
-        text: `Project "${bestProj.name}" generated the highest effective value per hour at ${topRateStr}/hour.`,
-      })
-    }
-
-    // 4. Lost Projects Opportunity Cost (incorporates callout realization)
     if (convData.lostCount > 0) {
-      const lostValStr = fmt(convData.lostTimeEstValue, currency.value)
+      const lostValStr = fmtCurrency(convData.lostTimeEstValue, currency.value)
       list.push({
         id: 'insight-lost-projects',
         type: 'info',
@@ -1092,271 +1393,226 @@ export const useWelloStore = defineStore('wello', () => {
         stat: convData.lostTimeHM,
         statSub: `${lostValStr} unbilled`,
         title: 'Lost Engagements Investment',
-        description: `Invested across ${convData.lostCount} unconverted proposals. Unsuccessful projects still consume real time; Wello preserves this unbilled effort for accurate lifetime metrics.`,
-        text: `You invested ${convData.lostTimeHM} in ${convData.lostCount} projects that did not convert (unbilled opportunity cost: ${lostValStr}).`,
-      })
-    }
-
-    // 5. Work Type Consumption (Revisions / Meetings / Production)
-    const revisionType = periodData.typeBreakdown.find(t => t.type === 'revision')
-    const revPct = revisionType ? revisionType.pctOfTotal : 7
-    list.push({
-      id: 'insight-revision-time',
-      type: 'neutral',
-      tag: 'Work Pattern',
-      stat: `${revPct}%`,
-      statSub: 'of logged time',
-      title: 'Revision & Meeting Load',
-      description: `Client revisions and feedback loops consumed ${revPct}% of your total logged work time this period.`,
-      text: `Client revisions and feedback loops consumed ${revPct}% of your total logged time this period.`,
-    })
-
-    // 6. Target Alignment
-    if (periodData.effectiveHourlyValue < target) {
-      const gap = target - periodData.effectiveHourlyValue
-      const gapStr = fmt(gap, currency.value)
-      const targetStr = fmt(target, currency.value)
-      list.push({
-        id: 'insight-target-gap',
-        type: 'neutral',
-        tag: 'Target Rate',
-        stat: `-${gapStr}/h`,
-        statSub: `Target: ${targetStr}/h`,
-        title: 'Target Benchmark Gap',
-        description: `You are currently ${gapStr}/h away from your target rate of ${targetStr}/hour across active engagements.`,
-        text: `You are ${gapStr}/h away from your target rate of ${targetStr}/hour.`,
-      })
-    } else {
-      const targetStr = fmt(target, currency.value)
-      list.push({
-        id: 'insight-target-met',
-        type: 'positive',
-        tag: 'Target Rate',
-        stat: '✓ Surpassed',
-        statSub: `Target: ${targetStr}/h`,
-        title: 'Target Benchmark Exceeded',
-        description: `Your average effective hourly earnings have surpassed your target benchmark of ${targetStr}/hour for this period.`,
-        text: `You have surpassed your target hourly benchmark of ${targetStr}/hour for this period!`,
+        description: `Invested across ${convData.lostCount} unconverted proposals. Unsuccessful projects still consume real time; Wello preserves this unbilled effort.`,
+        text: `You invested ${convData.lostTimeHM} in ${convData.lostCount} projects that did not convert.`,
       })
     }
 
     return list
   }
 
-  // ── Dashboard Master Stats ────────────────────────────────────────────────
+  const recentInsights = computed(() => getDynamicSmartInsights('month'))
 
-  const dashboardStats = computed(() => {
-    const todayMin       = todaysTotalMinutes()
-    const todayHM        = minutesToHM(todayMin)
-    const todayUnpaidMin = todaysUnpaidMinutes()
-    const todayUnpaidHM  = minutesToHM(todayUnpaidMin)
-    const todayPaidMin   = todaysPaidMinutes()
-    const todayPaidHM    = minutesToHM(todayPaidMin)
-
-    const todayRev       = todaysRevenue()
-    const todayExp       = todaysExpenses()
-    const todayNetVal    = todaysNet()
-    const todayHrVal     = todaysEffectiveHourly()
-
-    const target         = user.value.targetHourly || 350
-    const isAboveTarget  = todayHrVal >= target
-    const targetDelta    = todayHrVal - target
-    const targetDeltaPct = target > 0 ? Math.round(((todayHrVal - target) / target) * 100) : 0
-    const progressPct    = target > 0 ? Math.min((todayHrVal / target) * 100, 100) : 0
-
-    const unpaidEstValue = Math.round((todayUnpaidMin / 60) * target)
-
-    // Unpaid sessions by project for detailed breakdown
-    const unpaidSessionsToday = todaysSessions().filter(s => s.paymentType === 'unpaid' || s.paymentType === 'intentional_unpaid')
-    const unpaidProjectsMap = {}
-    for (const s of unpaidSessionsToday) {
-      if (!unpaidProjectsMap[s.projectId]) {
-        unpaidProjectsMap[s.projectId] = {
-          projectId: s.projectId,
-          projectName: getProject(s.projectId)?.name || 'Project',
-          durationMin: 0,
-        }
-      }
-      unpaidProjectsMap[s.projectId].durationMin += s.durationMin
-    }
-    const unpaidProjectsList = Object.values(unpaidProjectsMap).map(p => ({
-      ...p,
-      durationHM: minutesToHM(p.durationMin),
-      estValue: Math.round((p.durationMin / 60) * target),
-    }))
-
-    const activeProj = projects.value.filter(p => p.status === 'in_progress').length
-    const totalJobs  = projects.value.filter(p => p.isJob).length
-
-    return {
-      todayMin,
-      todayHM,
-      todayUnpaidMin,
-      todayUnpaidHM,
-      todayPaidMin,
-      todayPaidHM,
-      todayRev,
-      todayExp,
-      todayNetVal,
-      todayHrVal,
-      target,
-      isAboveTarget,
-      targetDelta,
-      targetDeltaPct,
-      progressPct,
-      unpaidEstValue,
-      unpaidProjectsList,
-      activeProj,
-      totalJobs,
-      todaySessions: todaysSessions(),
-    }
-  })
-
-  // ── Project Enrichment ────────────────────────────────────────────────────
-
-  const enrichedProjects = computed(() =>
-    projects.value.map(p => enrichProject(p))
-  )
+  const enrichedProjects = computed(() => projects.value.map((p) => enrichProject(p)))
 
   function enrichProject(p) {
-    const totalMin   = projectTotalMinutes(p.id)
-    const unpaidMin  = projectUnpaidMinutes(p.id)
-    const paidMin    = projectPaidMinutes(p.id)
-    const revenue    = projectRevenueTotal(p.id)
-    const expensesTot = projectExpenseTotal(p.id)
-    const netIncome  = revenue - expensesTot
-    const grossHrVal = projectGrossHourlyValue(p)
-    const netHrVal   = projectNetHourlyValue(p)
-    const estUnpaid  = estimatedUnpaidValue(p)
-    const client     = getClient(p.clientId)
-    const sess       = getProjectSessions(p.id)
-    const pmts       = getProjectPayments(p.id)
-    const exps       = getProjectExpenses(p.id)
+    const projSessions = getProjectSessions(p.id)
+    const projPayments = getProjectPayments(p.id)
+    const projExpenses = getProjectExpenses(p.id)
+
+    const baseCur = user.value.baseCurrency || user.value.currency || 'USD'
+    const target = Number(user.value.targetHourly) || 100
+    const headlinePref = user.value.headlineRateMetric || 'client_work'
+
+    const hrs = computeSessionHours(projSessions)
+    const fin = computeFinancials(projPayments, projExpenses, [p], [], baseCur)
+    const rates = computeDualRates(fin, hrs, target, headlinePref, baseCur)
+    const client = getClient(p.clientId)
+
+    const estUnpaid = Math.round(hrs.unpaidClientHours * target)
 
     return {
       ...p,
       client,
-      revenue,
-      expenses: expensesTot,
-      sessions: sess,
-      paymentsHistory: pmts,
-      expensesHistory: exps,
-      totalMin,
-      unpaidMin,
-      paidMin,
-      netIncome,
-      grossHrVal,
-      netHrVal,
+      revenue: fin.collectedRevenue,
+      collectedRevenue: fin.collectedRevenue,
+      earnedRevenue: fin.earnedRevenue,
+      outstandingRevenue: fin.outstandingRevenue,
+      expenses: fin.directExpenses,
+      netIncome: fin.collectedNetIncome,
+      earnedNetIncome: fin.earnedNetIncome,
+      sessions: projSessions,
+      paymentsHistory: projPayments,
+      expensesHistory: projExpenses,
+      totalMin: hrs.totalAllMinutes,
+      totalHours: hrs.totalAllHours,
+      paidMin: hrs.paidMinutes,
+      paidHours: hrs.paidHours,
+      unpaidMin: hrs.unpaidClientMinutes,
+      unpaidHours: hrs.unpaidClientHours,
+      intentionalUnpaidMin: hrs.intentionalUnpaidMinutes,
+      intentionalUnpaidHours: hrs.intentionalUnpaidHours,
+      totalHM: minutesToHM(hrs.totalAllMinutes),
+      paidHM: minutesToHM(hrs.paidMinutes),
+      unpaidHM: minutesToHM(hrs.unpaidClientMinutes),
+      intentionalUnpaidHM: minutesToHM(hrs.intentionalUnpaidMinutes),
+      clientWorkRate: rates.clientWorkRate,
+      allInRate: rates.allInRate,
+      earnedClientWorkRate: rates.earnedClientWorkRate,
+      earnedAllInRate: rates.earnedAllInRate,
+      effectiveHourly: rates.clientWorkRate || rates.earnedClientWorkRate,
+      grossHrVal: hrs.totalAllHours > 0 ? Math.round(fin.collectedRevenue / hrs.totalAllHours) : 0,
+      netHrVal: rates.clientWorkRate,
       estUnpaidValue: estUnpaid,
-      totalHM: minutesToHM(totalMin),
-      unpaidHM: minutesToHM(unpaidMin),
-      paidHM: minutesToHM(paidMin),
+      unpaidRatioPct: hrs.unpaidRatioPct,
+      isZeroHours: rates.isZeroHours,
     }
   }
 
-  // ── Timer Actions (Start, Pause, Resume, Stop) ─────────────────────────────
+  const dashboardStats = computed(() => {
+    const tz = user.value.timezone || 'UTC'
+    const baseCur = (user.value.baseCurrency || user.value.currencyCode || 'USD').toUpperCase().slice(0, 3)
+    const target = Number(user.value.targetHourly) || 100
+    const headlinePref = user.value.headlineRateMetric || 'client_work'
 
-  let _timerInterval = null
+    // Compute month (30d) summary as default rolling baseline
+    const summary30d = computeUnifiedMetricsSummary(
+      sessions.value,
+      payments.value,
+      expenses.value,
+      projects.value,
+      [],
+      { range: '30d', timezone: tz, baseCurrency: baseCur, targetHourly: target, headlinePreference: headlinePref }
+    )
 
-  function initTimerTicker() {
-    if (_timerInterval) clearInterval(_timerInterval)
-    _timerInterval = setInterval(() => {
-      if (activeTimer.value && !isTimerPaused.value) {
-        timerElapsed.value++
+    // Compute 7d, 90d, YTD, and All Time summaries
+    const summary7d = computeUnifiedMetricsSummary(sessions.value, payments.value, expenses.value, projects.value, [], { range: '7d', timezone: tz, baseCurrency: baseCur, targetHourly: target, headlinePreference: headlinePref })
+    const summary90d = computeUnifiedMetricsSummary(sessions.value, payments.value, expenses.value, projects.value, [], { range: '90d', timezone: tz, baseCurrency: baseCur, targetHourly: target, headlinePreference: headlinePref })
+    const summaryYtd = computeUnifiedMetricsSummary(sessions.value, payments.value, expenses.value, projects.value, [], { range: 'ytd', timezone: tz, baseCurrency: baseCur, targetHourly: target, headlinePreference: headlinePref })
+    const summaryAll = computeUnifiedMetricsSummary(sessions.value, payments.value, expenses.value, projects.value, [], { range: 'all', timezone: tz, baseCurrency: baseCur, targetHourly: target, headlinePreference: headlinePref })
+
+    // Compute Today snapshot
+    const todaySummary = computeUnifiedMetricsSummary(
+      sessions.value,
+      payments.value,
+      expenses.value,
+      projects.value,
+      [],
+      { range: 'today', timezone: tz, baseCurrency: baseCur, targetHourly: target, headlinePreference: headlinePref }
+    )
+
+    const todayUnpaidValue = Math.round(todaySummary.hours.unpaidClientHours * target)
+    const todaySess = todaysSessions() || []
+
+    const unpaidSess = todaySess.filter((s) => s.paymentType === 'unpaid' || s.paymentType === 'intentional_unpaid')
+    const unpaidMap = new Map()
+    for (const s of unpaidSess) {
+      const pId = s.projectId
+      const p = getProject(pId)
+      const current = unpaidMap.get(pId) || {
+        projectId: pId,
+        projectName: p?.name || 'Project',
+        durationMin: 0,
       }
-    }, 1000)
-  }
-
-  // Start ticker on store creation if timer is running
-  if (typeof window !== 'undefined' && activeTimer.value && !isTimerPaused.value) {
-    initTimerTicker()
-  }
-
-  function startTimer(payload) {
-    if (activeTimer.value) {
-      // If already active, stop existing one first to prevent duplicates
-      stopTimer()
+      current.durationMin += (s.durationMin || s.durationMinutes || 0)
+      unpaidMap.set(pId, current)
     }
-    activeTimer.value = {
-      ...payload,
-      startedAt: new Date().toISOString(),
+    const unpaidProjectsList = Array.from(unpaidMap.values()).map((item) => ({
+      ...item,
+      durationHM: minutesToHM(item.durationMin),
+      estValue: Math.round((item.durationMin / 60) * target),
+    }))
+
+    const activeProj = projects.value.filter((p) => p.status === 'in_progress').length
+    const totalJobs = projects.value.filter((p) => p.isJob).length
+
+    return {
+      // Primary dual rates
+      clientWorkRate: summary30d.rates.clientWorkRate,
+      allInRate: summary30d.rates.allInRate,
+      headlineRate: summary30d.rates.headlineRate,
+      earnedClientWorkRate: summary30d.rates.earnedClientWorkRate,
+      earnedAllInRate: summary30d.rates.earnedAllInRate,
+      headlinePreference: headlinePref,
+      isZeroHours: summary30d.rates.isZeroHours,
+      isTargetMet: summary30d.rates.isTargetMet,
+      targetDeltaPct: summary30d.rates.targetDeltaPct,
+      targetDelta: summary30d.rates.headlineRate - target,
+      target,
+
+      // Effective hourly baseline (rolling 30d without 1-day divide by zero)
+      todayEffHourly: summary30d.rates.headlineRate,
+      todayHrVal: summary30d.rates.headlineRate,
+      todayNetHourly: summary30d.rates.clientWorkRate,
+      isAboveTarget: summary30d.rates.isTargetMet,
+      progressPct: target > 0 ? Math.min((summary30d.rates.headlineRate / target) * 100, 100) : 0,
+
+      // Today metrics
+      todayMin: todaySummary.hours.totalAllMinutes,
+      todayHM: minutesToHM(todaySummary.hours.totalAllMinutes),
+      todayTotalMin: todaySummary.hours.totalAllMinutes,
+      todayTotalHM: minutesToHM(todaySummary.hours.totalAllMinutes),
+      todayPaidMin: todaySummary.hours.paidMinutes,
+      todayPaidHM: minutesToHM(todaySummary.hours.paidMinutes),
+      todayUnpaidMin: todaySummary.hours.unpaidClientMinutes,
+      todayUnpaidHM: minutesToHM(todaySummary.hours.unpaidClientMinutes),
+      todayIntentionalUnpaidMin: todaySummary.hours.intentionalUnpaidMinutes,
+      todayIntentionalUnpaidHM: minutesToHM(todaySummary.hours.intentionalUnpaidMinutes),
+      todayRev: todaySummary.financials.collectedRevenue,
+      todayRevenue: todaySummary.financials.collectedRevenue,
+      todayEarnedRevenue: todaySummary.financials.earnedRevenue,
+      todayExp: todaySummary.financials.directExpenses,
+      todayExpenses: todaySummary.financials.directExpenses,
+      todayNetVal: todaySummary.financials.collectedNetIncome,
+      todayOutstandingVal: todaySummary.financials.outstandingRevenue,
+      unpaidEstValue: todayUnpaidValue,
+
+      // 30d Summary Financials
+      collectedRevenue: summary30d.financials.collectedRevenue,
+      earnedRevenue: summary30d.financials.earnedRevenue,
+      outstandingRevenue: summary30d.financials.outstandingRevenue,
+      revenue: summary30d.financials.collectedRevenue,
+      expenses: summary30d.financials.directExpenses,
+      netIncome: summary30d.financials.collectedNetIncome,
+      totalHours: summary30d.hours.totalAllHours,
+      totalMinutes: summary30d.hours.totalAllMinutes,
+      paidHours: summary30d.hours.paidHours,
+      unpaidClientHours: summary30d.hours.unpaidClientHours,
+      intentionalUnpaidHours: summary30d.hours.intentionalUnpaidHours,
+      unpaidRatioPct: summary30d.hours.unpaidRatioPct,
+
+      // Projects & session counts
+      activeProj,
+      totalJobs,
+      todaySessions: todaySess,
+      unpaidProjectsList,
+
+      // Rolling window summaries
+      rolling: {
+        '7d': summary7d,
+        '30d': summary30d,
+        '90d': summary90d,
+        'ytd': summaryYtd,
+        'all': summaryAll,
+      },
     }
-    timerElapsed.value = 0
-    isTimerPaused.value = false
-    initTimerTicker()
-  }
-
-  function pauseTimer() {
-    if (!activeTimer.value) return
-    isTimerPaused.value = true
-  }
-
-  function resumeTimer() {
-    if (!activeTimer.value) return
-    isTimerPaused.value = false
-    initTimerTicker()
-  }
-
-  function stopTimer() {
-    if (!activeTimer.value) return null
-    if (_timerInterval) {
-      clearInterval(_timerInterval)
-      _timerInterval = null
-    }
-
-    const endedAt = new Date().toISOString()
-    const durationMin = Math.max(1, Math.round(timerElapsed.value / 60))
-
-    const sess = {
-      id: 's' + uid(),
-      projectId: activeTimer.value.projectId,
-      title: activeTimer.value.title || 'Work session',
-      type: activeTimer.value.type || 'production',
-      paymentType: activeTimer.value.paymentType || 'paid',
-      unpaidReason: activeTimer.value.unpaidReason || null,
-      notes: activeTimer.value.notes || '',
-      startedAt: activeTimer.value.startedAt,
-      endedAt,
-      durationMin,
-    }
-    sessions.value.push(sess)
-
-    const result = { ...activeTimer.value, session: sess }
-    activeTimer.value = null
-    timerElapsed.value = 0
-    isTimerPaused.value = false
-    return result
-  }
-
-  function timerDisplay() {
-    const s = timerElapsed.value
-    const h = Math.floor(s / 3600)
-    const m = Math.floor((s % 3600) / 60)
-    const sec = s % 60
-    const pad = n => String(n).padStart(2, '0')
-    return `${pad(h)}:${pad(m)}:${pad(sec)}`
-  }
+  })
 
   // ── Formatters ────────────────────────────────────────────────────────────
 
-  function fmtCurrency(val) { return fmt(val, currency.value) }
+  function fmtCurrency(val, currencyCode = null) {
+    const code = currencyCode || user.value.baseCurrency || user.value.currencyCode || user.value.currency || 'USD'
+    return formatCurrencyIntl(val, code)
+  }
   function fmtDuration(mins) { return minutesToHM(mins) }
-  function fmtHourly(val) {
-    if (val === null || val === undefined || isNaN(val) || val === 0) return `${currency.value}0/hr`
-    return `${currency.value}${Math.round(Number(val)).toLocaleString('en-IN')}/hr`
+  function fmtHourly(val, currencyCode = null) {
+    const formatted = fmtCurrency(val || 0, currencyCode)
+    return `${formatted}/hr`
   }
 
-  // ── CRUD Mutations ────────────────────────────────────────────────────────
+  // ── Optimistic CRUD Mutations ─────────────────────────────────────────────
 
-  function createProject(data) {
-    const proj = {
-      id: 'p' + uid(),
+  // 1. Projects
+  async function createProject(data) {
+    const tempId = 'temp_p_' + uid()
+    const optimisticProj = {
+      id: tempId,
       clientId: data.clientId || null,
       name: data.name,
       description: data.description || '',
       serviceCategory: data.serviceCategory || 'General',
-      status: 'potential',
-      isJob: false,
+      status: data.status || 'potential',
+      isJob: Boolean(data.isJob || ['in_progress', 'approved', 'completed'].includes(data.status)),
       quoteAmount: data.quoteAmount ? Number(data.quoteAmount) : null,
       quoteDate: data.quoteDate || null,
       quoteEstHours: data.quoteEstHours ? Number(data.quoteEstHours) : null,
@@ -1367,34 +1623,102 @@ export const useWelloStore = defineStore('wello', () => {
       createdAt: now(),
       updatedAt: now(),
     }
-    projects.value.unshift(proj)
-    return proj
-  }
 
-  function updateProject(id, data) {
-    const idx = projects.value.findIndex(p => p.id === id)
-    if (idx === -1) return false
-    projects.value[idx] = { ...projects.value[idx], ...data, updatedAt: now() }
-    return true
-  }
+    const snapshot = [...projects.value]
+    projects.value.unshift(optimisticProj)
+    saveCachedState()
 
-  function convertToJob(projectId) {
-    const idx = projects.value.findIndex(p => p.id === projectId)
-    if (idx === -1) return false
-    projects.value[idx] = {
-      ...projects.value[idx],
-      isJob: true,
-      status: 'in_progress',
-      updatedAt: now(),
+    try {
+      const res = await apiFetch('/api/projects', {
+        method: 'POST',
+        body: {
+          clientId: data.clientId ? Number(data.clientId) : null,
+          name: data.name,
+          description: data.description,
+          serviceCategory: data.serviceCategory,
+          status: data.status || 'potential',
+          isJob: optimisticProj.isJob,
+          quoteAmount: data.quoteAmount ? Number(data.quoteAmount) : null,
+          quoteDate: data.quoteDate,
+          quoteEstHours: data.quoteEstHours ? Number(data.quoteEstHours) : null,
+          quoteNotes: data.quoteNotes,
+        },
+      })
+
+      if (res?.data) {
+        const idx = projects.value.findIndex((p) => p.id === tempId)
+        if (idx !== -1) {
+          projects.value[idx] = { ...optimisticProj, ...res.data }
+        }
+        saveCachedState()
+        return res.data
+      }
+      return optimisticProj
+    } catch (err) {
+      projects.value = snapshot
+      saveCachedState()
+      toast.error(err?.data?.message || err?.message || 'Failed to create project on server.')
+      throw err
     }
-    return true
   }
 
-  function saveQuote(projectId, quoteData) {
-    const idx = projects.value.findIndex(p => p.id === projectId)
+  async function updateProject(id, data) {
+    const idx = projects.value.findIndex((p) => String(p.id) === String(id))
     if (idx === -1) return false
+
+    const previousItem = { ...projects.value[idx] }
+    projects.value[idx] = { ...previousItem, ...data, updatedAt: now() }
+    saveCachedState()
+
+    try {
+      const res = await apiFetch(`/api/projects/${id}`, {
+        method: 'PATCH',
+        body: data,
+      })
+      if (res?.data) {
+        projects.value[idx] = { ...projects.value[idx], ...res.data }
+        saveCachedState()
+      }
+      return true
+    } catch (err) {
+      projects.value[idx] = previousItem
+      saveCachedState()
+      toast.error(err?.data?.message || err?.message || 'Failed to update project.')
+      return false
+    }
+  }
+
+  async function deleteProject(id) {
+    const idx = projects.value.findIndex((p) => String(p.id) === String(id))
+    if (idx === -1) return false
+
+    const deletedItem = projects.value[idx]
+    const snapshot = [...projects.value]
+    projects.value = projects.value.filter((p) => String(p.id) !== String(id))
+    saveCachedState()
+
+    try {
+      await apiFetch(`/api/projects/${id}`, { method: 'DELETE' })
+      return true
+    } catch (err) {
+      projects.value = snapshot
+      saveCachedState()
+      toast.error('Failed to delete project on server.')
+      return false
+    }
+  }
+
+  async function convertToJob(projectId) {
+    return await updateProject(projectId, { isJob: true, status: 'in_progress' })
+  }
+
+  async function saveQuote(projectId, quoteData) {
+    const idx = projects.value.findIndex((p) => String(p.id) === String(projectId))
+    if (idx === -1) return false
+
+    const previousItem = { ...projects.value[idx] }
     projects.value[idx] = {
-      ...projects.value[idx],
+      ...previousItem,
       quoteAmount: Number(quoteData.amount),
       quoteDate: quoteData.date || today(),
       quoteEstHours: quoteData.estHours ? Number(quoteData.estHours) : null,
@@ -1403,42 +1727,130 @@ export const useWelloStore = defineStore('wello', () => {
       status: 'quoted',
       updatedAt: now(),
     }
-    return true
-  }
+    saveCachedState()
 
-  function addPayment(projectId, pmtData) {
-    const pmt = {
-      id: 'pay' + uid(),
-      projectId,
-      amount: Number(pmtData.amount),
-      paidDate: pmtData.paidDate || today(),
-      notes: pmtData.notes || '',
+    try {
+      const res = await apiFetch(`/api/projects/${projectId}/quotes`, {
+        method: 'POST',
+        body: {
+          quoteAmount: Number(quoteData.amount),
+          estHours: quoteData.estHours ? Number(quoteData.estHours) : null,
+          quoteDate: quoteData.date || today(),
+          notes: quoteData.notes || '',
+          status: 'sent',
+        },
+      })
+      if (res?.data) {
+        await updateProject(projectId, {
+          quoteAmount: Number(quoteData.amount),
+          quoteStatus: 'sent',
+          status: 'quoted',
+        })
+      }
+      return true
+    } catch (err) {
+      projects.value[idx] = previousItem
+      saveCachedState()
+      toast.error(err?.data?.message || err?.message || 'Failed to save quote.')
+      return false
     }
-    payments.value.unshift(pmt)
-    return pmt
   }
 
-  function addExpense(projectId, expData) {
-    const exp = {
-      id: 'exp' + uid(),
-      projectId,
-      description: expData.description || 'Project expense',
-      amount: Number(expData.amount),
-      date: expData.date || today(),
-      category: expData.category || 'General',
+  // 2. Clients
+  async function createClient(data) {
+    const tempId = 'temp_c_' + uid()
+    const optimisticClient = {
+      id: tempId,
+      name: data.name,
+      email: data.email || '',
+      phone: data.phone || '',
+      company: data.company || '',
+      country: data.country || 'US',
+      notes: data.notes || '',
+      totalProjects: 0,
+      activeProjects: 0,
+      createdAt: now(),
+      updatedAt: now(),
     }
-    expenses.value.unshift(exp)
-    return exp
+
+    const snapshot = [...clients.value]
+    clients.value.unshift(optimisticClient)
+    saveCachedState()
+
+    try {
+      const res = await apiFetch('/api/clients', {
+        method: 'POST',
+        body: data,
+      })
+      if (res?.data) {
+        const idx = clients.value.findIndex((c) => c.id === tempId)
+        if (idx !== -1) clients.value[idx] = { ...optimisticClient, ...res.data }
+        saveCachedState()
+        return res.data
+      }
+      return optimisticClient
+    } catch (err) {
+      clients.value = snapshot
+      saveCachedState()
+      toast.error(err?.data?.message || err?.message || 'Failed to create client.')
+      throw err
+    }
   }
 
-  function addSession(data) {
+  async function updateClient(id, data) {
+    const idx = clients.value.findIndex((c) => String(c.id) === String(id))
+    if (idx === -1) return false
+
+    const previous = { ...clients.value[idx] }
+    clients.value[idx] = { ...previous, ...data, updatedAt: now() }
+    saveCachedState()
+
+    try {
+      const res = await apiFetch(`/api/clients/${id}`, {
+        method: 'PATCH',
+        body: data,
+      })
+      if (res?.data) {
+        clients.value[idx] = { ...clients.value[idx], ...res.data }
+        saveCachedState()
+      }
+      return true
+    } catch (err) {
+      clients.value[idx] = previous
+      saveCachedState()
+      toast.error(err?.data?.message || err?.message || 'Failed to update client.')
+      return false
+    }
+  }
+
+  async function deleteClient(id) {
+    const idx = clients.value.findIndex((c) => String(c.id) === String(id))
+    if (idx === -1) return false
+
+    const snapshot = [...clients.value]
+    clients.value = clients.value.filter((c) => String(c.id) !== String(id))
+    saveCachedState()
+
+    try {
+      await apiFetch(`/api/clients/${id}`, { method: 'DELETE' })
+      return true
+    } catch (err) {
+      clients.value = snapshot
+      saveCachedState()
+      toast.error('Failed to archive client on server.')
+      return false
+    }
+  }
+
+  // 3. Sessions
+  async function addSession(data) {
     const startedAt = data.startedAt || now()
-    const endedAt   = data.endedAt || now()
-    const durationMin = data.durationMin ?? Math.max(1, Math.round(
-      (new Date(endedAt) - new Date(startedAt)) / 60000
-    ))
-    const sess = {
-      id: 's' + uid(),
+    const endedAt = data.endedAt || now()
+    const durationMin = data.durationMin ?? Math.max(1, Math.round((new Date(endedAt) - new Date(startedAt)) / 60000))
+    const tempId = 'temp_s_' + uid()
+
+    const optimisticSess = {
+      id: tempId,
       projectId: data.projectId,
       title: data.title || 'Work session',
       type: data.type || 'production',
@@ -1448,46 +1860,370 @@ export const useWelloStore = defineStore('wello', () => {
       startedAt,
       endedAt,
       durationMin,
+      createdAt: now(),
+      updatedAt: now(),
     }
-    sessions.value.push(sess)
-    return sess
+
+    const snapshot = [...sessions.value]
+    sessions.value.unshift(optimisticSess)
+    saveCachedState()
+
+    try {
+      const res = await apiFetch('/api/sessions', {
+        method: 'POST',
+        body: {
+          projectId: Number(data.projectId),
+          title: data.title || 'Work session',
+          type: data.type || 'production',
+          paymentType: data.paymentType || 'paid',
+          unpaidReason: data.unpaidReason,
+          notes: data.notes,
+          startedAt,
+          endedAt,
+          durationMinutes: durationMin,
+        },
+      })
+      if (res?.data) {
+        const idx = sessions.value.findIndex((s) => s.id === tempId)
+        if (idx !== -1) sessions.value[idx] = { ...optimisticSess, ...res.data, durationMin: res.data.durationMinutes || durationMin }
+        saveCachedState()
+        return res.data
+      }
+      return optimisticSess
+    } catch (err) {
+      sessions.value = snapshot
+      saveCachedState()
+      toast.error(err?.data?.message || err?.message || 'Failed to save session.')
+      throw err
+    }
   }
 
-  function updateSession(id, data) {
-    const idx = sessions.value.findIndex(s => s.id === id)
+  async function updateSession(id, data) {
+    const idx = sessions.value.findIndex((s) => String(s.id) === String(id))
     if (idx === -1) return false
-    sessions.value[idx] = { ...sessions.value[idx], ...data }
-    return true
+
+    const previous = { ...sessions.value[idx] }
+    sessions.value[idx] = { ...previous, ...data, updatedAt: now() }
+    saveCachedState()
+
+    try {
+      const res = await apiFetch(`/api/sessions/${id}`, {
+        method: 'PATCH',
+        body: data,
+      })
+      if (res?.data) {
+        sessions.value[idx] = { ...sessions.value[idx], ...res.data }
+        saveCachedState()
+      }
+      return true
+    } catch (err) {
+      sessions.value[idx] = previous
+      saveCachedState()
+      toast.error('Failed to update session.')
+      return false
+    }
   }
 
-  function deleteSession(id) {
-    sessions.value = sessions.value.filter(s => s.id !== id)
+  async function deleteSession(id) {
+    const idx = sessions.value.findIndex((s) => String(s.id) === String(id))
+    if (idx === -1) return false
+
+    const snapshot = [...sessions.value]
+    sessions.value = sessions.value.filter((s) => String(s.id) !== String(id))
+    saveCachedState()
+
+    try {
+      await apiFetch(`/api/sessions/${id}`, { method: 'DELETE' })
+      return true
+    } catch (err) {
+      sessions.value = snapshot
+      saveCachedState()
+      toast.error('Failed to delete session on server.')
+      return false
+    }
   }
 
-  function createClient(data) {
-    const client = {
-      id: 'c' + uid(),
+  // 4. Payments
+  async function addPayment(projectId, pmtData) {
+    const tempId = 'temp_pay_' + uid()
+    const optimisticPmt = {
+      id: tempId,
+      projectId,
+      amount: Number(pmtData.amount),
+      paidDate: pmtData.paidDate || today(),
+      notes: pmtData.notes || '',
+      createdAt: now(),
+      updatedAt: now(),
+    }
+
+    const snapshot = [...payments.value]
+    payments.value.unshift(optimisticPmt)
+    saveCachedState()
+
+    try {
+      const res = await apiFetch('/api/payments', {
+        method: 'POST',
+        body: {
+          projectId: Number(projectId),
+          amount: Number(pmtData.amount),
+          paidDate: pmtData.paidDate || today(),
+          notes: pmtData.notes || '',
+        },
+      })
+      if (res?.data) {
+        const idx = payments.value.findIndex((p) => p.id === tempId)
+        if (idx !== -1) payments.value[idx] = { ...optimisticPmt, ...res.data }
+        saveCachedState()
+        return res.data
+      }
+      return optimisticPmt
+    } catch (err) {
+      payments.value = snapshot
+      saveCachedState()
+      toast.error(err?.data?.message || err?.message || 'Failed to record payment.')
+      throw err
+    }
+  }
+
+  async function deletePayment(id) {
+    const snapshot = [...payments.value]
+    payments.value = payments.value.filter((p) => String(p.id) !== String(id))
+    saveCachedState()
+
+    try {
+      await apiFetch(`/api/payments/${id}`, { method: 'DELETE' })
+      return true
+    } catch (err) {
+      payments.value = snapshot
+      saveCachedState()
+      toast.error('Failed to delete payment.')
+      return false
+    }
+  }
+
+  // 5. Expenses
+  async function addExpense(projectId, expData) {
+    const tempId = 'temp_exp_' + uid()
+    const optimisticExp = {
+      id: tempId,
+      projectId,
+      description: expData.description || 'Project expense',
+      amount: Number(expData.amount),
+      date: expData.date || today(),
+      expenseDate: expData.date || today(),
+      category: expData.category || 'General',
+      createdAt: now(),
+      updatedAt: now(),
+    }
+
+    const snapshot = [...expenses.value]
+    expenses.value.unshift(optimisticExp)
+    saveCachedState()
+
+    try {
+      const res = await apiFetch('/api/expenses', {
+        method: 'POST',
+        body: {
+          projectId: Number(projectId),
+          description: expData.description || 'Project expense',
+          amount: Number(expData.amount),
+          category: expData.category || 'General',
+          expenseDate: expData.date || today(),
+        },
+      })
+      if (res?.data) {
+        const idx = expenses.value.findIndex((e) => e.id === tempId)
+        if (idx !== -1) expenses.value[idx] = { ...optimisticExp, ...res.data, date: res.data.expenseDate || res.data.date }
+        saveCachedState()
+        return res.data
+      }
+      return optimisticExp
+    } catch (err) {
+      expenses.value = snapshot
+      saveCachedState()
+      toast.error(err?.data?.message || err?.message || 'Failed to record expense.')
+      throw err
+    }
+  }
+
+  async function deleteExpense(id) {
+    const snapshot = [...expenses.value]
+    expenses.value = expenses.value.filter((e) => String(e.id) !== String(id))
+    saveCachedState()
+
+    try {
+      await apiFetch(`/api/expenses/${id}`, { method: 'DELETE' })
+      return true
+    } catch (err) {
+      expenses.value = snapshot
+      saveCachedState()
+      toast.error('Failed to delete expense.')
+      return false
+    }
+  }
+
+  // 6. User Profile
+  async function updateProfile(data) {
+    const previous = { ...user.value }
+    user.value = { ...user.value, ...data }
+    saveCachedState()
+
+    try {
+      const res = await apiFetch('/api/me', {
+        method: 'PATCH',
+        body: data,
+      })
+      if (res?.data) {
+        user.value = {
+          ...user.value,
+          ...res.data,
+          currency: res.data.baseCurrency || user.value.currency,
+          currencyCode: res.data.baseCurrency || user.value.currencyCode,
+        }
+        saveCachedState()
+      }
+      return true
+    } catch (err) {
+      user.value = previous
+      saveCachedState()
+      toast.error(err?.data?.message || err?.message || 'Failed to update profile settings.')
+      return false
+    }
+  }
+
+  // 7. Tax Rates (Generic Global Tax Engine)
+  async function fetchTaxRates() {
+    try {
+      const res = await apiFetch('/api/tax-rates')
+      if (res?.data && Array.isArray(res.data)) {
+        taxRates.value = res.data
+        saveCachedState()
+      }
+      return taxRates.value
+    } catch (e) {
+      console.warn('[Wello Tax] Could not fetch tax rates', e)
+      return []
+    }
+  }
+
+  async function createTaxRate(data) {
+    const tempId = 'temp_tax_' + uid()
+    const optimistic = {
+      id: tempId,
       name: data.name,
-      email: data.email || '',
-      phone: data.phone || '',
-      company: data.company || '',
-      location: data.location || '',
-      notes: data.notes || '',
+      rate: Number(data.rate),
+      isCompound: Boolean(data.isCompound),
+      isInclusive: Boolean(data.isInclusive),
+      isDefault: Boolean(data.isDefault),
+      countryCode: data.countryCode || '',
     }
-    clients.value.push(client)
-    return client
+    const snapshot = [...taxRates.value]
+    taxRates.value.push(optimistic)
+    saveCachedState()
+
+    try {
+      const res = await apiFetch('/api/tax-rates', {
+        method: 'POST',
+        body: data,
+      })
+      if (res?.data) {
+        const idx = taxRates.value.findIndex((t) => t.id === tempId)
+        if (idx !== -1) taxRates.value[idx] = res.data
+        saveCachedState()
+        return res.data
+      }
+      return optimistic
+    } catch (err) {
+      taxRates.value = snapshot
+      saveCachedState()
+      toast.error(err?.data?.message || err?.message || 'Failed to create tax rate.')
+      throw err
+    }
   }
 
-  function updateClient(id, data) {
-    const idx = clients.value.findIndex(c => c.id === id)
+  async function updateTaxRate(id, data) {
+    const idx = taxRates.value.findIndex((t) => String(t.id) === String(id))
     if (idx === -1) return false
-    clients.value[idx] = { ...clients.value[idx], ...data }
-    return true
+    const previous = { ...taxRates.value[idx] }
+    taxRates.value[idx] = { ...previous, ...data }
+    saveCachedState()
+
+    try {
+      const res = await apiFetch(`/api/tax-rates/${id}`, {
+        method: 'PATCH',
+        body: data,
+      })
+      if (res?.data) {
+        taxRates.value[idx] = { ...taxRates.value[idx], ...res.data }
+        saveCachedState()
+      }
+      return true
+    } catch (err) {
+      taxRates.value[idx] = previous
+      saveCachedState()
+      toast.error(err?.data?.message || err?.message || 'Failed to update tax rate.')
+      return false
+    }
   }
 
-  function deleteClient(id) {
-    clients.value = clients.value.filter(c => c.id !== id)
+  async function deleteTaxRate(id) {
+    const snapshot = [...taxRates.value]
+    taxRates.value = taxRates.value.filter((t) => String(t.id) !== String(id))
+    saveCachedState()
+
+    try {
+      await apiFetch(`/api/tax-rates/${id}`, { method: 'DELETE' })
+      return true
+    } catch (err) {
+      taxRates.value = snapshot
+      saveCachedState()
+      toast.error('Failed to delete tax rate.')
+      return false
+    }
   }
+
+  async function fetchMetricsSummary(params = {}) {
+    const tz = params.timezone || user.value.timezone || 'UTC'
+    const range = params.range || '30d'
+    const currency = params.currency || user.value.baseCurrency || 'USD'
+    try {
+      const q = new URLSearchParams()
+      if (params.range) q.set('range', params.range)
+      if (params.from) q.set('from', params.from)
+      if (params.to) q.set('to', params.to)
+      q.set('tz', tz)
+      q.set('currency', currency)
+      const res = await apiFetch(`/api/metrics/summary?${q.toString()}`)
+      if (res?.data) {
+        metricsSummary.value = res.data
+        return res.data
+      }
+    } catch (err) {
+      console.warn('[Wello Metrics] Error fetching metrics summary:', err)
+    }
+    return null
+  }
+
+  async function fetchMetricsInsights(params = {}) {
+    const tz = params.timezone || user.value.timezone || 'UTC'
+    const currency = params.currency || user.value.baseCurrency || 'USD'
+    try {
+      const q = new URLSearchParams()
+      if (params.from) q.set('from', params.from)
+      if (params.to) q.set('to', params.to)
+      q.set('tz', tz)
+      q.set('currency', currency)
+      const res = await apiFetch(`/api/metrics/insights?${q.toString()}`)
+      if (res?.data) {
+        metricsInsights.value = res.data
+        return res.data
+      }
+    } catch (err) {
+      console.warn('[Wello Metrics] Error fetching metrics insights:', err)
+    }
+    return null
+  }
+
 
   function resetToDefaults() {
     user.value = { ...SAMPLE_USER }
@@ -1496,12 +2232,12 @@ export const useWelloStore = defineStore('wello', () => {
     sessions.value = [...SAMPLE_SESSIONS]
     payments.value = [...SAMPLE_PAYMENTS]
     expenses.value = [...SAMPLE_EXPENSES]
+    taxRates.value = []
+    fxRates.value = {}
     activeTimer.value = null
     timerElapsed.value = 0
     isTimerPaused.value = false
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(STORAGE_KEY)
-    }
+    clearCache()
   }
 
   return {
@@ -1512,9 +2248,19 @@ export const useWelloStore = defineStore('wello', () => {
     sessions,
     payments,
     expenses,
+    taxRates,
+    fxRates,
+    metricsSummary,
+    metricsInsights,
     activeTimer,
     timerElapsed,
     isTimerPaused,
+    isLoading,
+    isSyncing,
+    isOffline,
+    lastSyncedAt,
+    showMigrationPrompt,
+    migrationData,
 
     // Computed
     currency,
@@ -1522,7 +2268,15 @@ export const useWelloStore = defineStore('wello', () => {
     dashboardStats,
     recentInsights,
 
-    // Helpers
+    // Authoritative Metrics & Taxonomy Engine
+    computeUnifiedMetricsSummary,
+    computeIntelligenceInsights,
+    UNPAID_TAXONOMY,
+    categorizeUnpaidReason,
+    fetchMetricsSummary,
+    fetchMetricsInsights,
+
+    // Core Helpers
     getClient,
     getProject,
     getProjectSessions,
@@ -1554,32 +2308,57 @@ export const useWelloStore = defineStore('wello', () => {
     getValueTrendSeries,
     getDynamicSmartInsights,
     minutesToHM,
+    userToday,
+
+    // FX Engine
+    fetchFxRates,
+    convertToBaseCurrency,
+
+    // Tax Engine
+    fetchTaxRates,
+    createTaxRate,
+    updateTaxRate,
+    deleteTaxRate,
 
     // Formatters
+    fmt,
     fmtCurrency,
     fmtDuration,
     fmtHourly,
 
-    // Timer
+    // Data Load & Sync
+    loadInitialData,
+    loadCachedState,
+    saveCachedState,
+    clearCache,
+    importLegacyData,
+    dismissMigration,
+
+    // Timer Actions
+    fetchActiveTimer,
     startTimer,
     pauseTimer,
     resumeTimer,
     stopTimer,
     timerDisplay,
 
-    // Mutations
+    // Optimistic CRUD Actions
     createProject,
     updateProject,
+    deleteProject,
     convertToJob,
     saveQuote,
     addPayment,
+    deletePayment,
     addExpense,
+    deleteExpense,
     addSession,
     updateSession,
     deleteSession,
     createClient,
     updateClient,
     deleteClient,
+    updateProfile,
     resetToDefaults,
   }
 })

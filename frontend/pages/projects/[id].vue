@@ -130,12 +130,16 @@
         </div>
         <div class="metric-sub-breakdown">
           <div class="flex justify-between text-xs py-1 border-b">
-            <span class="text-tertiary">Unpaid time:</span>
+            <span class="text-tertiary">Paid time:</span>
+            <span class="fw-600 kpi-val-2">{{ proj.paidHM }}</span>
+          </div>
+          <div class="flex justify-between text-xs py-1 border-b">
+            <span class="text-tertiary">Client unpaid:</span>
             <span class="fw-600 kpi-val-3">{{ proj.unpaidHM }}</span>
           </div>
           <div class="flex justify-between text-xs py-1">
-            <span class="text-tertiary">Paid time:</span>
-            <span class="fw-600 kpi-val-2">{{ proj.paidHM }}</span>
+            <span class="text-tertiary">Intentional unpaid:</span>
+            <span class="fw-600 text-secondary">{{ proj.intentionalUnpaidHM || '0m' }}</span>
           </div>
         </div>
       </div>
@@ -148,14 +152,18 @@
         </div>
         <div class="flex items-baseline gap-2 mb-3">
           <div class="metric-value kpi-val-2">
-            {{ store.fmtCurrency(proj.revenue) }}
+            {{ store.fmtCurrency(proj.collectedRevenue) }}
           </div>
-          <div class="text-tertiary text-xs">revenue</div>
+          <div class="text-tertiary text-xs">collected</div>
         </div>
         <div class="metric-sub-breakdown">
           <div class="flex justify-between text-xs py-1 border-b">
-            <span class="text-tertiary">Quoted budget:</span>
-            <span class="fw-600">{{ proj.quoteAmount ? store.fmtCurrency(proj.quoteAmount) : '—' }}</span>
+            <span class="text-tertiary">Earned revenue:</span>
+            <span class="fw-600">{{ store.fmtCurrency(proj.earnedRevenue) }}</span>
+          </div>
+          <div class="flex justify-between text-xs py-1 border-b" v-if="proj.outstandingRevenue > 0">
+            <span class="text-tertiary">Outstanding:</span>
+            <span class="fw-600 text-brand">+{{ store.fmtCurrency(proj.outstandingRevenue) }}</span>
           </div>
           <div class="flex justify-between text-xs py-1">
             <span class="text-tertiary">Project expenses:</span>
@@ -167,16 +175,20 @@
       <!-- VALUE CARD -->
       <div class="card card-padded" id="project-card-value">
         <div class="metric-label mb-2 flex items-center justify-between">
-          <span>Effective Value</span>
+          <span>Dual Rates</span>
           <span class="text-xs text-brand fw-600">Work-Value</span>
         </div>
         <div class="flex items-baseline gap-2 mb-3">
           <div class="metric-value kpi-val-3">
-            {{ proj.netHrVal > 0 ? store.fmtHourly(proj.netHrVal) : `${store.currency}0/hr` }}
+            {{ proj.clientWorkRate > 0 ? store.fmtHourly(proj.clientWorkRate) : (proj.isZeroHours ? '—' : store.fmtHourly(0)) }}
           </div>
-          <div class="text-tertiary text-xs">current rate</div>
+          <div class="text-tertiary text-xs">client-work rate</div>
         </div>
         <div class="metric-sub-breakdown">
+          <div class="flex justify-between text-xs py-1 border-b">
+            <span class="text-tertiary">All-in rate:</span>
+            <span class="fw-600 text-primary">{{ proj.allInRate > 0 ? store.fmtHourly(proj.allInRate) : (proj.isZeroHours ? '—' : store.fmtHourly(0)) }}</span>
+          </div>
           <div class="flex justify-between text-xs py-1 border-b">
             <span class="text-tertiary">Unpaid time value:</span>
             <span class="fw-600 kpi-val-3">{{ store.fmtCurrency(Math.round(proj.estUnpaidValue)) }}</span>
@@ -520,10 +532,14 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
 import { useWelloStore } from '~/stores/wello'
 import { useAuthStore } from '~/stores/auth'
 import { useToast } from '~/composables/useToast'
+import IconFolders from '~/components/IconFolders.vue'
+import IconClock from '~/components/IconClock.vue'
+import IconEdit from '~/components/IconEdit.vue'
+import IconBriefcase from '~/components/IconBriefcase.vue'
+import IconAlert from '~/components/IconAlert.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -656,7 +672,7 @@ function executeDeleteSession() {
 
 function fmtDate(d) {
   if (!d) return '—'
-  return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+  return new Date(d).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 // ── Chronological Timeline Generator ────────────────────────────────────────
@@ -674,7 +690,7 @@ const timelineEvents = computed(() => {
       title: 'Project created',
       description: `Created for ${proj.value.client?.name || 'Customer'} with initial status "${proj.value.status}".`,
       type: 'creation',
-      icon: resolveComponent('IconFolders'),
+      icon: IconFolders,
       iconBg: 'rgba(107,114,128,0.1)',
       iconColor: '#6B7280',
     })
@@ -693,7 +709,7 @@ const timelineEvents = computed(() => {
         type: 'session',
         durationHM: store.minutesToHM(s.durationMin),
         paymentType: s.paymentType,
-        icon: resolveComponent('IconClock'),
+        icon: IconClock,
         iconBg: s.paymentType === 'paid' ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)',
         iconColor: s.paymentType === 'paid' ? '#059669' : '#D97706',
       })
@@ -710,7 +726,7 @@ const timelineEvents = computed(() => {
       description: proj.value.quoteNotes || (proj.value.quoteEstHours ? `Estimated effort: ${proj.value.quoteEstHours} hours` : 'Quote prepared and sent to customer.'),
       type: 'quote',
       amountStr: store.fmtCurrency(proj.value.quoteAmount),
-      icon: resolveComponent('IconEdit'),
+      icon: IconEdit,
       iconBg: 'rgba(122,63,246,0.1)',
       iconColor: '#7A3FF6',
     })
@@ -727,7 +743,7 @@ const timelineEvents = computed(() => {
         description: pmt.notes || 'Revenue recorded',
         type: 'payment',
         amountStr: store.fmtCurrency(pmt.amount),
-        icon: resolveComponent('IconBriefcase'),
+        icon: IconBriefcase,
         iconBg: 'rgba(16,185,129,0.12)',
         iconColor: '#059669',
       })
@@ -745,7 +761,7 @@ const timelineEvents = computed(() => {
         description: `Category: ${exp.category || 'General'}`,
         type: 'expense',
         amountStr: store.fmtCurrency(exp.amount),
-        icon: resolveComponent('IconAlert'),
+        icon: IconAlert,
         iconBg: 'rgba(239,68,68,0.1)',
         iconColor: '#DC2626',
       })

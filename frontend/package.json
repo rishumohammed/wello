@@ -21,7 +21,9 @@
     "vue-router": "^4.4.0"
   },
   "devDependencies": {
+    "@oxc-parser/binding-win32-x64-msvc": "^0.150.0",
     "@types/node": "^20.12.0",
+    "oxc-parser": "^0.150.0",
     "typescript": "^5.5.0",
     "vue-tsc": "^2.0.0"
   }

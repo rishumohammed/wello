@@ -116,7 +116,7 @@
                   class="font-bold text-sm"
                   :class="getClientOutstanding(client.id) > 0 ? 'text-warning' : 'text-tertiary'"
                 >
-                  {{ store.currency }} {{ getClientOutstanding(client.id).toLocaleString('en-IN') }}
+                  {{ store.fmtCurrency(getClientOutstanding(client.id)) }}
                 </div>
                 <div class="text-xs mt-1">
                   <span v-if="getClientOutstanding(client.id) > 0" class="badge badge-unpaid badge-xs">
@@ -204,7 +204,7 @@
                   v-model="form.location"
                   class="form-input"
                   type="text"
-                  placeholder="e.g. Bengaluru, India"
+                  placeholder="e.g. San Francisco, USA or Berlin, Germany"
                 />
               </div>
 
@@ -333,25 +333,25 @@ function getClientCollectionRate(clientId) {
 }
 
 const defaultPhones = {
-  c1: '+91 98201 12345',
-  c2: '+91 98334 56789',
-  c3: '+91 98112 34567',
-  c4: '+91 97690 98765',
-  c5: '+91 98450 11223',
-  c6: '+91 99001 88776',
+  c1: '+1 415 555 0123',
+  c2: '+49 30 1234567',
+  c3: '+971 4 123 4567',
+  c4: '+61 2 9876 5432',
+  c5: '+46 8 123 456',
+  c6: '+44 20 7946 0912',
 }
 
 const defaultLocations = {
-  c1: 'Bengaluru, India',
-  c2: 'Mumbai, India',
-  c3: 'Goa, India',
-  c4: 'Pune, India',
-  c5: 'Hyderabad, India',
-  c6: 'New Delhi, India',
+  c1: 'San Francisco, USA',
+  c2: 'Berlin, Germany',
+  c3: 'Dubai, UAE',
+  c4: 'Sydney, Australia',
+  c5: 'Stockholm, Sweden',
+  c6: 'London, UK',
 }
 
 function getClientLocation(client) {
-  return client.location || defaultLocations[client.id] || 'India'
+  return client.location || defaultLocations[client.id] || 'Global'
 }
 
 function getClientPhone(client) {

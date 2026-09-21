@@ -16,5 +16,8 @@
         <NuxtLink to="/register" class="hover-underline">Create Account</NuxtLink>
       </div>
     </footer>
+
+    <!-- Global Toast Notifications -->
+    <ToastContainer />
   </div>
 </template>

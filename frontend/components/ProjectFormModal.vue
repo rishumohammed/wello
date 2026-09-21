@@ -1,5 +1,6 @@
 <template>
-  <Teleport to="body">
+  <ClientOnly>
+    <Teleport to="body">
     <div class="modal-overlay" @click.self="$emit('close')" id="modal-project-form-overlay">
       <div class="modal" id="modal-project-form" role="dialog" aria-modal="true">
         <div class="modal-header">
@@ -214,7 +215,8 @@
         </form>
       </div>
     </div>
-  </Teleport>
+    </Teleport>
+  </ClientOnly>
 </template>
 
 <script setup>
@@ -319,9 +321,9 @@ const form = reactive({
 
 const errors = reactive({ name: '', clientId: '' })
 
-function quickCreateClient() {
+async function quickCreateClient() {
   if (!newClientName.value.trim()) return
-  const client = store.createClient({ name: newClientName.value.trim() })
+  const client = await store.createClient({ name: newClientName.value.trim() })
   form.clientId = client.id
   showNewClient.value = false
   newClientName.value = ''
@@ -351,7 +353,7 @@ async function handleSubmit() {
 
   try {
     if (isEdit.value) {
-      store.updateProject(props.project.id, {
+      await store.updateProject(props.project.id, {
         name: form.name.trim(),
         clientId: form.clientId,
         serviceCategory: form.serviceCategory,
@@ -363,19 +365,15 @@ async function handleSubmit() {
       toast.success('Project updated.')
       emit('updated', props.project.id)
     } else {
-      const newProj = store.createProject({
+      const newProj = await store.createProject({
         name: form.name.trim(),
         clientId: form.clientId,
         serviceCategory: form.serviceCategory,
         description: form.description.trim(),
+        status: form.status || 'potential',
         quoteAmount: form.quoteAmount ? Number(form.quoteAmount) : null,
         quoteEstHours: form.quoteEstHours ? Number(form.quoteEstHours) : null,
       })
-
-      // If initial status was customized beyond potential
-      if (form.status && form.status !== 'potential') {
-        store.updateProject(newProj.id, { status: form.status })
-      }
 
       toast.success(`Project "${newProj.name}" created.`)
       emit('created', newProj)

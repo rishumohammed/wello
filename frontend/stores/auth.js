@@ -143,6 +143,13 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     syncWithWelloStore(newUser)
+
+    try {
+      const welloStore = useWelloStore()
+      if (welloStore?.loadInitialData) {
+        welloStore.loadInitialData()
+      }
+    } catch (e) {}
   }
 
   async function sendOtp(payload) {
@@ -189,6 +196,14 @@ export const useAuthStore = defineStore('auth', () => {
   function logout() {
     token.value = null
     user.value = null
+
+    try {
+      const welloStore = useWelloStore()
+      if (welloStore) {
+        welloStore.clearCache()
+        welloStore.resetToDefaults()
+      }
+    } catch (e) {}
 
     try {
       logoutCookie.value = 'true'

@@ -1,84 +1,87 @@
 <template>
-  <Teleport to="body">
-    <div class="modal-overlay" @click.self="$emit('close')" id="modal-expense-overlay">
-      <div class="modal modal-sm" id="modal-expense" role="dialog" aria-modal="true">
-        <div class="modal-header">
-          <div>
-            <div class="modal-title">Add Expense</div>
-            <div class="modal-subtitle" v-if="selectedProject">{{ selectedProject.name }}</div>
+  <ClientOnly>
+    <Teleport to="body">
+      <div class="modal-overlay" @click.self="$emit('close')" id="modal-expense-overlay">
+        <div class="modal modal-sm" id="modal-expense" role="dialog" aria-modal="true">
+          <div class="modal-header">
+            <div>
+              <div class="modal-title">Record Project Expense</div>
+              <div class="modal-subtitle" v-if="selectedProject">{{ selectedProject.name }}</div>
+            </div>
+            <button class="modal-close" @click="$emit('close')" id="btn-close-expense-modal" aria-label="Close"><IconX /></button>
           </div>
-          <button class="modal-close" @click="$emit('close')" id="btn-close-expense-modal" aria-label="Close"><IconX /></button>
-        </div>
-        <form @submit.prevent="handleSubmit" novalidate>
-          <div class="modal-body">
-            <!-- Project selector if not preset -->
-            <div class="form-group" v-if="!projectId">
-              <label class="form-label" for="exp-project">Project <span class="required">*</span></label>
-              <select id="exp-project" v-model="form.projectId" class="form-select" :class="{ error: errors.projectId }">
-                <option value="">Select project…</option>
-                <option v-for="p in availableProjects" :key="p.id" :value="p.id">
-                  {{ p.name }} {{ p.isJob ? '(Job)' : '' }}
-                </option>
-              </select>
-              <span v-if="errors.projectId" class="form-error">{{ errors.projectId }}</span>
-            </div>
+          <form @submit.prevent="handleSubmit" novalidate>
+            <div class="modal-body">
+              <!-- Project selector if not preset -->
+              <div class="form-group" v-if="!projectId">
+                <label class="form-label" for="exp-project">Project <span class="required">*</span></label>
+                <select id="exp-project" v-model="form.projectId" class="form-select" :class="{ error: errors.projectId }">
+                  <option value="">Select project…</option>
+                  <option v-for="p in availableProjects" :key="p.id" :value="p.id">
+                    {{ p.name }} {{ p.isJob ? '(Job)' : '' }}
+                  </option>
+                </select>
+                <span v-if="errors.projectId" class="form-error">{{ errors.projectId }}</span>
+              </div>
 
-            <div class="form-group">
-              <label class="form-label" for="exp-desc">Description <span class="required">*</span></label>
-              <input
-                id="exp-desc"
-                v-model="form.description"
-                class="form-input"
-                :class="{ error: errors.description }"
-                type="text"
-                placeholder="e.g. Asset library license, Hosting fee, Travel"
-                autocomplete="off"
-              />
-              <span v-if="errors.description" class="form-error">{{ errors.description }}</span>
-            </div>
-
-            <div class="form-row">
               <div class="form-group">
-                <label class="form-label" for="exp-amount">Amount ({{ store.currency }}) <span class="required">*</span></label>
+                <label class="form-label" for="exp-desc">Expense Description <span class="required">*</span></label>
                 <input
-                  id="exp-amount"
-                  v-model.number="form.amount"
+                  id="exp-desc"
+                  v-model="form.description"
                   class="form-input"
-                  :class="{ error: errors.amount }"
-                  type="number"
-                  min="1"
-                  step="50"
-                  placeholder="0"
+                  :class="{ error: errors.description }"
+                  type="text"
+                  placeholder="e.g. Figma plugin license, Stock photos, Cloud hosting"
+                  autocomplete="off"
                 />
-                <span v-if="errors.amount" class="form-error">{{ errors.amount }}</span>
+                <span v-if="errors.description" class="form-error">{{ errors.description }}</span>
               </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="exp-amount">Amount ({{ store.currency }}) <span class="required">*</span></label>
+                  <input
+                    id="exp-amount"
+                    v-model.number="form.amount"
+                    class="form-input"
+                    :class="{ error: errors.amount }"
+                    type="number"
+                    min="1"
+                    step="10"
+                    placeholder="e.g. 150"
+                  />
+                  <span v-if="errors.amount" class="form-error">{{ errors.amount }}</span>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="exp-date">Date Incurred</label>
+                  <input id="exp-date" v-model="form.date" class="form-input" type="date" :max="todayStr" />
+                </div>
+              </div>
+
               <div class="form-group">
-                <label class="form-label" for="exp-date">Date</label>
-                <input id="exp-date" v-model="form.date" class="form-input" type="date" :max="todayStr" />
+                <label class="form-label" for="exp-category">Expense Category</label>
+                <select id="exp-category" v-model="form.category" class="form-select">
+                  <option value="software">Software & Subscriptions</option>
+                  <option value="assets">Assets & Fonts / Media</option>
+                  <option value="subcontractor">Subcontractor & Outsourcing</option>
+                  <option value="travel">Travel & Transport</option>
+                  <option value="hosting">Hosting & Infrastructure</option>
+                  <option value="equipment">Equipment & Hardware</option>
+                  <option value="other">Other Operational Expense</option>
+                </select>
               </div>
             </div>
 
-            <div class="form-group">
-              <label class="form-label" for="exp-category">Category</label>
-              <select id="exp-category" v-model="form.category" class="form-select">
-                <option value="Assets">Assets & Resources</option>
-                <option value="Software">Software & Subscriptions</option>
-                <option value="Infrastructure">Infrastructure & Hosting</option>
-                <option value="Subcontracting">Subcontracting</option>
-                <option value="Travel">Travel & Meetings</option>
-                <option value="General">General / Miscellaneous</option>
-              </select>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" @click="$emit('close')" id="btn-cancel-expense">Cancel</button>
+              <button type="submit" class="btn btn-primary" id="btn-save-expense">Add Expense</button>
             </div>
-          </div>
-
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="$emit('close')" id="btn-cancel-expense">Cancel</button>
-            <button type="submit" class="btn btn-primary" id="btn-save-expense">Add Expense</button>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
-    </div>
-  </Teleport>
+    </Teleport>
+  </ClientOnly>
 </template>
 
 <script setup>

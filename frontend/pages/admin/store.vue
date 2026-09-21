@@ -178,7 +178,7 @@
                   <td class="font-bold text-xs text-primary">{{ tr.month }}</td>
                   <td class="table-text-center text-xs text-secondary">{{ tr.activations }}</td>
                   <td class="table-text-center text-xs text-secondary">{{ tr.invoices }}</td>
-                  <td class="table-text-right text-xs font-bold text-success">{{ store.currency }} {{ tr.revenueBilled.toLocaleString('en-IN') }}</td>
+                  <td class="table-text-right text-xs font-bold text-success">{{ store.fmtCurrency(tr.revenueBilled) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -201,7 +201,7 @@
           </div>
           <div class="flex justify-between text-xs py-1">
             <span class="text-secondary">Total Settled Billed Amount:</span>
-            <span class="font-extrabold text-primary">{{ store.currency }} {{ (invoiceStats.totalBilled || 0).toLocaleString('en-IN') }}</span>
+            <span class="font-extrabold text-primary">{{ store.fmtCurrency(invoiceStats.totalBilled || 0) }}</span>
           </div>
         </div>
       </div>

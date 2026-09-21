@@ -33,6 +33,9 @@
           </NuxtLink>
         </div>
         <div class="topbar-right">
+          <!-- Network / Offline status badge -->
+          <OfflineBadge />
+
           <!-- Active timer pill -->
           <div
             v-if="store.activeTimer"
@@ -131,6 +134,7 @@
 
       <!-- Page content -->
       <main class="app-content">
+        <MigrationBanner />
         <slot />
       </main>
     </div>
@@ -157,14 +161,26 @@
       v-if="showTimerModal"
       @close="showTimerModal = false"
     />
+
+    <!-- Global Toast Notifications -->
+    <ToastContainer />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
 import { useWelloStore } from '~/stores/wello'
 import { useAuthStore } from '~/stores/auth'
+import IconHome from '~/components/IconHome.vue'
+import IconBriefcase from '~/components/IconBriefcase.vue'
+import IconUser from '~/components/IconUser.vue'
+import IconReceipt from '~/components/IconReceipt.vue'
+import IconInsights from '~/components/IconInsights.vue'
+import IconSettings from '~/components/IconSettings.vue'
+import IconChevronDown from '~/components/IconChevronDown.vue'
+import IconShield from '~/components/IconShield.vue'
+import IconPackage from '~/components/IconPackage.vue'
+import IconLogOut from '~/components/IconLogOut.vue'
 
 const store = useWelloStore()
 const authStore = useAuthStore()
@@ -181,15 +197,24 @@ function handleClickOutside(event) {
   }
 }
 
+function handleVisibilityChange() {
+  if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+    store.fetchActiveTimer()
+  }
+}
+
 onMounted(() => {
   if (typeof window !== 'undefined') {
     window.addEventListener('click', handleClickOutside)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    store.loadInitialData()
   }
 })
 
 onUnmounted(() => {
   if (typeof window !== 'undefined') {
     window.removeEventListener('click', handleClickOutside)
+    document.removeEventListener('visibilitychange', handleVisibilityChange)
   }
 })
 
@@ -218,19 +243,19 @@ function handleLogout() {
 
 // Nav items for User Account Workspace
 const navItems = [
-  { id: 'home',     to: '/',          label: 'Home',     icon: resolveComponent('IconHome') },
-  { id: 'work',     to: '/work',      label: 'Work Hub', icon: resolveComponent('IconBriefcase') },
-  { id: 'clients',  to: '/clients',   label: 'Clients',  icon: resolveComponent('IconUser') },
-  { id: 'invoicing', to: '/invoicing', label: 'Invoices', icon: resolveComponent('IconReceipt') },
-  { id: 'insights', to: '/insights',  label: 'Insights', icon: resolveComponent('IconInsights') },
-  { id: 'settings', to: '/settings',  label: 'Settings', icon: resolveComponent('IconSettings') },
+  { id: 'home',     to: '/',          label: 'Home',     icon: IconHome },
+  { id: 'work',     to: '/work',      label: 'Work Hub', icon: IconBriefcase },
+  { id: 'clients',  to: '/clients',   label: 'Clients',  icon: IconUser },
+  { id: 'invoicing', to: '/invoicing', label: 'Invoices', icon: IconReceipt },
+  { id: 'insights', to: '/insights',  label: 'Insights', icon: IconInsights },
+  { id: 'settings', to: '/settings',  label: 'Settings', icon: IconSettings },
 ]
 
 const mobileNavItems = [
-  { id: 'home',     to: '/',          label: 'Home',     icon: resolveComponent('IconHome') },
-  { id: 'work',     to: '/work',      label: 'Work Hub', icon: resolveComponent('IconBriefcase') },
-  { id: 'clients',  to: '/clients',   label: 'Clients',  icon: resolveComponent('IconUser') },
-  { id: 'invoicing', to: '/invoicing', label: 'Invoices', icon: resolveComponent('IconReceipt') },
+  { id: 'home',     to: '/',          label: 'Home',     icon: IconHome },
+  { id: 'work',     to: '/work',      label: 'Work Hub', icon: IconBriefcase },
+  { id: 'clients',  to: '/clients',   label: 'Clients',  icon: IconUser },
+  { id: 'invoicing', to: '/invoicing', label: 'Invoices', icon: IconReceipt },
 ]
 
 const visibleNavItems = computed(() => navItems)
@@ -246,15 +271,16 @@ const pageNames = {
 }
 
 const currentPageTitle = computed(() => {
-  const matched = route.matched
+  const matched = route?.matched || []
   for (const m of matched) {
     const path = m.path
     if (pageNames[path]) return pageNames[path]
   }
-  return pageNames[route.path] || 'Wello'
+  return pageNames[route?.path] || 'Wello'
 })
 
 function isActive(item) {
+  if (!route?.path) return false
   if (item.to === '/') return route.path === '/'
   return route.path.startsWith(item.to)
 }

@@ -298,7 +298,7 @@ const auditLogs = ref([])
 const config = ref({})
 
 const currentDateStr = computed(() => {
-  return new Date().toLocaleDateString('en-IN', {
+  return new Date().toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
@@ -332,14 +332,14 @@ const recentAuditLogs = computed(() => {
 })
 
 const consoleModules = [
-  { title: 'User Directory', desc: 'Accounts & status', to: '/admin/users', icon: resolveComponent('IconUser'), bg: 'rgba(122,63,246,0.1)', color: 'var(--color-purple)' },
-  { title: 'Registration Funnel', desc: 'Drop-off analytics', to: '/admin/registration-pipeline', icon: resolveComponent('IconClock'), bg: 'rgba(16,185,129,0.1)', color: 'var(--color-success)' },
-  { title: 'Categories', desc: 'Master taxonomy', to: '/admin/categories', icon: resolveComponent('IconFolders'), bg: 'rgba(255,159,28,0.1)', color: 'var(--color-sunrise)' },
-  { title: 'Category Requests', desc: 'User request queue', to: '/admin/category-requests', icon: resolveComponent('IconAlert'), bg: 'rgba(255,56,125,0.1)', color: 'var(--color-pink)' },
-  { title: 'Jobs & Services', desc: 'Listing moderation', to: '/admin/jobs', icon: resolveComponent('IconBriefcase'), bg: 'rgba(0,123,255,0.1)', color: 'var(--color-blue)' },
-  { title: 'Analytics Center', desc: 'Platform intelligence', to: '/admin/analytics', icon: resolveComponent('IconInsights'), bg: 'rgba(59,130,246,0.1)', color: 'var(--color-info)' },
-  { title: 'Resend & Email Engine', desc: 'API keys & templates', to: '/admin/settings?tab=resend', icon: resolveComponent('IconEdit'), bg: 'rgba(122,63,246,0.1)', color: 'var(--color-purple)' },
-  { title: 'Security & Roles', desc: 'Admin RBAC', to: '/admin/settings?tab=roles', icon: resolveComponent('IconShield'), bg: 'rgba(16,185,129,0.1)', color: 'var(--color-success)' },
+  { title: 'User Directory', desc: 'Accounts & status', to: '/admin/users', icon: IconUser, bg: 'rgba(122,63,246,0.1)', color: 'var(--color-purple)' },
+  { title: 'Registration Funnel', desc: 'Drop-off analytics', to: '/admin/registration-pipeline', icon: IconClock, bg: 'rgba(16,185,129,0.1)', color: 'var(--color-success)' },
+  { title: 'Categories', desc: 'Master taxonomy', to: '/admin/categories', icon: IconFolders, bg: 'rgba(255,159,28,0.1)', color: 'var(--color-sunrise)' },
+  { title: 'Category Requests', desc: 'User request queue', to: '/admin/category-requests', icon: IconAlert, bg: 'rgba(255,56,125,0.1)', color: 'var(--color-pink)' },
+  { title: 'Jobs & Services', desc: 'Listing moderation', to: '/admin/jobs', icon: IconBriefcase, bg: 'rgba(0,123,255,0.1)', color: 'var(--color-blue)' },
+  { title: 'Analytics Center', desc: 'Platform intelligence', to: '/admin/analytics', icon: IconInsights, bg: 'rgba(59,130,246,0.1)', color: 'var(--color-info)' },
+  { title: 'Resend & Email Engine', desc: 'API keys & templates', to: '/admin/settings?tab=resend', icon: IconEdit, bg: 'rgba(122,63,246,0.1)', color: 'var(--color-purple)' },
+  { title: 'Security & Roles', desc: 'Admin RBAC', to: '/admin/settings?tab=roles', icon: IconShield, bg: 'rgba(16,185,129,0.1)', color: 'var(--color-success)' },
 ]
 
 onMounted(async () => {
@@ -398,7 +398,7 @@ function formatTime(isoStr) {
   if (!isoStr) return '—'
   try {
     const d = new Date(isoStr)
-    return d.toLocaleDateString('en-IN', {
+    return d.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',

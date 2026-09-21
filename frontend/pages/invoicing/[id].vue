@@ -174,10 +174,10 @@
                   {{ item.quantity }}
                 </td>
                 <td class="p-4 text-right tabular text-sm text-secondary">
-                  {{ store.currency }} {{ item.rate.toLocaleString('en-IN') }}
+                  {{ fmtCurrency(item.rate, invoice.currency) }}
                 </td>
                 <td class="p-4 text-right tabular text-sm fw-700 text-primary">
-                  {{ store.currency }} {{ item.amount.toLocaleString('en-IN') }}
+                  {{ fmtCurrency(item.amount, invoice.currency) }}
                 </td>
               </tr>
             </tbody>
@@ -189,23 +189,33 @@
           <div class="w-80 flex flex-col gap-2.5 bg-off-white p-5 rounded-14 border-subtle-box">
             <div class="flex justify-between text-xs text-secondary">
               <span>Subtotal</span>
-              <span class="tabular fw-600 text-primary">{{ store.currency }} {{ invoice.subtotal.toLocaleString('en-IN') }}</span>
+              <span class="tabular fw-600 text-primary">{{ fmtCurrency(invoice.subtotal, invoice.currency) }}</span>
             </div>
 
             <div v-if="invoice.discount > 0" class="flex justify-between text-xs text-danger">
               <span>Discount</span>
-              <span class="tabular fw-600">- {{ store.currency }} {{ invoice.discount.toLocaleString('en-IN') }}</span>
+              <span class="tabular fw-600">- {{ fmtCurrency(invoice.discount, invoice.currency) }}</span>
             </div>
 
             <div v-if="invoice.taxAmount > 0" class="flex justify-between text-xs text-secondary">
-              <span>Tax / GST ({{ invoice.taxPercent }}%)</span>
-              <span class="tabular fw-600 text-primary">+ {{ store.currency }} {{ invoice.taxAmount.toLocaleString('en-IN') }}</span>
+              <span>{{ invoice.taxIdLabel || 'Tax' }} ({{ invoice.taxPercent }}%)</span>
+              <span class="tabular fw-600 text-primary">+ {{ fmtCurrency(invoice.taxAmount, invoice.currency) }}</span>
+            </div>
+
+            <div v-if="invoice.isReverseCharge" class="flex justify-between text-xs text-info font-medium">
+              <span>Tax Regime</span>
+              <span>Reverse Charge (0%)</span>
             </div>
 
             <!-- Total Amount Highlight Box -->
             <div class="flex items-center justify-between pt-3 border-t border-color mt-1">
               <span class="fw-800 text-sm text-primary">Total Amount Due</span>
-              <span class="fw-800 text-xl text-purple">{{ store.currency }} {{ invoice.total.toLocaleString('en-IN') }}</span>
+              <span class="fw-800 text-xl text-purple">{{ fmtCurrency(invoice.total, invoice.currency) }}</span>
+            </div>
+
+            <!-- Base Currency Converted Equivalent -->
+            <div v-if="invoice.currency && invoice.currency !== store.user.baseCurrency" class="text-right text-xs text-tertiary">
+              ≈ {{ fmtCurrency(invoice.baseTotal || store.convertToBaseCurrency(invoice.total, invoice.currency)) }} (Base)
             </div>
           </div>
         </div>
@@ -224,9 +234,9 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
 import { useWelloStore } from '~/stores/wello'
 import { useAuthStore } from '~/stores/auth'
+import { useFormatters } from '~/composables/useFormatters'
 import IconBack from '~/components/IconBack.vue'
 import IconShare from '~/components/IconShare.vue'
 import IconDownload from '~/components/IconDownload.vue'
@@ -237,6 +247,7 @@ import IconUser from '~/components/IconUser.vue'
 const store = useWelloStore()
 const authStore = useAuthStore()
 const route = useRoute()
+const { fmtCurrency } = useFormatters()
 
 const invoice = ref(null)
 const isLoading = ref(true)
@@ -251,7 +262,7 @@ const displayLogo = computed(() => {
 const displaySellerName = computed(() => {
   if (invoice.value?.sellerName) return invoice.value.sellerName
   if (store.user?.businessName) return store.user.businessName
-  return store.user?.name || 'Rahul Mehta Tech Consulting'
+  return store.user?.name || 'Your Business Name'
 })
 
 const displaySellerAddress = computed(() => {

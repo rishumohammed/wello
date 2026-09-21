@@ -274,8 +274,12 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
 import { useToast } from '~/composables/useToast'
+import IconSettings from '~/components/IconSettings.vue'
+import IconEdit from '~/components/IconEdit.vue'
+import IconClock from '~/components/IconClock.vue'
+import IconShield from '~/components/IconShield.vue'
+import IconUser from '~/components/IconUser.vue'
 
 definePageMeta({
   layout: 'admin',
@@ -289,11 +293,11 @@ const toast = useToast()
 const activeTab = ref(route.query.tab || 'resend')
 
 const tabs = [
-  { id: 'resend', label: 'Resend API Settings', icon: resolveComponent('IconSettings') },
-  { id: 'templates', label: 'Email Templates', icon: resolveComponent('IconEdit') },
-  { id: 'email-logs', label: 'Email Delivery Logs', icon: resolveComponent('IconClock') },
-  { id: 'audit', label: 'Immutable Audit Trail', icon: resolveComponent('IconShield') },
-  { id: 'roles', label: 'Admin Roles & RBAC', icon: resolveComponent('IconUser') },
+  { id: 'resend', label: 'Resend API Settings', icon: IconSettings },
+  { id: 'templates', label: 'Email Templates', icon: IconEdit },
+  { id: 'email-logs', label: 'Email Delivery Logs', icon: IconClock },
+  { id: 'audit', label: 'Immutable Audit Trail', icon: IconShield },
+  { id: 'roles', label: 'Admin Roles & RBAC', icon: IconUser },
 ]
 
 // Data states
@@ -387,7 +391,7 @@ function formatTime(isoStr) {
   if (!isoStr) return '—'
   try {
     const d = new Date(isoStr)
-    return d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   } catch (e) {
     return isoStr
   }

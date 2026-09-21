@@ -363,8 +363,15 @@
                 <template v-if="sess.paymentType === 'paid'">
                   {{ getSessionEffectiveRate(sess) }}
                 </template>
+                <template v-else-if="sess.paymentType === 'intentional_unpaid'">
+                  <span class="badge badge-intentional badge-xs" :title="sess.unpaidReason">
+                    {{ formatTaxonomyReason(sess.unpaidReason) || 'Intentional' }}
+                  </span>
+                </template>
                 <template v-else>
-                  <span class="badge badge-unpaid badge-xs">Unpaid</span>
+                  <span class="badge badge-unpaid badge-xs" :title="sess.unpaidReason">
+                    {{ formatTaxonomyReason(sess.unpaidReason) || 'Unpaid' }}
+                  </span>
                 </template>
               </div>
 
@@ -400,7 +407,6 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
 import { useWelloStore } from '~/stores/wello'
 import { useToast } from '~/composables/useToast'
 
@@ -487,6 +493,24 @@ function formatTimeRange(sess) {
   return `${start} - ${end}`
 }
 
+function formatTaxonomyReason(reason) {
+  if (!reason) return ''
+  const map = {
+    scope_creep: 'Scope Creep',
+    revisions_beyond_scope: 'Revisions',
+    pitching: 'Pitching',
+    client_friction: 'Client Friction',
+    admin_overhead: 'Admin Overhead',
+    uncollectible: 'Uncollectible',
+    learning: 'Learning',
+    portfolio: 'Portfolio',
+    charity: 'Charity',
+    strategic: 'Strategic',
+    personal: 'Personal',
+  }
+  return map[reason] || reason.replace(/_/g, ' ')
+}
+
 function getSessionEffectiveRate(sess) {
   const proj = store.getProject(sess.projectId)
   if (!proj || proj.totalMin <= 0) return '—'
@@ -515,8 +539,8 @@ const timerProjectName = computed(() => {
   return store.getProject(store.activeTimer.projectId)?.name || 'Project'
 })
 
-function stopTimer() {
-  store.stopTimer()
+async function stopTimer() {
+  await store.stopTimer()
   toast.success('Timer stopped and session saved.')
 }
 

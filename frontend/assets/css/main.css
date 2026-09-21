@@ -4170,6 +4170,114 @@ ul, ol { list-style: none; }
   }
 }
 
+/* =========================================
+   Migration Banner & Network Status Badges
+   ========================================= */
+.migration-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: linear-gradient(135deg, rgba(255, 159, 28, 0.08) 0%, rgba(255, 56, 125, 0.06) 100%);
+  border: 1px solid rgba(255, 159, 28, 0.25);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-4);
+}
 
+.migration-banner-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
 
+.migration-banner-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: var(--grad-sunrise);
+  color: var(--color-white);
+  flex-shrink: 0;
+}
 
+.migration-banner-title {
+  font-size: var(--font-sm);
+  font-weight: 700;
+  color: var(--color-charcoal);
+}
+
+.migration-banner-desc {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.migration-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.offline-badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #B45309;
+  font-size: var(--font-xs);
+  font-weight: 600;
+}
+
+.offline-pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--color-warning);
+  animation: pulse-dot 1.5s infinite ease-in-out;
+}
+
+.sync-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--font-2xs);
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.sync-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--color-gray-300);
+  border-top-color: var(--color-purple);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+@media (max-width: 768px) {
+  .migration-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .migration-banner-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

@@ -105,13 +105,28 @@
         <slot />
       </main>
     </div>
+
+    <!-- Global Toast Notifications -->
+    <ToastContainer />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '~/stores/auth'
+import IconGrid from '~/components/IconGrid.vue'
+import IconPackage from '~/components/IconPackage.vue'
+import IconUser from '~/components/IconUser.vue'
+import IconClock from '~/components/IconClock.vue'
+import IconFolders from '~/components/IconFolders.vue'
+import IconAlert from '~/components/IconAlert.vue'
+import IconBriefcase from '~/components/IconBriefcase.vue'
+import IconInsights from '~/components/IconInsights.vue'
+import IconSettings from '~/components/IconSettings.vue'
+import IconHome from '~/components/IconHome.vue'
+import IconShield from '~/components/IconShield.vue'
+import IconLogOut from '~/components/IconLogOut.vue'
+import IconChevronDown from '~/components/IconChevronDown.vue'
 
 const authStore = useAuthStore()
 const route = useRoute()
@@ -155,15 +170,15 @@ function handleLogout() {
 }
 
 const navItems = [
-  { id: 'overview',     to: '/admin',                      label: 'Dashboard',         icon: resolveComponent('IconGrid') },
-  { id: 'store',        to: '/admin/store',                label: 'Store Addons',      icon: resolveComponent('IconPackage') },
-  { id: 'users',        to: '/admin/users',                label: 'Users',             icon: resolveComponent('IconUser') },
-  { id: 'funnel',       to: '/admin/registration-pipeline', label: 'User Funnel',      icon: resolveComponent('IconClock') },
-  { id: 'categories',   to: '/admin/categories',           label: 'Categories',        icon: resolveComponent('IconFolders') },
-  { id: 'requests',     to: '/admin/category-requests',     label: 'Category Requests', icon: resolveComponent('IconAlert') },
-  { id: 'jobs',         to: '/admin/jobs',                 label: 'Jobs',              icon: resolveComponent('IconBriefcase') },
-  { id: 'analytics',    to: '/admin/analytics',            label: 'Analytics',         icon: resolveComponent('IconInsights') },
-  { id: 'settings',     to: '/admin/settings',             label: 'Settings',          icon: resolveComponent('IconSettings') },
+  { id: 'overview',     to: '/admin',                      label: 'Dashboard',         icon: IconGrid },
+  { id: 'store',        to: '/admin/store',                label: 'Store Addons',      icon: IconPackage },
+  { id: 'users',        to: '/admin/users',                label: 'Users',             icon: IconUser },
+  { id: 'funnel',       to: '/admin/registration-pipeline', label: 'User Funnel',      icon: IconClock },
+  { id: 'categories',   to: '/admin/categories',           label: 'Categories',        icon: IconFolders },
+  { id: 'requests',     to: '/admin/category-requests',     label: 'Category Requests', icon: IconAlert },
+  { id: 'jobs',         to: '/admin/jobs',                 label: 'Jobs',              icon: IconBriefcase },
+  { id: 'analytics',    to: '/admin/analytics',            label: 'Analytics',         icon: IconInsights },
+  { id: 'settings',     to: '/admin/settings',             label: 'Settings',          icon: IconSettings },
 ]
 
 const pageTitles = {
@@ -178,9 +193,10 @@ const pageTitles = {
   '/admin/settings': 'Admin Console Settings',
 }
 
-const currentPageTitle = computed(() => pageTitles[route.path] || 'Admin Console')
+const currentPageTitle = computed(() => pageTitles[route?.path] || 'Admin Console')
 
 function isActive(path) {
+  if (!route?.path) return false
   if (path === '/admin') return route.path === '/admin'
   return route.path.startsWith(path)
 }
