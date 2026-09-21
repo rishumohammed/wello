@@ -1,82 +1,124 @@
-# Security Architecture & Production Hardening Controls — Wello
+# Wello — Security, Privacy & Compliance Specification
 
-This document outlines the security architecture, defense-in-depth controls, threat model, and residual risk register implemented across the Wello platform.
-
----
-
-## 1. Executive Summary & Threat Model
-
-Wello is an economic command center for self-employed professionals managing personal income, real hourly rates, project proposals, and client billing. Because Wello stores sensitive financial data and personal income metrics, the platform adheres to a zero-trust, privacy-first engineering architecture.
-
-### Primary Threat Vectors Addressed:
-- **Unauthorized Financial Snooping**: Unauthenticated or unauthorized access to individual billing rates, invoices, and payment data.
-- **Data Tampering & Non-Repudiation**: Unauthorized alteration of admin actions, user statuses, or billing history.
-- **Injection Attacks (SQLi, XSS, XXE)**: Malicious input via API parameters, email template variables, or SVG logo uploads.
-- **Brute Force & Credential Stuffing**: Automated guessing of 6-digit OTP login codes or DDoS on resource-heavy analytical endpoints.
-- **Path Traversal & Storage Insecurity**: Arbitrary file read/write vulnerabilities via logo uploads.
-- **Information Leakage**: Internal database error stack traces, unmasked API keys, or raw OTP codes exposed to clients or logs.
+This document details the defense-in-depth security architecture, personal income privacy controls, cryptographic tamper-evident audit ledger, and operational safeguards implemented across the Wello platform.
 
 ---
 
-## 2. Production Security Controls Matrix
+## 1. Input Validation & Schema Hardening
 
-| Control Category | Implemented Defense Mechanism | Status |
-|---|---|:---:|
-| **Input Validation** | Strict Zod schemas (`.strict()`) rejecting unknown fields, bounding string lengths, and validating UUID/ID params on all routes. | ✅ Verified |
-| **HTTP Security Headers** | CSP, HSTS (`max-age=31536000; includeSubDomains`), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`. | ✅ Verified |
-| **Distributed Rate Limiting** | Shared MySQL-backed sliding window rate limiter throttling OTP dispatch, login attempts, event ingestion (120 req/min), and data exports. | ✅ Verified |
-| **Personal Income Privacy** | Aggregate defaults; individual financial drilldown strictly gated behind `users.financial_view` and mandatory business justification logging. | ✅ Verified |
-| **Tamper-Evident Audit Trail** | Cryptographic SHA-256 hash-chained append-only audit trail from Genesis to tip with real-time integrity verification endpoint. | ✅ Verified |
-| **Email Template Sanitization** | Automatic HTML entity escaping on all user variable substitutions, tag allowlist sanitization on admin templates, and live preview. | ✅ Verified |
-| **Secure File / Logo Uploads** | Magic byte validation, MIME verification, SVG XSS/XXE sanitization, 2MB size cap, and path traversal defense with UUID keys. | ✅ Verified |
-| **Structured Observability** | JSON logging with correlation `x-request-id`, user ID, and automated PII/secrets redaction; Sentry error hook; `/api/health` & `/api/ready` probes. | ✅ Verified |
-| **Database Performance** | Knex connection pooling with active timeout management; composite indexes on top 20 queries across work sessions, invoices, and events. | ✅ Verified |
-| **SSR vs SPA Architecture** | Nuxt routeRules configured: static prerender/SSR for public marketing & invoices, client-side SPA (`ssr: false`) for authenticated workspace. | ✅ Verified |
-| **Time-Boxed Support Mode** | Read-only impersonation session (15-min expiry), mandatory reason logging, omnipresent warning banner, and mutation blocking (403). | ✅ Verified |
+- **Zod Strict Validation**: All API route handlers enforce `.strict()` schema parsing across `body`, `query`, and `params`. Unrecognized payload attributes are strictly rejected to prevent mass-assignment attacks and prototype pollution.
+- **Strict Size Bounds**: Text inputs and JSON payloads have enforced maximum length bounds (e.g. `name: max 100`, `email: max 255`, `notes: max 1000`, `json: max 64KB`).
+- **Safe Error Handling**: Server stack traces, raw SQL queries, and internal system paths are stripped from client HTTP responses. Generic HTTP status codes and user-friendly error messages are returned.
 
 ---
 
-## 3. Detailed Technical Implementation
+## 2. HTTP Security Headers & Middleware
 
-### A. Input Validation & Parameter Narrowing
-- **Strict Schema Enforcement**: All endpoints parse incoming request payloads with Zod schemas. Unknown or unmapped fields are rejected with HTTP 400.
-- **Size Bounds**: Maximum lengths on text inputs (e.g. `name: z.string().max(100)`, `email: z.string().max(255)`).
-- **Safe Error Masking**: Client responses return sanitized validation messages without leaking internal database column names or execution stack traces.
+Implemented in [`backend/middleware/01.security.ts`](backend/middleware/01.security.ts):
 
-### B. Distributed Rate Limiting Engine
-- **Shared Persistence**: The `rate_limits` table enables multi-instance deployments to enforce global limits without race conditions.
-- **Tiered Quotas**:
-  - `auth_send_otp`: 5 requests / 5 minutes per identifier
-  - `auth_verify_otp`: 10 attempts / 10 minutes per identifier (cleared immediately upon successful verification)
-  - `events_ingest`: 120 requests / minute per client session
-  - `export_data`: 10 requests / 10 minutes per user
-  - `analytics_admin`: 60 requests / minute
-
-### C. Email Template & XSS Defense
-- **Variable Escaping**: `escapeHtml()` encodes `&`, `<`, `>`, `"`, `'` on any user-supplied variable (e.g. `customer_name`, `project_name`, `first_name`).
-- **Template Sanitization**: Admin template updates strip `<script>`, `<iframe>`, `on*` event handlers, and `javascript:` URLs.
-- **Preview Sandbox**: Endpoint `GET /api/admin/email/preview` provides live rendered previews using standard fixture datasets.
-
-### D. File & Logo Upload Protection
-- **Magic Byte Inspection**: Verifies binary signatures of PNG (`89 50 4E 47`), JPEG (`FF D8 FF`), and WebP (`52 49 46 46`).
-- **SVG Sanitization**: Strips XML entity declarations (`<!ENTITY>`), `<script>` blocks, and embedded payloads.
-- **Directory Traversal Immunity**: Filenames are discarded and replaced with random 128-bit hex UUIDs (`logo_{userId}_{hex}.{ext}`); file resolution is constrained strictly within the upload root directory.
-
-### E. Health & Readiness Probes
-- **Liveness Probe** (`/api/health`): Returns HTTP 200 with uptime, Node version, and memory allocation metrics.
-- **Readiness Probe** (`/api/ready`): Executes `SELECT 1` against the MySQL pool to verify active database connectivity and migration state before accepting user traffic.
-
-### F. SSR vs SPA Architectural Strategy
-- **Marketing & Public Pages** (`/`, `/privacy`, `/terms`, `/invoices/public/**`): Prerendered or server-side rendered for SEO, social crawlers, and instant Largest Contentful Paint (LCP).
-- **Authenticated App & Admin Panel** (`/timer`, `/dashboard`, `/analytics`, `/store`, `/admin/**`): Configured with `ssr: false` to enable local-first offline synchronization, Pinia state reactivity, and secure browser-side token storage.
+| Header | Production Setting | Security Objective |
+| :--- | :--- | :--- |
+| `Content-Security-Policy` | `default-src 'self'; script-src 'self' 'unsafe-inline'; ...` | Prevents cross-site scripting (XSS) and data injection. |
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains; preload` | Enforces HTTPS and protects against SSL stripping (HSTS). |
+| `X-Content-Type-Options` | `nosniff` | Blocks MIME-sniffing vulnerabilities. |
+| `X-Frame-Options` | `DENY` | Prevents clickjacking by blocking iframe embedding. |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` | Protects sensitive URL query parameters from leaking to third parties. |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=(), payment=()` | Restricts browser hardware and payment API access. |
+| `X-Request-ID` | Generated UUID v4 / propagated header | Provides end-to-end request tracing across logs and services. |
 
 ---
 
-## 4. Residual Risk Register & Operational Recommendations
+## 3. Session Security & Secret Protection
 
-| Risk Item | Severity | Current Mitigation | Recommended Next Step for Enterprise Production |
-|---|---|---|---|
-| **DDoS Attack Volume** | Medium | Server-level rate limiting (`rateLimiter.ts`) | Deploy Cloudflare or AWS CloudFront WAF at DNS edge. |
-| **Admin Credential Compromise** | Low | Step-up OTP for sensitive mutations + 4-hour max session lifespan | Enforce FIDO2 / WebAuthn hardware security keys for Super Admins. |
-| **Blob Storage Scalability** | Low | Local storage driver with path containment | Configure AWS S3 or Cloudflare R2 bucket with `STORAGE_DRIVER=s3`. |
-| **Log Aggregation** | Low | Structured JSON logs formatted for stdout | Pipe container stdout to Datadog, AWS CloudWatch, or Grafana Loki. |
+- **Passwordless OTP Authentication**: Eliminates password database vulnerabilities.
+- **HMAC Code Salting**: OTP codes are salted and verified with `AUTH_HMAC_SECRET`.
+- **SHA-256 Token Hashing**: Raw session tokens are never stored in the database. The `auth_sessions` table stores `token_hash = sha256(rawToken)`.
+- **HTTP-Only Cookies**: Tokens are transported using HTTP-only, `SameSite=Lax`, secure cookies (`wello_session`).
+- **Zero Plaintext Secrets**: Admins cannot view raw OTP codes, session tokens, or unmasked credentials via any API endpoint.
+
+---
+
+## 4. Distributed Rate Limiting Engine
+
+Implemented in [`backend/utils/rateLimiter.ts`](backend/utils/rateLimiter.ts) with MySQL/Redis sliding-window stores:
+
+| Endpoint Route / Action | Quota Limit | Window Duration | Throttling Action |
+| :--- | :---: | :---: | :--- |
+| **Auth: Send OTP** (`/api/auth/send-otp`) | 5 requests | 5 minutes | `429 Too Many Requests` |
+| **Auth: Verify OTP** (`/api/auth/verify-otp`) | 10 attempts | 10 minutes | `429 Too Many Requests` (Reset on success) |
+| **Event Ingestion** (`/api/events/track`) | 120 events | 1 minute | `429 Too Many Requests` |
+| **Analytics & Reports Export** | 10 exports | 10 minutes | `429 Too Many Requests` |
+| **General API Handlers** | 120 requests | 1 minute | `429 Too Many Requests` |
+
+Standard RFC rate-limiting headers are injected on all responses:
+- `X-RateLimit-Limit`
+- `X-RateLimit-Remaining`
+- `X-RateLimit-Reset`
+- `Retry-After` (when rate exceeded)
+
+---
+
+## 5. Personal Income Privacy & Admin Console Access Controls
+
+Wello holds sensitive personal income data. The admin console implements strict privacy tiers:
+
+```mermaid
+graph TD
+    Admin["Admin User"] -->|Requests Admin Directory| UsersView["users.view Permission"]
+    UsersView --> DirectoryView["Aggregated Directory<br/>(Names, Emails, Created Date, Masked Amounts)"]
+    
+    Admin -->|Drills Down into Financials| FinViewCheck{"Has users.financial_view<br/>AND provided non-empty Reason?"}
+    FinViewCheck -->|No / Missing Reason| Block403["403 Forbidden / 400 Bad Request<br/>(Access Blocked)"]
+    FinViewCheck -->|Yes| FinViewAllowed["Unmask Quotes, Payments, Invoices"]
+    FinViewAllowed --> WriteAudit["Write Immutable SHA-256 Audit Log Record<br/>(Actor, Target, Reason, Timestamp, PrevHash)"]
+```
+
+### Key Privacy Controls:
+1. **Aggregates by Default**: Admin dashboards and directories display user activity counts without exposing personal hourly targets or monetary amounts.
+2. **Dual-Permission Gate**: Viewing individual quotes, invoices, payments, or income sources requires `users.financial_view` (granted only to `SUPER_ADMIN`).
+3. **Mandatory Justification Reason**: Access requests without a non-empty `reason` parameter are rejected with `400 Bad Request`.
+4. **Moderation Isolation**: Content moderators can review job titles, categories, and flags, but financial amounts remain masked.
+
+---
+
+## 6. Cryptographic Tamper-Evident SHA-256 Audit Ledger
+
+Implemented in [`backend/utils/auditStore.ts`](backend/utils/auditStore.ts):
+
+- **Append-Only Schema**: The `audit_logs` table has no `UPDATE` or `DELETE` application paths.
+- **Hash Chain Math**: Each record calculates a canonical SHA-256 hash incorporating the previous record's hash:
+
+$$\text{Block Hash} = \text{SHA256}(\text{prev\_hash} \mid \text{admin\_email} \mid \text{permission} \mid \text{action} \mid \text{target} \mid \text{reason} \mid \text{ip} \mid \text{timestamp})$$
+
+- **Genesis Block**: The initial ledger block links to `0000000000000000000000000000000000000000000000000000000000000000`.
+- **Chain Verification**: The `/api/admin/audit-logs/verify` endpoint sequentially recalculates all block hashes from genesis to head, immediately flagging corrupted or tampered records.
+
+---
+
+## 7. File & Logo Upload Defense
+
+Implemented in [`backend/api/upload/logo.post.ts`](backend/api/upload/logo.post.ts) and [`backend/utils/storageDriver.ts`](backend/utils/storageDriver.ts):
+
+- **Magic Byte Validation**: Verifies file headers against binary magic numbers (PNG: `89 50 4E 47`, JPEG: `FF D8 FF`, WebP: `52 49 46 46`).
+- **SVG Sanitization**: Strips XML entity declarations (`DOCTYPE`), external references, embedded `<script>` tags, and inline event handlers (`onload`, `onerror`).
+- **UUID Filenames**: Files are saved with random UUID keys (e.g. `logo_3fa85f64-5717-4562-b3fc-2c963f66afa6.png`), preventing path traversal and overwrite attacks.
+- **Max File Size**: Enforces a strict 2MB limit on logo uploads and 10MB on Nginx ingress.
+
+---
+
+## 8. Support Impersonation Safety
+
+- **Read-Only Enforcement**: Impersonation sessions generated for customer support are strictly read-only.
+- **Mutation Rejection**: Any `POST`, `PUT`, `PATCH`, or `DELETE` requests made with an impersonation token are blocked with `403 Forbidden`.
+- **Time-Boxed Lifespan**: Impersonation tokens automatically expire after 15 minutes.
+- **Audit Requirement**: Support impersonation requires a mandatory support ticket justification reason.
+
+---
+
+## 9. Observability & Sentinel Alert Dispatcher
+
+Implemented in [`backend/utils/alertEngine.ts`](backend/utils/alertEngine.ts) and [`backend/utils/logger.ts`](backend/utils/logger.ts):
+
+- **PII Redaction**: Structured JSON logger automatically redacts passwords, tokens, API keys, cookies, and OTP secrets.
+- **Sentry Hook**: Captures runtime exceptions with sanitized contextual metadata (active only when `SENTRY_DSN` is configured).
+- **Webhook Alert Sentinel**: Dispatches critical system failures (backup failures, brute-force rate limit spikes, audit tampering attempts) to configured Slack / Discord / PagerDuty webhooks.
