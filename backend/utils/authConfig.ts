@@ -36,6 +36,9 @@ export interface RegisteredUser {
   email: string
   avatarInitials: string
   targetHourly: number
+  currencyCode: string
+  timezone: string
+  countryCode?: string
   role: 'user' | 'admin'
   serviceCategory?: string
   createdAt: string
@@ -63,6 +66,9 @@ registeredUsers.set('rahul@mehtatech.in', {
   email: 'rahul@mehtatech.in',
   avatarInitials: 'RM',
   targetHourly: 350,
+  currencyCode: 'USD',
+  timezone: 'UTC',
+  countryCode: 'US',
   role: 'user',
   serviceCategory: 'Independent Professional',
   createdAt: new Date(Date.now() - 30 * 86400000).toISOString(),
@@ -75,6 +81,9 @@ registeredUsers.set('admin@wello.com', {
   email: 'admin@wello.com',
   avatarInitials: 'SA',
   targetHourly: 500,
+  currencyCode: 'USD',
+  timezone: 'UTC',
+  countryCode: 'US',
   role: 'admin',
   serviceCategory: 'System Administrator',
   createdAt: new Date(Date.now() - 60 * 86400000).toISOString(),
@@ -168,7 +177,7 @@ export function getAuthLogs(): AuthLog[] {
   return [...authLogs]
 }
 
-export function getOrCreateUser(email: string, name?: string, serviceCategory?: string): RegisteredUser {
+export function getOrCreateUser(email: string, name?: string, serviceCategory?: string, currencyCode?: string, timezone?: string, countryCode?: string): RegisteredUser {
   const normalizedEmail = email.toLowerCase().trim()
   let user = registeredUsers.get(normalizedEmail)
 
@@ -187,6 +196,9 @@ export function getOrCreateUser(email: string, name?: string, serviceCategory?: 
       email: normalizedEmail,
       avatarInitials: initials,
       targetHourly: 350,
+      currencyCode: (currencyCode || 'USD').toUpperCase().trim().slice(0, 3),
+      timezone: timezone || 'UTC',
+      countryCode: countryCode ? countryCode.toUpperCase().trim().slice(0, 2) : undefined,
       role: (normalizedEmail.includes('admin') || registeredUsers.size === 0) ? 'admin' : 'user',
       serviceCategory: serviceCategory || 'Independent Professional',
       createdAt: new Date().toISOString(),
@@ -197,6 +209,9 @@ export function getOrCreateUser(email: string, name?: string, serviceCategory?: 
     user.lastLoginAt = new Date().toISOString()
     if (name) user.name = name
     if (serviceCategory) user.serviceCategory = serviceCategory
+    if (currencyCode) user.currencyCode = currencyCode.toUpperCase().trim().slice(0, 3)
+    if (timezone) user.timezone = timezone
+    if (countryCode) user.countryCode = countryCode.toUpperCase().trim().slice(0, 2)
   }
 
   return user

@@ -22,6 +22,7 @@ export interface InvoiceRecord {
   customerAddress: string
   serviceDescription: string
   projectId?: string
+  currencyCode?: string
   sellerName?: string
   sellerLogo?: string
   sellerAddress?: string
@@ -53,10 +54,11 @@ const initialInvoices: InvoiceRecord[] = [
     invoiceDate: new Date(Date.now() - 10 * 86400000).toISOString().split('T')[0],
     dueDate: new Date(Date.now() + 5 * 86400000).toISOString().split('T')[0],
     customerName: 'Acme Corporation',
-    customerContact: 'billing@acme.com · +91 98765 43210',
-    customerAddress: 'Suite 402, Trade Tower, Lower Parel, Mumbai, Maharashtra - 400013',
+    customerContact: 'billing@acme.com · +1 415 555 2671',
+    customerAddress: 'Suite 402, Trade Tower, San Francisco, CA 94105, USA',
     serviceDescription: 'Full-stack Web Application & API Integration Services',
     projectId: 'p1',
+    currencyCode: 'USD',
     items: [
       { id: 'item_1', description: 'Web Application Frontend Development', quantity: 25, rate: 800, amount: 20000 },
       { id: 'item_2', description: 'RESTful API & Database Integration', quantity: 10, rate: 800, amount: 8000 }
@@ -79,9 +81,10 @@ const initialInvoices: InvoiceRecord[] = [
     dueDate: new Date(Date.now() + 12 * 86400000).toISOString().split('T')[0],
     customerName: 'TechVision Global',
     customerContact: 'finance@techvision.io',
-    customerAddress: '12th Floor, Cyber City, Phase 2, Gurugram, Haryana - 122002',
+    customerAddress: '12th Floor, Cyber Plaza, London, EC1A 1BB, UK',
     serviceDescription: 'UI/UX Mobile Design System & Component Library',
     projectId: 'p2',
+    currencyCode: 'USD',
     items: [
       { id: 'item_3', description: 'Mobile Design System & Component Specs', quantity: 18, rate: 750, amount: 13500 },
       { id: 'item_4', description: 'Interactive Design Workshop & Handoff', quantity: 4, rate: 750, amount: 3000 }
@@ -134,7 +137,7 @@ export function createInvoice(data: Partial<InvoiceRecord> & { userId: string })
     description: it.description || 'Service Line Item',
     quantity: Number(it.quantity) || 1,
     rate: Number(it.rate) || 0,
-    amount: (Number(it.quantity) || 1) * (Number(it.rate) || 0),
+    amount: Math.round(((Number(it.quantity) || 1) * (Number(it.rate) || 0)) * 10000) / 10000,
   }))
 
   const subtotal = items.reduce((sum, item) => sum + item.amount, 0)
@@ -155,12 +158,13 @@ export function createInvoice(data: Partial<InvoiceRecord> & { userId: string })
     customerAddress: data.customerAddress || '',
     serviceDescription: data.serviceDescription || 'Professional Services',
     projectId: data.projectId,
-    sellerName: data.sellerName || 'Rahul Mehta Tech Consulting',
+    currencyCode: (data.currencyCode || 'USD').toUpperCase().trim().slice(0, 3),
+    sellerName: data.sellerName || 'Wello Consulting',
     sellerLogo: data.sellerLogo || '',
-    sellerAddress: data.sellerAddress || '102 Tech Park, Suite 4B, Indiranagar, Bengaluru, KA 560038, India',
-    sellerEmail: data.sellerEmail || 'rahul@mehtatech.in',
-    sellerPhone: data.sellerPhone || '+91 98765 43210',
-    sellerTaxId: data.sellerTaxId || 'GSTIN: 29AAAAA0000A1Z5',
+    sellerAddress: data.sellerAddress || '100 Innovation Way, Suite 400, San Francisco, CA 94105, USA',
+    sellerEmail: data.sellerEmail || 'consulting@wello.app',
+    sellerPhone: data.sellerPhone || '+14155552671',
+    sellerTaxId: data.sellerTaxId || 'Tax ID: US987654321',
     items,
     discount,
     taxPercent,

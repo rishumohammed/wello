@@ -8,13 +8,19 @@
     "build": "nitropack build",
     "preview": "node .output/server/index.mjs",
     "start": "node .output/server/index.mjs",
-    "test": "node tests/test_auth.mjs && node tests/test_admin_apis.mjs && node tests/test_store_and_invoicing.mjs"
+    "db:migrate": "node database/runner.cjs migrate",
+    "db:rollback": "node database/runner.cjs rollback",
+    "db:seed": "node database/runner.cjs seed",
+    "test": "node tests/test_auth_guards.mjs && node tests/test_auth.mjs && node tests/test_admin_apis.mjs && node tests/test_store_and_invoicing.mjs && node tests/test_user_apis.mjs && node tests/test_globalization_fx_tz_tax.mjs && node tests/test_metrics_engine.mjs && node tests/e2e_verification.mjs"
   },
   "dependencies": {
     "dayjs": "^1.11.13",
     "h3": "^1.12.0",
+    "knex": "^3.3.0",
+    "libphonenumber-js": "^1.13.13",
     "mysql2": "^3.11.0",
-    "nitropack": "^2.9.7"
+    "nitropack": "^2.9.7",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^20.12.0",
