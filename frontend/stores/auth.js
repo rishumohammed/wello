@@ -8,25 +8,6 @@ import { useWelloStore } from './wello'
 const AUTH_TOKEN_KEY = 'wello_auth_token_v1'
 const AUTH_USER_KEY  = 'wello_auth_user_v1'
 
-const DEMO_USER = {
-  id: 'u1',
-  name: 'Rahul Mehta',
-  email: 'rahul@mehtatech.in',
-  avatarInitials: 'RM',
-  targetHourly: 350,
-  role: 'user',
-  serviceCategory: 'Independent Professional',
-}
-
-const DEMO_ADMIN = {
-  id: 'u_admin',
-  name: 'System Admin',
-  email: 'admin@wello.com',
-  avatarInitials: 'SA',
-  targetHourly: 500,
-  role: 'admin',
-  serviceCategory: 'System Administrator',
-}
 
 export const useAuthStore = defineStore('auth', () => {
   // Use Nuxt useCookie for SSR & Client session persistence across page refreshes
@@ -63,8 +44,8 @@ export const useAuthStore = defineStore('auth', () => {
     (typeof window !== 'undefined' && localStorage.getItem('wello_logged_out') === 'true')
   )
 
-  const token = ref(isExplicitlyLoggedOut ? null : (initialToken || 'demo_token_wello'))
-  const user  = ref(isExplicitlyLoggedOut ? null : (initialUser  || { ...DEMO_USER }))
+  const token = ref(isExplicitlyLoggedOut ? null : (initialToken || null))
+  const user  = ref(isExplicitlyLoggedOut ? null : (initialUser  || null))
 
   const isAuthenticated = computed(() => Boolean(token.value && user.value))
   const isLoggedIn = computed(() => Boolean(token.value && user.value))
@@ -183,15 +164,6 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  function loginAsDemo() {
-    setSession('demo_token_' + Date.now(), { ...DEMO_USER })
-    return { success: true, user: DEMO_USER }
-  }
-
-  function loginAsAdminDemo() {
-    setSession('admin_token_' + Date.now(), { ...DEMO_ADMIN })
-    return { success: true, user: DEMO_ADMIN }
-  }
 
   function logout() {
     token.value = null
@@ -237,8 +209,6 @@ export const useAuthStore = defineStore('auth', () => {
     init,
     sendOtp,
     verifyOtp,
-    loginAsDemo,
-    loginAsAdminDemo,
     logout,
     setSession,
   }

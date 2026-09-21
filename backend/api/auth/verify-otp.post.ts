@@ -12,21 +12,24 @@ import {
   SESSION_COOKIE_NAME,
   getSessionCookieOptions,
 } from '../../utils/authGuard'
+import { logAnalyticsEvent } from '../../utils/analyticsService'
+
+import { requireRateLimit, resetRateLimit } from '../../utils/rateLimiter'
 
 const verifyOtpSchema = z.object({
-  email: z.string().optional(),
-  phone: z.string().optional(),
-  identifier: z.string().optional(),
-  code: z.string().optional(),
-  otp: z.string().optional(),
-  name: z.string().optional().default(''),
-  serviceCategory: z.string().optional().default(''),
+  email: z.string().max(255).optional(),
+  phone: z.string().max(50).optional(),
+  identifier: z.string().max(255).optional(),
+  code: z.string().max(20).optional(),
+  otp: z.string().max(20).optional(),
+  name: z.string().max(100).optional().default(''),
+  serviceCategory: z.string().max(100).optional().default(''),
   targetHourly: z.number().or(z.string()).optional(),
   currencyCode: z.string().length(3).optional().default('USD'),
-  timezone: z.string().optional().default('UTC'),
-  countryCode: z.string().length(2).optional(),
-  defaultCountry: z.string().optional().default('US'),
-})
+  timezone: z.string().max(50).optional().default('UTC'),
+  countryCode: z.string().max(2).optional(),
+  defaultCountry: z.string().max(10).optional().default('US'),
+}).strict()
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
@@ -60,6 +63,15 @@ export default defineEventHandler(async (event) => {
 
   const normalized = normalizeIdentifier(inputTarget, defaultCountry)
 
+  // Enforce distributed rate limit on verification attempts (10 attempts / 10m)
+  await requireRateLimit(event, {
+    keyPrefix: 'auth_verify_otp',
+    limit: 10,
+    windowSeconds: 600,
+    identifier: normalized.value,
+    customErrorMessage: 'Too many invalid verification attempts. Please wait before retrying.',
+  })
+
   // 1. Verify code against MySQL otp_codes table
   let verification = await verifyDbOtp(normalized.value, code, 'login')
   if (!verification.valid) {
@@ -77,6 +89,10 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  // Clear rate limits on successful authentication
+  await resetRateLimit(`rl:auth_verify_otp:${normalized.value.toLowerCase()}`)
+  await resetRateLimit(`rl:auth_send_otp:${normalized.value.toLowerCase()}`)
+
   // 2. Fetch or create user in MySQL users table
   const dbUser = await getOrCreateDbUser(normalized, name || verification.name || undefined, {
     currency: data.currencyCode,
@@ -88,16 +104,48 @@ export default defineEventHandler(async (event) => {
   const userAgent = getHeader(event, 'user-agent') || ''
   const ipAddress = getHeader(event, 'x-forwarded-for') || (event.node?.req?.socket?.remoteAddress) || ''
 
+  const isAdminUser = dbUser.role === 'admin' || dbUser.email === 'admin@wello.com'
   const session = await createDbSession(dbUser.id, {
     userAgent,
     ipAddress,
+    isAdmin: isAdminUser,
   })
 
   // 4. Set HttpOnly session cookie
   setCookie(event, SESSION_COOKIE_NAME, session.token, getSessionCookieOptions())
 
+  // Log analytics event
+  await logAnalyticsEvent(dbUser.id, 'otp_verified', {
+    auth_type: normalized.type,
+    country: data.countryCode || dbUser.country,
+  }, false, {
+    country: data.countryCode || dbUser.country || undefined,
+    timezone: data.timezone || dbUser.timezone || undefined,
+  })
+
   // 5. Retrieve full authenticated user with resolved admin role & permissions
   const authUser = await getAuthenticatedUserByToken(session.token)
+
+  // 6. If administrator, record audit log and trigger login security alert
+  if (authUser?.role === 'admin' || authUser?.adminRole) {
+    await recordAuditLog({
+      adminEmail: authUser.email,
+      actorId: authUser.id,
+      action: 'ADMIN_LOGIN',
+      module: 'Security',
+      permissionUsed: 'audit_logs.view',
+      target: authUser.email,
+      ipAddress,
+      userAgent,
+      newValue: `Admin sign-in successful (Role: ${authUser.adminRole || 'ADMIN'}). Session valid for 4 hours.`,
+    })
+
+    pushAdminNotification({
+      type: 'SECURITY_ALERT',
+      title: 'Administrator Sign-In Detected',
+      message: `Admin ${authUser.email} logged in from IP ${ipAddress || '127.0.0.1'}.`,
+    })
+  }
 
   return {
     success: true,

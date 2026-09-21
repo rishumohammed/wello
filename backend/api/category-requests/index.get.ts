@@ -1,7 +1,7 @@
 // backend/api/category-requests/index.get.ts
 import { defineEventHandler } from 'h3'
 import { requireUser } from '../../utils/authGuard'
-import { getDb } from '../../utils/authService'
+import { getDb } from '../../utils/db'
 import { sendSuccess } from '../../utils/apiResponse'
 
 export default defineEventHandler(async (event) => {

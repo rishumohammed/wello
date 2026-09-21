@@ -46,18 +46,7 @@
         </button>
       </form>
 
-      <!-- Quick Account Switchers for Testing -->
-      <div class="mt-5 pt-4 border-t border-color flex flex-col gap-2 text-xs" id="login-quick-accounts">
-        <div class="text-tertiary font-semibold text-center">Quick Account Sign-In:</div>
-        <div class="flex gap-2">
-          <button type="button" class="btn btn-secondary btn-sm flex-1 text-xs py-2 px-2.5" @click="useUserAccount" id="btn-demo-user">
-            👤 User Account (Rahul)
-          </button>
-          <button type="button" class="btn btn-secondary btn-sm flex-1 text-xs py-2 px-2.5" @click="useAdminAccount" id="btn-demo-admin">
-            🛡️ Admin Account
-          </button>
-        </div>
-      </div>
+
 
       <!-- Switch to Register -->
       <div class="auth-bottom-switch mt-6">
@@ -162,15 +151,6 @@ import { useAuthStore } from '~/stores/auth'
 const authStore = useAuthStore()
 const router = useRouter()
 
-function useUserAccount() {
-  authStore.loginAsDemo()
-  router.push('/')
-}
-
-function useAdminAccount() {
-  authStore.loginAsAdminDemo()
-  router.push('/admin')
-}
 
 const step = ref(1)
 const email = ref('')
@@ -328,8 +308,5 @@ async function handleVerifyOtp() {
   }
 }
 
-function handleDemoLogin() {
-  authStore.loginAsDemo()
-  router.push('/')
-}
+
 </script>

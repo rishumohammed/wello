@@ -5,6 +5,7 @@ import { requireUser } from '../../utils/authGuard'
 import { getDb, normalizeIdentifier } from '../../utils/authService'
 import { sendSuccess, sendError, formatZodError } from '../../utils/apiResponse'
 import { getIdempotencyKey, checkIdempotency, saveIdempotency } from '../../utils/idempotency'
+import { logAnalyticsEvent } from '../../utils/analyticsService'
 
 const createClientSchema = z.object({
   name: z.string().min(1, 'Client name is required').max(200),
@@ -75,6 +76,13 @@ export default defineEventHandler(async (event) => {
   if (idempotencyKey) {
     await saveIdempotency(user.id, idempotencyKey, path, 201, responseData)
   }
+
+  // Emit trusted analytics event
+  await logAnalyticsEvent(user.id, 'client_created', {
+    client_id: newClient.id,
+    has_email: Boolean(newClient.email),
+    country: newClient.country,
+  })
 
   return sendSuccess(event, responseData, undefined, 201)
 })

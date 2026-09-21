@@ -118,6 +118,7 @@ export default defineEventHandler(async (event) => {
     session: {
       id: completedSession.id,
       projectId: completedSession.project_id,
+      incomeSourceId: completedSession.income_source_id,
       project: project ? { id: project.id, name: project.name, currency: project.currency } : null,
       title: completedSession.title,
       type: completedSession.type,

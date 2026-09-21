@@ -281,6 +281,14 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useToast } from '~/composables/useToast'
+import IconUser from '~/components/IconUser.vue'
+import IconAlert from '~/components/IconAlert.vue'
+import IconBriefcase from '~/components/IconBriefcase.vue'
+import IconInsights from '~/components/IconInsights.vue'
+import IconClock from '~/components/IconClock.vue'
+import IconFolders from '~/components/IconFolders.vue'
+import IconEdit from '~/components/IconEdit.vue'
+import IconShield from '~/components/IconShield.vue'
 
 definePageMeta({
   layout: 'admin',

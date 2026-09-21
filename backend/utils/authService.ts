@@ -7,8 +7,7 @@
 import crypto from 'node:crypto'
 import { parsePhoneNumberFromString } from 'libphonenumber-js'
 import { getDb } from './db'
-
-export { getDb }
+export { getDb } from './db'
 
 // ─── Environment & Security Config ──────────────────────────────────────────
 
@@ -41,12 +40,35 @@ export interface DbUser {
   phone_e164: string | null
   status: 'REGISTERED' | 'EMAIL_PENDING' | 'VERIFICATION_PENDING' | 'VERIFIED' | 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'BLOCKED'
   role: 'user' | 'admin'
+  earning_persona?: 'freelancer_projects' | 'salaried' | 'daily_hourly_wage' | 'gig_retainer' | 'mixed_hybrid' | string
+  include_overhead_in_metrics?: boolean
   state: string | null
   city: string | null
   business_name: string | null
   business_address: string | null
   business_tax_id: string | null
+  business_phone?: string | null
+  business_email?: string | null
+  business_logo?: string | null
+  default_invoice_notes?: string | null
+  tax_registration_number?: string | null
+  tax_scheme?: string | null
+  default_tax_rate?: number | null
+  default_tax_inclusive?: boolean
+  default_payment_terms_days?: number
+  target_monthly?: number | null
+  target_annual?: number | null
+  daily_capacity_hours?: number | null
+  weekly_capacity_hours?: number | null
   max_timer_hours?: number
+  idle_reminder_minutes?: number
+  notify_email_on_idle?: boolean
+  notify_push_on_idle?: boolean
+  digest_frequency?: 'weekly' | 'daily' | 'disabled' | string
+  digest_day_of_week?: number
+  digest_hour_utc?: number
+  email_unsubscribed_at?: string | null
+  unsubscribe_token?: string | null
   created_at: string
   updated_at: string
   deleted_at: string | null
@@ -55,6 +77,9 @@ export interface DbUser {
 export interface AuthenticatedUser extends DbUser {
   adminRole?: string | null
   adminPermissions: string[]
+  isImpersonation?: boolean
+  impersonatorEmail?: string | null
+  impersonationExpiresAt?: string | null
 }
 
 export interface SessionContext {
@@ -321,6 +346,8 @@ export async function getOrCreateDbUser(
   const isSuperAdminEmail = identifier.type === 'email' && identifier.value.toLowerCase() === 'admin@wello.com'
   const role = isSuperAdminEmail ? 'admin' : (extra.role || 'user')
 
+  const unsubToken = crypto.randomBytes(24).toString('hex')
+
   const [newUserId] = await db('users').insert({
     name: displayName,
     email: emailValue,
@@ -332,6 +359,10 @@ export async function getOrCreateDbUser(
     phone_e164: phoneValue,
     status: 'ACTIVE',
     role,
+    unsubscribe_token: unsubToken,
+    digest_frequency: 'weekly',
+    digest_day_of_week: 1,
+    digest_hour_utc: 9,
     created_at: knexFnNow(),
     updated_at: knexFnNow(),
   })
@@ -359,12 +390,14 @@ export function hashSessionToken(token: string): string {
 
 export async function createDbSession(
   userId: number,
-  options: { userAgent?: string; ipAddress?: string; deviceInfo?: string } = {}
+  options: { userAgent?: string; ipAddress?: string; deviceInfo?: string; isAdmin?: boolean } = {}
 ): Promise<{ token: string; expiresAt: Date }> {
   const db = getDb()
   const token = crypto.randomBytes(32).toString('hex')
   const tokenHash = hashSessionToken(token)
-  const expiresAt = new Date(Date.now() + 30 * 86400 * 1000) // 30-day sliding expiry
+  // Admin sessions: 4-hour max lifespan; regular users: 30 days
+  const expiryDuration = options.isAdmin ? 4 * 3600 * 1000 : 30 * 86400 * 1000
+  const expiresAt = new Date(Date.now() + expiryDuration)
 
   await db('auth_sessions').insert({
     token_hash: tokenHash,
@@ -372,6 +405,39 @@ export async function createDbSession(
     user_agent: options.userAgent || null,
     ip_address: options.ipAddress || null,
     device_info: options.deviceInfo || null,
+    created_at: knexFnNow(),
+    last_seen_at: knexFnNow(),
+    expires_at: expiresAt,
+    revoked_at: null,
+  })
+
+  return { token, expiresAt }
+}
+
+/**
+ * Creates a time-boxed, strictly read-only impersonation session for Support / Admin
+ */
+export async function createImpersonationSession(
+  targetUserId: number,
+  adminEmail: string,
+  reason: string,
+  durationMinutes: number = 15
+): Promise<{ token: string; expiresAt: Date }> {
+  const db = getDb()
+  const token = 'imp_' + crypto.randomBytes(32).toString('hex')
+  const tokenHash = hashSessionToken(token)
+  const clampedMinutes = Math.min(30, Math.max(5, durationMinutes))
+  const expiresAt = new Date(Date.now() + clampedMinutes * 60 * 1000)
+
+  await db('auth_sessions').insert({
+    token_hash: tokenHash,
+    user_id: targetUserId,
+    user_agent: 'Support Impersonation Mode',
+    ip_address: null,
+    device_info: `Impersonated by ${adminEmail}`,
+    is_impersonation: true,
+    impersonator_email: adminEmail,
+    impersonation_reason: reason,
     created_at: knexFnNow(),
     last_seen_at: knexFnNow(),
     expires_at: expiresAt,
@@ -396,21 +462,54 @@ export async function getAuthenticatedUserByToken(token: string): Promise<Authen
     .select(
       'auth_sessions.id as session_id',
       'auth_sessions.last_seen_at as session_last_seen',
+      'auth_sessions.expires_at as session_expires_at',
+      'auth_sessions.is_impersonation as session_is_impersonation',
+      'auth_sessions.impersonator_email as session_impersonator_email',
       'users.*'
     )
     .first()
 
   if (!sessionRecord) {
     const isDevAllowed = process.env.DEV_MODE === 'true' || process.env.ALLOW_DEV_AUTH === 'true' || process.env.NODE_ENV !== 'production'
-    if (isDevAllowed && (token.startsWith('demo_token') || token.startsWith('admin_token'))) {
-      const isAdmin = token.startsWith('admin_token')
-      const email = isAdmin ? 'admin@wello.com' : 'rahul@mehtatech.in'
-      const name = isAdmin ? 'System Admin' : 'Alex Morgan'
+    if (isDevAllowed && (token.startsWith('demo_token') || token.startsWith('admin_token') || token.startsWith('analyst_token') || token.startsWith('support_token'))) {
+      const isAdmin = token.startsWith('admin_token') || token.startsWith('analyst_token') || token.startsWith('support_token')
+      let email = 'rahul@mehtatech.in'
+      let name = 'Alex Morgan'
+      let roleKey = 'SUPER_ADMIN'
+
+      if (token.startsWith('admin_token')) {
+        email = 'admin@wello.com'
+        name = 'System Admin'
+        roleKey = 'SUPER_ADMIN'
+      } else if (token.startsWith('analyst_token')) {
+        email = 'analyst@wello.com'
+        name = 'Growth Analyst'
+        roleKey = 'ANALYST'
+      } else if (token.startsWith('support_token')) {
+        email = 'support@wello.com'
+        name = 'Support Specialist'
+        roleKey = 'SUPPORT'
+      }
+
       const user = await getOrCreateDbUser({ type: 'email', value: email, raw: email }, name, {
         role: isAdmin ? 'admin' : 'user',
         currency: 'USD',
         timezone: 'America/New_York',
       })
+
+      if (isAdmin) {
+        const existingAdmin = await db('admin_users').where({ user_id: user.id }).first()
+        if (!existingAdmin) {
+          await db('admin_users').insert({
+            user_id: user.id,
+            email: user.email,
+            role_key: roleKey,
+            is_active: true,
+          })
+        } else {
+          await db('admin_users').where({ user_id: user.id }).update({ role_key: roleKey, is_active: true })
+        }
+      }
 
       const existingSession = await db('auth_sessions').where({ token_hash: tokenHash }).first()
       if (!existingSession) {
@@ -421,11 +520,11 @@ export async function getAuthenticatedUserByToken(token: string): Promise<Authen
           ip_address: '127.0.0.1',
           created_at: knexFnNow(),
           last_seen_at: knexFnNow(),
-          expires_at: new Date(Date.now() + 30 * 86400 * 1000),
+          expires_at: new Date(Date.now() + 4 * 3600 * 1000),
         })
       } else {
         await db('auth_sessions').where({ id: existingSession.id }).update({
-          expires_at: new Date(Date.now() + 30 * 86400 * 1000),
+          expires_at: new Date(Date.now() + 4 * 3600 * 1000),
           revoked_at: null,
           last_seen_at: knexFnNow(),
         })
@@ -440,6 +539,9 @@ export async function getAuthenticatedUserByToken(token: string): Promise<Authen
         .select(
           'auth_sessions.id as session_id',
           'auth_sessions.last_seen_at as session_last_seen',
+          'auth_sessions.expires_at as session_expires_at',
+          'auth_sessions.is_impersonation as session_is_impersonation',
+          'auth_sessions.impersonator_email as session_impersonator_email',
           'users.*'
         )
         .first()
@@ -450,23 +552,26 @@ export async function getAuthenticatedUserByToken(token: string): Promise<Authen
 
   // Reject suspended, blocked, or inactive accounts
   if (sessionRecord.status === 'SUSPENDED' || sessionRecord.status === 'BLOCKED' || sessionRecord.status === 'INACTIVE') {
-    // Immediately revoke session
     await db('auth_sessions')
       .where({ id: sessionRecord.session_id })
       .update({ revoked_at: now })
     return null
   }
 
-  // Sliding expiry: update last_seen_at & extend expires_at by 30 days if last seen > 5 min ago
-  const lastSeenMs = new Date(sessionRecord.session_last_seen).getTime()
-  if (now.getTime() - lastSeenMs > 5 * 60 * 1000) {
-    const extendedExpires = new Date(now.getTime() + 30 * 86400 * 1000)
-    await db('auth_sessions')
-      .where({ id: sessionRecord.session_id })
-      .update({
-        last_seen_at: now,
-        expires_at: extendedExpires,
-      })
+  // Sliding expiry (only for non-impersonation regular sessions)
+  const isImpersonation = Boolean(sessionRecord.session_is_impersonation)
+  if (!isImpersonation) {
+    const lastSeenMs = new Date(sessionRecord.session_last_seen).getTime()
+    if (now.getTime() - lastSeenMs > 5 * 60 * 1000) {
+      const slidingDuration = sessionRecord.role === 'admin' ? 4 * 3600 * 1000 : 30 * 86400 * 1000
+      const extendedExpires = new Date(now.getTime() + slidingDuration)
+      await db('auth_sessions')
+        .where({ id: sessionRecord.session_id })
+        .update({
+          last_seen_at: now,
+          expires_at: extendedExpires,
+        })
+    }
   }
 
   // Resolve admin role and permissions
@@ -496,6 +601,9 @@ export async function getAuthenticatedUserByToken(token: string): Promise<Authen
     ...sessionRecord,
     adminRole,
     adminPermissions,
+    isImpersonation,
+    impersonatorEmail: sessionRecord.session_impersonator_email || null,
+    impersonationExpiresAt: isImpersonation ? new Date(sessionRecord.session_expires_at).toISOString() : null,
   }
 }
 
@@ -515,6 +623,25 @@ export async function revokeAllSessionsForUser(userId: number): Promise<number> 
     .whereNull('revoked_at')
     .update({ revoked_at: new Date() })
   return rows
+}
+
+// ─── Admin Action OTP Verification (Step-Up Re-Authentication) ───────────────
+
+export async function createAdminActionOtp(
+  adminEmail: string,
+  actionType: string = 'reauth'
+): Promise<{ code: string; expiresAt: Date }> {
+  const purpose = `admin_${actionType.toLowerCase().trim()}`
+  return await createDbOtp(adminEmail, purpose as any, 'Admin Action', 10)
+}
+
+export async function verifyAdminActionOtp(
+  adminEmail: string,
+  code: string,
+  actionType: string = 'reauth'
+): Promise<{ valid: boolean; error?: string }> {
+  const purpose = `admin_${actionType.toLowerCase().trim()}`
+  return await verifyDbOtp(adminEmail, code, purpose as any)
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

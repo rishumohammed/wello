@@ -341,6 +341,39 @@
                 </span>
               </div>
 
+              <!-- Earning Persona Selection -->
+              <div class="form-group">
+                <label class="form-label" for="settings-earning-persona">
+                  Earning Persona
+                </label>
+                <select id="settings-earning-persona" v-model="prefForm.earningPersona" class="form-select">
+                  <option value="freelancer_projects">💼 Freelancer / Project-Based (Clients, quotes, project billing)</option>
+                  <option value="salaried">🏢 Salaried Employee (Contract salary, true rate, commute drag)</option>
+                  <option value="daily_hourly_wage">⏱️ Daily & Hourly Worker (Multiple employers, shifts, quick entry)</option>
+                  <option value="gig_retainer">🛵 Gig Worker & Retainers (Dynamic tasks, recurring retainers)</option>
+                  <option value="mixed_hybrid">⚡ Mixed / Hybrid Portfolio (Combined salary, freelance & gigs)</option>
+                </select>
+                <span class="form-hint">
+                  Customizes terminology, quick actions, and dashboard intelligence cards to fit how you earn.
+                </span>
+              </div>
+
+              <!-- Overhead Costs Inclusion Toggle -->
+              <div class="form-group">
+                <label class="form-label">Overhead & Non-Project Cost Allocations</label>
+                <label class="flex items-center gap-2 text-xs cursor-pointer p-3 bg-card border rounded-8">
+                  <input
+                    type="checkbox"
+                    v-model="prefForm.includeOverheadInMetrics"
+                    id="toggle-overhead-in-metrics"
+                  />
+                  <div>
+                    <span class="fw-700 text-primary">Factor overhead expenses into effective hourly rate</span>
+                    <span class="text-tertiary block text-2xs mt-0.5">Deducts commute fares, software tools, licenses, and equipment based on their allocation rules</span>
+                  </div>
+                </label>
+              </div>
+
               <!-- Forgotten-Timer Max Hours Limit -->
               <div class="form-group">
                 <label class="form-label" for="settings-max-timer-hours">
@@ -500,6 +533,486 @@
               <span>Sign Out</span>
             </button>
           </div>
+
+          <!-- Danger Zone: Reset Work Data & Account Deletion -->
+          <div class="pt-6 border-t mt-4 space-y-4">
+            <div class="card border border-error/30 bg-error/5 p-4 rounded-xl">
+              <div class="flex items-center justify-between flex-wrap gap-4">
+                <div>
+                  <div class="font-bold text-sm text-error">Delete All Work Data (Keep Account)</div>
+                  <div class="text-xs text-tertiary mt-0.5">
+                    Permanently wipes all sessions, invoices, clients, payments, and projects while keeping your user login and free addons.
+                  </div>
+                </div>
+                <button
+                  class="btn btn-secondary btn-sm text-error border-error-subtle font-bold"
+                  @click="handleResetWorkData"
+                  id="btn-reset-work-data"
+                >
+                  Wipe Work Data
+                </button>
+              </div>
+            </div>
+
+            <div class="card border border-error/30 bg-error/5 p-4 rounded-xl">
+              <div class="flex items-center justify-between flex-wrap gap-4">
+                <div>
+                  <div class="font-bold text-sm text-error">Delete Account & All Personal Data</div>
+                  <div class="text-xs text-tertiary mt-0.5">
+                    Schedules permanent erasure of your account with a 14-day grace period. All records across all tables will be purged.
+                  </div>
+                  <div v-if="store.user.status === 'pending_deletion'" class="mt-2 text-xs text-error font-bold">
+                    ⚠️ Account scheduled for permanent erasure on {{ formatDate(store.user.scheduledDeletionAt) }}.
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <button
+                    v-if="store.user.status === 'pending_deletion'"
+                    class="btn btn-primary btn-sm font-bold text-xs"
+                    @click="handleCancelDeletion"
+                    id="btn-cancel-deletion"
+                  >
+                    Cancel Account Deletion
+                  </button>
+                  <button
+                    v-else
+                    class="btn btn-danger btn-sm font-bold text-xs"
+                    @click="handleDeleteAccount"
+                    id="btn-delete-account"
+                  >
+                    Delete Account (14-day grace)
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: DATA EXPORT & IMPORT -->
+    <div v-if="activeTab === 'data'" class="settings-section flex flex-col gap-6">
+      <!-- Card 1: Data Export -->
+      <div class="card" id="settings-export-card">
+        <div class="card-header flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="metric-icon-box purple">
+              <IconDownload :size="16" />
+            </div>
+            <div>
+              <div class="card-title text-base">Export Your Personal Data</div>
+              <div class="card-subtitle text-xs">Download complete backups in standard JSON and individual CSV files</div>
+            </div>
+          </div>
+        </div>
+        <div class="card-body flex flex-col gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="p-4 bg-off-white rounded-12 border-subtle-box flex flex-col justify-between">
+              <div>
+                <div class="fw-700 text-sm text-primary mb-1">📦 Complete Archive (ZIP)</div>
+                <div class="text-xs text-tertiary">All your sessions, invoices, payments, clients, expenses, and full JSON metadata bundled in a single ZIP file.</div>
+              </div>
+              <button class="btn btn-primary btn-sm font-bold mt-4 self-start" @click="store.exportAllZip()" id="btn-export-zip">
+                Download Complete ZIP
+              </button>
+            </div>
+
+            <div class="p-4 bg-off-white rounded-12 border-subtle-box flex flex-col justify-between">
+              <div>
+                <div class="fw-700 text-sm text-primary mb-1">📄 Full JSON Backup</div>
+                <div class="text-xs text-tertiary">Portable machine-readable JSON backup containing every database record linked to your user account.</div>
+              </div>
+              <button class="btn btn-secondary btn-sm font-semibold mt-4 self-start" @click="store.exportJson()" id="btn-export-json">
+                Download JSON
+              </button>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t">
+            <div class="fw-700 text-xs text-secondary uppercase mb-3">Download Per-Entity CSV Spreadsheets</div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <button class="btn btn-ghost btn-xs border text-xs" @click="store.exportCsv('sessions')" id="btn-export-csv-sessions">⏱️ Work Sessions (.csv)</button>
+              <button class="btn btn-ghost btn-xs border text-xs" @click="store.exportCsv('payments')" id="btn-export-csv-payments">💳 Payments (.csv)</button>
+              <button class="btn btn-ghost btn-xs border text-xs" @click="store.exportCsv('expenses')" id="btn-export-csv-expenses">🧾 Expenses (.csv)</button>
+              <button class="btn btn-ghost btn-xs border text-xs" @click="store.exportCsv('invoices')" id="btn-export-csv-invoices">📄 Invoices (.csv)</button>
+              <button class="btn btn-ghost btn-xs border text-xs" @click="store.exportCsv('clients')" id="btn-export-csv-clients">👥 Clients (.csv)</button>
+              <button class="btn btn-ghost btn-xs border text-xs" @click="store.exportCsv('projects')" id="btn-export-csv-projects">📁 Projects (.csv)</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 2: Universal CSV Importer -->
+      <div class="card" id="settings-import-card">
+        <div class="card-header flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="metric-icon-box blue">
+              <span>📥</span>
+            </div>
+            <div>
+              <div class="card-title text-base">Universal CSV Importer (Toggl, Clockify & Wello)</div>
+              <div class="card-subtitle text-xs">Import your work history with automatic column mapping and validation preview</div>
+            </div>
+          </div>
+        </div>
+        <div class="card-body flex flex-col gap-5">
+          <!-- Preset and Entity Select -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="form-group">
+              <label class="form-label">Data Entity to Import</label>
+              <select v-model="importForm.entityType" class="form-select text-xs">
+                <option value="sessions">⏱️ Work Sessions & Timers</option>
+                <option value="payments">💳 Payments & Cash Income</option>
+                <option value="clients">👥 Clients Roster</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Source Format Preset</label>
+              <div class="flex items-center gap-1.5 pt-1 flex-wrap">
+                <button
+                  type="button"
+                  class="filter-chip text-2xs"
+                  :class="{ active: importForm.preset === 'toggl' }"
+                  @click="importForm.preset = 'toggl'"
+                >
+                  Toggl Track
+                </button>
+                <button
+                  type="button"
+                  class="filter-chip text-2xs"
+                  :class="{ active: importForm.preset === 'clockify' }"
+                  @click="importForm.preset = 'clockify'"
+                >
+                  Clockify
+                </button>
+                <button
+                  type="button"
+                  class="filter-chip text-2xs"
+                  :class="{ active: importForm.preset === 'wello' }"
+                  @click="importForm.preset = 'wello'"
+                >
+                  Wello Export
+                </button>
+                <button
+                  type="button"
+                  class="filter-chip text-2xs"
+                  :class="{ active: importForm.preset === 'generic' }"
+                  @click="importForm.preset = 'generic'"
+                >
+                  Generic CSV
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- File Upload & Text Input -->
+          <div class="form-group">
+            <div class="flex items-center justify-between mb-1.5">
+              <label class="form-label mb-0">CSV Content</label>
+              <label class="btn btn-ghost btn-xs text-primary font-bold cursor-pointer">
+                <span>📁 Upload .CSV File</span>
+                <input type="file" accept=".csv,text/csv" class="hidden" @change="handleCsvFileUpload" />
+              </label>
+            </div>
+            <textarea
+              v-model="importForm.csvText"
+              class="form-input text-xs font-mono h-28 resize-none"
+              placeholder="Paste raw CSV content here or upload a file above..."
+              id="textarea-import-csv"
+            ></textarea>
+          </div>
+
+          <div class="flex justify-start">
+            <button
+              type="button"
+              class="btn btn-primary btn-sm font-bold text-xs"
+              @click="handleAnalyzeCsv"
+              :disabled="!importForm.csvText.trim() || importForm.isPreviewing"
+              id="btn-analyze-csv"
+            >
+              <span>{{ importForm.isPreviewing ? 'Analyzing...' : 'Analyze & Preview Mapping' }}</span>
+            </button>
+          </div>
+
+          <!-- Live Preview & Mapping Section -->
+          <div v-if="importPreview" class="p-4 bg-off-white rounded-12 border-subtle-box space-y-4 animate-fade-in">
+            <div class="flex items-center justify-between">
+              <div class="font-bold text-xs text-primary">
+                Found {{ importPreview.totalRows }} rows &bull; Detected format: <span class="uppercase text-primary font-bold">{{ importPreview.preset }}</span>
+              </div>
+              <span class="badge text-2xs font-bold" :class="importPreview.isValid ? 'badge-success' : 'badge-warning'">
+                {{ importPreview.isValid ? 'Valid Structure' : `${importPreview.validationErrors.length} Warnings` }}
+              </span>
+            </div>
+
+            <!-- Column Mapping -->
+            <div>
+              <div class="text-2xs uppercase text-tertiary font-bold mb-2">Column Header Mapping</div>
+              <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                <div
+                  v-for="h in importPreview.headers"
+                  :key="h"
+                  class="p-2 rounded border bg-surface text-2xs"
+                >
+                  <div class="font-bold text-primary truncate" :title="h">{{ h }}</div>
+                  <div class="text-tertiary mt-0.5">&darr; maps to &darr;</div>
+                  <div class="font-mono text-secondary truncate font-semibold">
+                    {{ importForm.mapping[h] || '(Skip)' }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Sample Preview Table -->
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-2xs">
+                <thead>
+                  <tr class="border-b text-tertiary">
+                    <th class="py-1 px-2">#</th>
+                    <th v-for="h in importPreview.headers.slice(0, 5)" :key="h" class="py-1 px-2">{{ h }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, idx) in importPreview.previewRows.slice(0, 5)" :key="idx" class="border-b">
+                    <td class="py-1 px-2 font-mono text-tertiary">{{ idx + 1 }}</td>
+                    <td v-for="h in importPreview.headers.slice(0, 5)" :key="h" class="py-1 px-2 text-secondary truncate max-w-[150px]">
+                      {{ row.raw[h] }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="flex items-center justify-between pt-2 border-t">
+              <div class="text-xs text-tertiary">
+                Ready to import into <strong>{{ importForm.entityType }}</strong>
+              </div>
+              <button
+                class="btn btn-primary btn-sm font-bold text-xs"
+                @click="handleExecuteImport"
+                :disabled="importForm.isImporting"
+                id="btn-execute-import"
+              >
+                <span>{{ importForm.isImporting ? 'Importing...' : `Import ${importPreview.totalRows} Records` }}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: PRIVACY & CONSENT -->
+    <div v-if="activeTab === 'privacy'" class="settings-section flex flex-col gap-6">
+      <div class="card" id="settings-privacy-card">
+        <div class="card-header flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="metric-icon-box purple">
+              <IconShield :size="16" />
+            </div>
+            <div>
+              <div class="card-title text-base">Privacy & Telemetry Controls</div>
+              <div class="card-subtitle text-xs">Manage non-essential telemetry, cookie consent, and read our privacy policies</div>
+            </div>
+          </div>
+        </div>
+        <div class="card-body flex flex-col gap-5">
+          <!-- Telemetry Toggle -->
+          <div class="p-4 bg-off-white rounded-12 border-subtle-box flex items-center justify-between gap-4">
+            <div>
+              <div class="fw-700 text-sm text-primary">Anonymous Analytics & Product Telemetry</div>
+              <div class="text-xs text-tertiary mt-0.5">
+                Allows Wello to collect privacy-preserving aggregated feature usage data. Never includes financial figures or client names.
+              </div>
+            </div>
+            <label class="toggle-switch">
+              <input
+                v-model="privacyForm.analyticsConsent"
+                type="checkbox"
+                id="toggle-analytics-consent"
+                @change="savePrivacySettings"
+              />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <!-- Legal Links -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+            <NuxtLink to="/privacy" class="p-4 rounded-xl border border-neutral hover:border-primary bg-surface flex items-center justify-between transition-all group">
+              <div>
+                <div class="font-bold text-xs text-primary group-hover:text-primary">🔒 Privacy Policy</div>
+                <div class="text-2xs text-tertiary mt-0.5">Learn how we protect and never monetize your income data.</div>
+              </div>
+              <span class="text-xs text-primary font-bold">&rarr;</span>
+            </NuxtLink>
+
+            <NuxtLink to="/terms" class="p-4 rounded-xl border border-neutral hover:border-primary bg-surface flex items-center justify-between transition-all group">
+              <div>
+                <div class="font-bold text-xs text-primary group-hover:text-primary">📜 Terms of Service</div>
+                <div class="text-2xs text-tertiary mt-0.5">Read our free product terms and fair-use guidelines.</div>
+              </div>
+              <span class="text-xs text-primary font-bold">&rarr;</span>
+            </NuxtLink>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: NOTIFICATIONS & EMAIL DIGEST -->
+    <div v-if="activeTab === 'notifications'" class="settings-section">
+      <div class="grid-1 lg:grid-2 gap-6">
+        <!-- Card 1: Email Digests & Unsubscribe Status -->
+        <div class="card" id="settings-email-digest-card">
+          <div class="card-header flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <div class="metric-icon-box purple">
+                <IconBell :size="16" />
+              </div>
+              <div>
+                <div class="card-title text-base">Executive Email Digests</div>
+                <div class="card-subtitle text-xs">Automated summaries delivered to your inbox</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card-body flex flex-col gap-4">
+            <!-- Unsubscribe status banner if unsubscribed -->
+            <div v-if="store.user.emailUnsubscribedAt" class="p-3 bg-danger-subtle border-error-subtle rounded-12 text-xs flex items-center justify-between">
+              <div>
+                <strong class="text-error">Currently Unsubscribed:</strong>
+                <span class="text-tertiary block mt-0.5">You opted out of non-transactional digests.</span>
+              </div>
+              <button type="button" class="btn btn-primary btn-xs" @click="handleResubscribeDigest" id="btn-resubscribe-digest">
+                Resubscribe
+              </button>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="settings-digest-frequency">Digest Frequency</label>
+              <select id="settings-digest-frequency" v-model="digestForm.digestFrequency" class="form-select">
+                <option value="weekly">Weekly Executive Digest (Recommended)</option>
+                <option value="daily">Daily Morning Digest</option>
+                <option value="none">Disabled (No automated digests)</option>
+              </select>
+              <span class="form-hint">
+                Summarizes billable hours, cash collected, and top leakage reasons directly to your inbox.
+              </span>
+            </div>
+
+            <div v-if="digestForm.digestFrequency === 'weekly'" class="grid-2 gap-3">
+              <div class="form-group">
+                <label class="form-label" for="settings-digest-day">Delivery Day</label>
+                <select id="settings-digest-day" v-model.number="digestForm.digestDayOfWeek" class="form-select">
+                  <option :value="1">Monday</option>
+                  <option :value="2">Tuesday</option>
+                  <option :value="3">Wednesday</option>
+                  <option :value="4">Thursday</option>
+                  <option :value="5">Friday</option>
+                  <option :value="6">Saturday</option>
+                  <option :value="0">Sunday</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="settings-digest-hour">Delivery Time (Your Timezone)</label>
+                <select id="settings-digest-hour" v-model.number="digestForm.digestHourLocal" class="form-select">
+                  <option :value="8">08:00 AM</option>
+                  <option :value="9">09:00 AM</option>
+                  <option :value="10">10:00 AM</option>
+                  <option :value="18">06:00 PM</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="flex justify-end pt-2">
+              <button type="button" class="btn btn-primary btn-sm" @click="saveDigestSettings" :disabled="isSaving">
+                Save Digest Schedule
+              </button>
+            </div>
+
+            <!-- Web Push Notifications -->
+            <div class="pt-4 border-t">
+              <div class="fw-700 text-sm text-primary mb-1">Web Push Notifications</div>
+              <div class="text-xs text-tertiary mb-3">
+                Receive instant browser alerts for forgotten active timers and overdue invoice milestones.
+              </div>
+
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  @click="handleWebPushSubscribe"
+                  id="btn-enable-web-push"
+                >
+                  <IconBell :size="14" />
+                  <span>{{ pushSubscribed ? 'Web Push Active ✓' : 'Enable Web Push' }}</span>
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm text-primary"
+                  @click="handleSendTestPush"
+                  id="btn-test-push"
+                >
+                  Send Test Alert
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: Notification Channel Matrix -->
+        <div class="card" id="settings-notifications-matrix-card">
+          <div class="card-header flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <div class="metric-icon-box success">
+                <IconShield :size="16" />
+              </div>
+              <div>
+                <div class="card-title text-base">Channel Routing & Event Triggers</div>
+                <div class="card-subtitle text-xs">Configure where each alert type is delivered</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card-body p-4">
+            <div class="table-container">
+              <table class="data-table text-xs">
+                <thead>
+                  <tr>
+                    <th>Alert Event</th>
+                    <th class="text-center w-20">In-App</th>
+                    <th class="text-center w-20">Email</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in channelPreferences" :key="item.type">
+                    <td>
+                      <div class="fw-600 text-primary">{{ item.label }}</div>
+                      <div class="text-2xs text-tertiary">{{ item.description }}</div>
+                    </td>
+                    <td class="text-center">
+                      <input type="checkbox" v-model="item.inApp" />
+                    </td>
+                    <td class="text-center">
+                      <input type="checkbox" v-model="item.email" />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="mt-4 pt-3 border-t flex justify-end">
+              <button
+                type="button"
+                class="btn btn-primary btn-sm"
+                @click="savePreferencesMatrix"
+                id="btn-save-notif-prefs"
+                :disabled="isSaving"
+              >
+                Save Notification Matrix
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -608,13 +1121,16 @@ import IconReceipt from '~/components/IconReceipt.vue'
 import IconClock from '~/components/IconClock.vue'
 import IconShield from '~/components/IconShield.vue'
 import IconPackage from '~/components/IconPackage.vue'
+import IconBell from '~/components/IconBell.vue'
+import IconDownload from '~/components/IconDownload.vue'
 
 const store = useWelloStore()
 const authStore = useAuthStore()
+const route = useRoute()
 const toast = useToast()
 const { formatMoney } = useFormatters()
 
-const activeTab = ref('profile')
+const activeTab = ref(route?.query?.tab ? String(route.query.tab) : 'profile')
 const isSaving = ref(false)
 const showAddTaxModal = ref(false)
 const browserTz = computed(() => getBrowserTimezone())
@@ -623,6 +1139,9 @@ const tabs = [
   { id: 'profile', label: 'Profile & Timezone', icon: IconUser },
   { id: 'business', label: 'Business & Invoice', icon: IconReceipt },
   { id: 'work', label: 'Rate Targets & Tax Rates', icon: IconClock },
+  { id: 'data', label: 'Data Management & CSV', icon: IconDownload },
+  { id: 'privacy', label: 'Privacy & Consent', icon: IconShield },
+  { id: 'notifications', label: 'Notifications & Email Digest', icon: IconBell },
   { id: 'account', label: 'Account & Security', icon: IconShield },
   { id: 'about', label: 'System Info', icon: IconPackage },
 ]
@@ -656,6 +1175,8 @@ const prefForm = ref({
   targetHourly: store.user.targetHourly || 100,
   baseCurrency: store.user.baseCurrency || store.user.currencyCode || 'USD',
   headlineRateMetric: store.user.headlineRateMetric || 'client_work',
+  earningPersona: store.user.earningPersona || 'freelancer_projects',
+  includeOverheadInMetrics: store.user.includeOverheadInMetrics ?? true,
   maxTimerHours: store.user.maxTimerHours || 8,
 })
 
@@ -768,6 +1289,8 @@ async function savePrefs() {
       currency: prefForm.value.baseCurrency,
       currencyCode: prefForm.value.baseCurrency,
       headlineRateMetric: prefForm.value.headlineRateMetric,
+      earningPersona: prefForm.value.earningPersona,
+      includeOverheadInMetrics: prefForm.value.includeOverheadInMetrics,
       maxTimerHours: Number(prefForm.value.maxTimerHours) || 8,
     })
     if (ok) {
@@ -811,6 +1334,8 @@ async function saveAll() {
       currency: prefForm.value.baseCurrency,
       currencyCode: prefForm.value.baseCurrency,
       headlineRateMetric: prefForm.value.headlineRateMetric,
+      earningPersona: prefForm.value.earningPersona,
+      includeOverheadInMetrics: prefForm.value.includeOverheadInMetrics,
     }
     const ok = await store.updateProfile(unifiedPayload)
     if (ok) {
@@ -868,4 +1393,236 @@ async function removeTaxRate(id) {
     toast.error('Failed to delete tax rate.')
   }
 }
+
+// Digest & Notification Matrix State
+const digestForm = ref({
+  digestFrequency: store.user.digestFrequency || 'weekly',
+  digestDayOfWeek: store.user.digestDayOfWeek !== undefined ? store.user.digestDayOfWeek : 1,
+  digestHourLocal: 9,
+})
+
+const pushSubscribed = ref(false)
+
+const channelPreferences = ref([
+  { type: 'forgotten_timer', label: 'Forgotten Active Timer', description: 'Alert when a work timer runs past your threshold', inApp: true, email: true },
+  { type: 'invoice_due_soon', label: 'Invoice Due Soon', description: 'Reminder 3 days before an issued invoice reaches due date', inApp: true, email: true },
+  { type: 'invoice_overdue', label: 'Invoice Overdue Alert', description: 'Immediate alert when an unpaid invoice becomes overdue', inApp: true, email: true },
+  { type: 'quote_awaiting_response', label: 'Quote Follow-Up Needed', description: 'Reminder 5 days after sending a quote without client acceptance', inApp: true, email: false },
+  { type: 'weekly_leakage_alert', label: 'Weekly Unpaid Time Leakage', description: 'Flagged when unbilled hours exceed 25% of total time in a week', inApp: true, email: true },
+  { type: 'target_rate_milestone', label: 'Target Rate Benchmark Milestone', description: 'Celebrates when your effective hourly rate exceeds your goal', inApp: true, email: true },
+])
+
+async function loadNotificationPreferences() {
+  const prefs = await store.fetchNotificationPreferences()
+  if (Array.isArray(prefs) && prefs.length > 0) {
+    prefs.forEach(p => {
+      const match = channelPreferences.value.find(item => item.type === p.type)
+      if (match) {
+        match.inApp = Boolean(p.inApp)
+        match.email = Boolean(p.email)
+      }
+    })
+  }
+}
+
+async function saveDigestSettings() {
+  isSaving.value = true
+  try {
+    const ok = await store.updateProfile({
+      digestFrequency: digestForm.value.digestFrequency,
+      digestDayOfWeek: Number(digestForm.value.digestDayOfWeek),
+      digestHourUtc: Number(digestForm.value.digestHourLocal),
+    })
+    if (ok) {
+      toast.success('Email digest schedule updated!')
+    }
+  } finally {
+    isSaving.value = false
+  }
+}
+
+async function handleResubscribeDigest() {
+  try {
+    const token = authStore.token
+    await $fetch('/api/auth/unsubscribe', {
+      method: 'POST',
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: { resubscribe: true }
+    })
+    store.user.emailUnsubscribedAt = null
+    toast.success('Successfully resubscribed to email digests!')
+  } catch (err) {
+    toast.error('Failed to resubscribe.')
+  }
+}
+
+async function savePreferencesMatrix() {
+  isSaving.value = true
+  try {
+    const payload = channelPreferences.value.map(p => ({
+      type: p.type,
+      inApp: p.inApp,
+      email: p.email,
+    }))
+    const ok = await store.saveNotificationPreferences(payload)
+    if (ok) {
+      toast.success('Notification channels saved!')
+    }
+  } finally {
+    isSaving.value = false
+  }
+}
+
+const webPush = useWebPush()
+
+async function handleWebPushToggle() {
+  if (webPush.isSubscribed.value) {
+    await webPush.unsubscribe()
+  } else {
+    await webPush.subscribe()
+  }
+}
+
+async function handleSendTestPush() {
+  await webPush.sendTest()
+}
+
+// ── Data Management & CSV Importer ──────────────────────────────────────────
+const importForm = ref({
+  entityType: 'sessions',
+  preset: 'toggl',
+  csvText: '',
+  mapping: {},
+  isPreviewing: false,
+  isImporting: false,
+})
+
+const importPreview = ref(null)
+
+function handleCsvFileUpload(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = (ev) => {
+    importForm.value.csvText = ev.target.result || ''
+    handleAnalyzeCsv()
+  }
+  reader.readAsText(file)
+}
+
+async function handleAnalyzeCsv() {
+  if (!importForm.value.csvText.trim()) return
+  importForm.value.isPreviewing = true
+  try {
+    const res = await store.previewImport(importForm.value.csvText, importForm.value.entityType, importForm.value.mapping)
+    if (res?.success) {
+      importPreview.value = res.data
+      importForm.value.preset = res.data.preset || importForm.value.preset
+      importForm.value.mapping = { ...res.data.detectedMapping }
+      toast.info(`Analyzed CSV: ${res.data.totalRows} records found.`)
+    } else {
+      toast.error(res?.message || 'Failed to parse CSV.')
+    }
+  } catch (err) {
+    toast.error(err?.data?.message || err?.message || 'Failed to analyze CSV preview.')
+  } finally {
+    importForm.value.isPreviewing = false
+  }
+}
+
+async function handleExecuteImport() {
+  if (!importForm.value.csvText.trim()) return
+  importForm.value.isImporting = true
+  try {
+    const res = await store.executeImport(importForm.value.csvText, importForm.value.entityType, importForm.value.mapping)
+    if (res?.success) {
+      toast.success(`Import complete! ${res.data.createdCount} records imported, ${res.data.skippedCount} skipped.`)
+      importForm.value.csvText = ''
+      importPreview.value = null
+    } else {
+      toast.error(res?.message || 'Import failed.')
+    }
+  } catch (err) {
+    toast.error(err?.data?.message || err?.message || 'Failed to execute import.')
+  } finally {
+    importForm.value.isImporting = false
+  }
+}
+
+// ── Privacy & Telemetry ─────────────────────────────────────────────────────
+const privacyForm = ref({
+  analyticsConsent: store.user?.analyticsConsent ?? true,
+})
+
+async function loadPrivacySettings() {
+  try {
+    const data = await store.fetchPrivacySettings()
+    if (data) {
+      privacyForm.value.analyticsConsent = Boolean(data.analyticsConsent)
+    }
+  } catch (err) {
+    // Non-blocking
+  }
+}
+
+async function savePrivacySettings() {
+  try {
+    await store.updatePrivacySettings({
+      analyticsConsent: privacyForm.value.analyticsConsent,
+      cookieConsent: privacyForm.value.analyticsConsent,
+    })
+    toast.success('Privacy preferences updated.')
+  } catch (err) {
+    toast.error('Failed to save privacy preferences.')
+  }
+}
+
+// ── Account Lifecycle & Danger Zone ─────────────────────────────────────────
+function formatDate(dateStr) {
+  if (!dateStr) return ''
+  try {
+    return new Date(dateStr).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+  } catch {
+    return dateStr
+  }
+}
+
+async function handleResetWorkData() {
+  if (!confirm('Are you sure you want to delete all work data? This will permanently delete your sessions, projects, clients, invoices, and payments. Your account login and free addons will be preserved.')) {
+    return
+  }
+  try {
+    await store.resetWorkData()
+    toast.success('All work data has been wiped.')
+  } catch (err) {
+    toast.error(err?.data?.message || err?.message || 'Failed to reset work data.')
+  }
+}
+
+async function handleDeleteAccount() {
+  if (!confirm('Are you sure you want to schedule your account for permanent deletion? You will have a 14-day grace period to cancel before all data across all tables is irreversibly erased.')) {
+    return
+  }
+  try {
+    await store.deleteAccount(14)
+    toast.warning('Account scheduled for permanent erasure in 14 days.')
+  } catch (err) {
+    toast.error(err?.data?.message || err?.message || 'Failed to schedule deletion.')
+  }
+}
+
+async function handleCancelDeletion() {
+  try {
+    await store.cancelAccountDeletion()
+    toast.success('Account deletion cancelled. Your account is active.')
+  } catch (err) {
+    toast.error(err?.data?.message || err?.message || 'Failed to cancel deletion.')
+  }
+}
+
+onMounted(() => {
+  loadNotificationPreferences()
+  loadPrivacySettings()
+  webPush.checkSubscription()
+})
 </script>

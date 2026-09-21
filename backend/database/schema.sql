@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS users (
   phone_e164      VARCHAR(50) UNIQUE DEFAULT NULL,
   status          ENUM('REGISTERED','EMAIL_PENDING','VERIFICATION_PENDING','VERIFIED','ACTIVE','INACTIVE','SUSPENDED','BLOCKED') NOT NULL DEFAULT 'ACTIVE',
   role            ENUM('user','admin') NOT NULL DEFAULT 'user',
+  earning_persona VARCHAR(50) NOT NULL DEFAULT 'freelancer_projects',
+  include_overhead_in_metrics BOOLEAN NOT NULL DEFAULT FALSE,
   state           VARCHAR(100) DEFAULT NULL,
   city            VARCHAR(100) DEFAULT NULL,
   business_name   VARCHAR(200) DEFAULT NULL,
@@ -105,11 +107,39 @@ CREATE TABLE IF NOT EXISTS projects (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 5. WORK SESSIONS & PAUSES
+-- 5. INCOME SOURCES
+-- =============================================
+CREATE TABLE IF NOT EXISTS income_sources (
+  id                        INT AUTO_INCREMENT PRIMARY KEY,
+  user_id                   INT NOT NULL,
+  client_id                 INT DEFAULT NULL,
+  project_id                INT DEFAULT NULL,
+  name                      VARCHAR(200) NOT NULL,
+  type                      VARCHAR(50) NOT NULL DEFAULT 'other',
+  currency                  VARCHAR(3) NOT NULL DEFAULT 'USD',
+  pay_frequency             VARCHAR(50) NOT NULL DEFAULT 'monthly',
+  expected_amount           DECIMAL(19,4) DEFAULT NULL,
+  expected_hours_per_period DECIMAL(8,2) DEFAULT NULL,
+  is_active                 BOOLEAN NOT NULL DEFAULT TRUE,
+  notes                     TEXT DEFAULT NULL,
+  created_at                DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at                DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  deleted_at                DATETIME(3) DEFAULT NULL,
+  FOREIGN KEY (user_id)    REFERENCES users(id),
+  FOREIGN KEY (client_id)  REFERENCES clients(id) ON DELETE SET NULL,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+  INDEX idx_income_sources_user_id (user_id),
+  INDEX idx_income_sources_active (user_id, is_active),
+  INDEX idx_income_sources_deleted (user_id, deleted_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
+-- 6. WORK SESSIONS & PAUSES
 -- =============================================
 CREATE TABLE IF NOT EXISTS work_sessions (
   id               INT AUTO_INCREMENT PRIMARY KEY,
-  project_id       INT NOT NULL,
+  project_id       INT DEFAULT NULL,
+  income_source_id INT DEFAULT NULL,
   user_id          INT NOT NULL,
   title            VARCHAR(255) NOT NULL DEFAULT 'Work session',
   type             ENUM('meeting','call','discussion','planning','proposal','travel','production','revision','delivery','other') NOT NULL DEFAULT 'other',
@@ -127,10 +157,12 @@ CREATE TABLE IF NOT EXISTS work_sessions (
   created_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   deleted_at       DATETIME(3) DEFAULT NULL,
-  FOREIGN KEY (project_id) REFERENCES projects(id),
-  FOREIGN KEY (user_id)    REFERENCES users(id),
+  FOREIGN KEY (project_id)       REFERENCES projects(id) ON DELETE SET NULL,
+  FOREIGN KEY (income_source_id) REFERENCES income_sources(id) ON DELETE SET NULL,
+  FOREIGN KEY (user_id)          REFERENCES users(id),
   INDEX idx_sessions_user_id (user_id),
   INDEX idx_sessions_project_id (project_id),
+  INDEX idx_sessions_income_source (user_id, income_source_id),
   INDEX idx_sessions_user_started (user_id, started_at),
   INDEX idx_sessions_user_payment (user_id, payment_type),
   INDEX idx_sessions_user_deleted (user_id, deleted_at)
@@ -164,25 +196,30 @@ CREATE TABLE IF NOT EXISTS work_session_edits (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 6. PAYMENTS & EXPENSES
+-- 7. PAYMENTS & EXPENSES
 -- =============================================
 CREATE TABLE IF NOT EXISTS payments (
-  id            INT AUTO_INCREMENT PRIMARY KEY,
-  user_id       INT NOT NULL,
-  project_id    INT NOT NULL,
-  client_id     INT DEFAULT NULL,
-  amount        DECIMAL(19,4) NOT NULL,
-  currency      VARCHAR(3) NOT NULL DEFAULT 'USD',
-  paid_date     DATE NOT NULL,
-  notes         TEXT DEFAULT NULL,
-  created_at    DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  updated_at    DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-  deleted_at    DATETIME(3) DEFAULT NULL,
-  FOREIGN KEY (user_id)    REFERENCES users(id),
-  FOREIGN KEY (project_id) REFERENCES projects(id),
-  FOREIGN KEY (client_id)  REFERENCES clients(id) ON DELETE SET NULL,
+  id               INT AUTO_INCREMENT PRIMARY KEY,
+  user_id          INT NOT NULL,
+  project_id       INT DEFAULT NULL,
+  income_source_id INT DEFAULT NULL,
+  client_id        INT DEFAULT NULL,
+  amount           DECIMAL(19,4) NOT NULL,
+  currency         VARCHAR(3) NOT NULL DEFAULT 'USD',
+  paid_date        DATE NOT NULL,
+  is_expected      BOOLEAN NOT NULL DEFAULT FALSE,
+  status           VARCHAR(50) NOT NULL DEFAULT 'paid',
+  notes            TEXT DEFAULT NULL,
+  created_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  deleted_at       DATETIME(3) DEFAULT NULL,
+  FOREIGN KEY (user_id)          REFERENCES users(id),
+  FOREIGN KEY (project_id)       REFERENCES projects(id) ON DELETE SET NULL,
+  FOREIGN KEY (income_source_id) REFERENCES income_sources(id) ON DELETE SET NULL,
+  FOREIGN KEY (client_id)        REFERENCES clients(id) ON DELETE SET NULL,
   INDEX idx_payments_user_id (user_id),
   INDEX idx_payments_project_id (project_id),
+  INDEX idx_payments_income_source (user_id, income_source_id),
   INDEX idx_payments_user_date (user_id, paid_date),
   INDEX idx_payments_user_deleted (user_id, deleted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -210,39 +247,24 @@ CREATE TABLE IF NOT EXISTS project_expenses (
 CREATE TABLE IF NOT EXISTS overhead_expenses (
   id               INT AUTO_INCREMENT PRIMARY KEY,
   user_id          INT NOT NULL,
+  income_source_id INT DEFAULT NULL,
   description      VARCHAR(255) NOT NULL,
-  category         VARCHAR(50) NOT NULL DEFAULT 'General',
+  category         VARCHAR(50) NOT NULL DEFAULT 'general',
   amount           DECIMAL(19,4) NOT NULL,
   currency         VARCHAR(3) NOT NULL DEFAULT 'USD',
   expense_date     DATE NOT NULL,
+  allocation_rule  VARCHAR(50) NOT NULL DEFAULT 'none',
   is_recurring     BOOLEAN NOT NULL DEFAULT FALSE,
-  recurring_period ENUM('monthly','quarterly','annual') DEFAULT NULL,
+  recurring_period VARCHAR(50) DEFAULT NULL,
   notes            TEXT DEFAULT NULL,
   created_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   deleted_at       DATETIME(3) DEFAULT NULL,
-  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (user_id)          REFERENCES users(id),
+  FOREIGN KEY (income_source_id) REFERENCES income_sources(id) ON DELETE SET NULL,
   INDEX idx_overhead_user_id (user_id),
   INDEX idx_overhead_user_date (user_id, expense_date),
   INDEX idx_overhead_user_deleted (user_id, deleted_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS income_sources (
-  id         INT AUTO_INCREMENT PRIMARY KEY,
-  user_id    INT NOT NULL,
-  name       VARCHAR(150) NOT NULL,
-  type       ENUM('retainer','consulting','royalty','product','salary','other') NOT NULL DEFAULT 'other',
-  amount     DECIMAL(19,4) NOT NULL,
-  currency   VARCHAR(3) NOT NULL DEFAULT 'USD',
-  frequency  ENUM('one_off','weekly','monthly','quarterly','annual') NOT NULL DEFAULT 'monthly',
-  is_active  BOOLEAN NOT NULL DEFAULT TRUE,
-  notes      TEXT DEFAULT NULL,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-  deleted_at DATETIME(3) DEFAULT NULL,
-  FOREIGN KEY (user_id) REFERENCES users(id),
-  INDEX idx_income_sources_user_id (user_id),
-  INDEX idx_income_sources_active (user_id, is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS fx_rates (
@@ -279,7 +301,7 @@ CREATE TABLE IF NOT EXISTS project_quotes (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 7. INVOICING MODULE
+-- 7. INVOICING MODULE & CREDIT NOTES
 -- =============================================
 CREATE TABLE IF NOT EXISTS invoices (
   id                  INT AUTO_INCREMENT PRIMARY KEY,
@@ -289,12 +311,15 @@ CREATE TABLE IF NOT EXISTS invoices (
   invoice_number      VARCHAR(100) NOT NULL,
   invoice_date        DATE NOT NULL,
   due_date            DATE NOT NULL,
+  payment_terms       VARCHAR(50) NOT NULL DEFAULT 'net_14',
   customer_name       VARCHAR(200) NOT NULL,
   customer_email      VARCHAR(255) DEFAULT NULL,
   customer_contact    VARCHAR(100) DEFAULT NULL,
   customer_address    TEXT DEFAULT NULL,
   service_description TEXT DEFAULT NULL,
   currency            VARCHAR(3) NOT NULL DEFAULT 'USD',
+  base_currency       VARCHAR(3) NOT NULL DEFAULT 'USD',
+  fx_rate             DECIMAL(19,6) NOT NULL DEFAULT 1.000000,
   seller_name         VARCHAR(200) DEFAULT NULL,
   seller_logo         TEXT DEFAULT NULL,
   seller_address      TEXT DEFAULT NULL,
@@ -303,12 +328,28 @@ CREATE TABLE IF NOT EXISTS invoices (
   seller_tax_id       VARCHAR(100) DEFAULT NULL,
   subtotal            DECIMAL(19,4) NOT NULL DEFAULT 0.0000,
   discount            DECIMAL(19,4) NOT NULL DEFAULT 0.0000,
+  tax_mode            VARCHAR(20) NOT NULL DEFAULT 'exclusive',
   tax_percent         DECIMAL(5,2) NOT NULL DEFAULT 0.00,
   tax_amount          DECIMAL(19,4) NOT NULL DEFAULT 0.0000,
+  is_reverse_charge   BOOLEAN NOT NULL DEFAULT FALSE,
+  tax_id_label        VARCHAR(50) DEFAULT 'Tax ID / VAT Reg',
   total               DECIMAL(19,4) NOT NULL DEFAULT 0.0000,
+  base_total          DECIMAL(19,4) NOT NULL DEFAULT 0.0000,
+  amount_paid         DECIMAL(19,4) NOT NULL DEFAULT 0.0000,
+  balance_due         DECIMAL(19,4) NOT NULL DEFAULT 0.0000,
   notes               TEXT DEFAULT NULL,
-  status              ENUM('DRAFT','SENT','PAID','OVERDUE','CANCELLED') NOT NULL DEFAULT 'DRAFT',
+  status              ENUM('draft','sent','viewed','partially_paid','paid','overdue','cancelled','void') NOT NULL DEFAULT 'draft',
+  public_token        VARCHAR(64) UNIQUE DEFAULT NULL,
+  pdf_template        VARCHAR(50) NOT NULL DEFAULT 'modern_clean',
+  sent_at             DATETIME(3) DEFAULT NULL,
+  viewed_at           DATETIME(3) DEFAULT NULL,
   paid_at             DATETIME(3) DEFAULT NULL,
+  last_reminder_sent_at DATETIME(3) DEFAULT NULL,
+  reminders_enabled   BOOLEAN NOT NULL DEFAULT TRUE,
+  payment_link_url    VARCHAR(500) DEFAULT NULL,
+  payment_link_provider VARCHAR(50) DEFAULT NULL,
+  recurring_profile_id INT DEFAULT NULL,
+  is_immutable        BOOLEAN NOT NULL DEFAULT FALSE,
   created_at          DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at          DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   deleted_at          DATETIME(3) DEFAULT NULL,
@@ -316,6 +357,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
   FOREIGN KEY (client_id)  REFERENCES clients(id) ON DELETE SET NULL,
   UNIQUE KEY uq_user_invoice_number (user_id, invoice_number),
+  UNIQUE KEY uq_invoices_public_token (public_token),
   INDEX idx_invoices_user_id (user_id),
   INDEX idx_invoices_user_status (user_id, status),
   INDEX idx_invoices_user_date (user_id, invoice_date),
@@ -329,6 +371,9 @@ CREATE TABLE IF NOT EXISTS invoice_items (
   quantity      DECIMAL(10,2) NOT NULL DEFAULT 1.00,
   unit_price    DECIMAL(19,4) NOT NULL DEFAULT 0.0000,
   amount        DECIMAL(19,4) NOT NULL DEFAULT 0.0000,
+  tax_rate      DECIMAL(5,2) DEFAULT NULL,
+  tax_name      VARCHAR(50) DEFAULT NULL,
+  tax_amount    DECIMAL(19,4) NOT NULL DEFAULT 0.0000,
   display_order INT NOT NULL DEFAULT 0,
   created_at    DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
@@ -336,26 +381,93 @@ CREATE TABLE IF NOT EXISTS invoice_items (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS invoice_taxes (
-  id          INT AUTO_INCREMENT PRIMARY KEY,
-  invoice_id  INT NOT NULL,
-  tax_name    VARCHAR(50) NOT NULL,
-  tax_percent DECIMAL(5,2) NOT NULL,
-  tax_amount  DECIMAL(19,4) NOT NULL,
-  created_at  DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  id                INT AUTO_INCREMENT PRIMARY KEY,
+  invoice_id        INT NOT NULL,
+  tax_name          VARCHAR(50) NOT NULL,
+  tax_percent       DECIMAL(5,2) NOT NULL,
+  tax_amount        DECIMAL(19,4) NOT NULL DEFAULT 0.0000,
+  is_inclusive      BOOLEAN NOT NULL DEFAULT FALSE,
+  is_reverse_charge BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at        DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
   INDEX idx_taxes_invoice (invoice_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS invoice_sequences (
-  id          INT AUTO_INCREMENT PRIMARY KEY,
-  user_id     INT NOT NULL,
-  prefix      VARCHAR(20) NOT NULL DEFAULT 'INV',
-  year        INT NOT NULL,
-  next_number INT NOT NULL DEFAULT 1,
-  created_at  DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  updated_at  DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  user_id        INT NOT NULL,
+  prefix         VARCHAR(20) NOT NULL DEFAULT 'INV',
+  year           INT NOT NULL,
+  format_pattern VARCHAR(50) NOT NULL DEFAULT '{{prefix}}-{{year}}-{{seq:4}}',
+  next_number    INT NOT NULL DEFAULT 1,
+  created_at     DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at     DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   FOREIGN KEY (user_id) REFERENCES users(id),
   UNIQUE KEY uq_user_prefix_year (user_id, prefix, year)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS credit_notes (
+  id                 INT AUTO_INCREMENT PRIMARY KEY,
+  user_id            INT NOT NULL,
+  invoice_id         INT NOT NULL,
+  credit_note_number VARCHAR(100) NOT NULL,
+  credit_note_date   DATE NOT NULL,
+  currency           VARCHAR(3) NOT NULL DEFAULT 'USD',
+  subtotal           DECIMAL(19,4) NOT NULL DEFAULT 0.0000,
+  tax_amount         DECIMAL(19,4) NOT NULL DEFAULT 0.0000,
+  total              DECIMAL(19,4) NOT NULL DEFAULT 0.0000,
+  reason             VARCHAR(255) NOT NULL DEFAULT 'Invoice Adjustment / Cancellation',
+  notes              TEXT DEFAULT NULL,
+  public_token       VARCHAR(64) UNIQUE NOT NULL,
+  created_at         DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at         DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  deleted_at         DATETIME(3) DEFAULT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_user_credit_note_number (user_id, credit_note_number),
+  INDEX idx_credit_notes_user_id (user_id),
+  INDEX idx_credit_notes_invoice_id (invoice_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS credit_note_items (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  credit_note_id INT NOT NULL,
+  description    VARCHAR(255) NOT NULL,
+  quantity       DECIMAL(10,2) NOT NULL DEFAULT 1.00,
+  unit_price     DECIMAL(19,4) NOT NULL DEFAULT 0.0000,
+  amount         DECIMAL(19,4) NOT NULL DEFAULT 0.0000,
+  created_at     DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  FOREIGN KEY (credit_note_id) REFERENCES credit_notes(id) ON DELETE CASCADE,
+  INDEX idx_credit_note_items (credit_note_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS recurring_invoice_profiles (
+  id               INT AUTO_INCREMENT PRIMARY KEY,
+  user_id          INT NOT NULL,
+  client_id        INT DEFAULT NULL,
+  project_id       INT DEFAULT NULL,
+  income_source_id INT DEFAULT NULL,
+  title            VARCHAR(200) NOT NULL,
+  frequency        VARCHAR(50) NOT NULL DEFAULT 'monthly',
+  interval_days    INT DEFAULT NULL,
+  next_issue_date  DATE NOT NULL,
+  payment_terms    VARCHAR(50) NOT NULL DEFAULT 'net_14',
+  currency         VARCHAR(3) NOT NULL DEFAULT 'USD',
+  subtotal         DECIMAL(19,4) NOT NULL DEFAULT 0.0000,
+  tax_amount       DECIMAL(19,4) NOT NULL DEFAULT 0.0000,
+  total            DECIMAL(19,4) NOT NULL DEFAULT 0.0000,
+  auto_send        BOOLEAN NOT NULL DEFAULT FALSE,
+  is_active        BOOLEAN NOT NULL DEFAULT TRUE,
+  template_data    JSON NOT NULL,
+  created_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  deleted_at       DATETIME(3) DEFAULT NULL,
+  FOREIGN KEY (user_id)          REFERENCES users(id),
+  FOREIGN KEY (client_id)        REFERENCES clients(id) ON DELETE SET NULL,
+  FOREIGN KEY (project_id)       REFERENCES projects(id) ON DELETE SET NULL,
+  FOREIGN KEY (income_source_id) REFERENCES income_sources(id) ON DELETE SET NULL,
+  INDEX idx_recurring_profiles_user (user_id),
+  INDEX idx_recurring_profiles_active (user_id, is_active, next_issue_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
@@ -393,7 +505,7 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
--- 9. PLATFORM, STORE & MONETIZATION
+-- 9. PLATFORM & STORE ADDONS (100% Free Modular Features)
 -- =============================================
 CREATE TABLE IF NOT EXISTS addons (
   id             INT AUTO_INCREMENT PRIMARY KEY,
@@ -405,8 +517,6 @@ CREATE TABLE IF NOT EXISTS addons (
   category       VARCHAR(50) NOT NULL DEFAULT 'Utilities',
   features       JSON DEFAULT NULL,
   is_free        BOOLEAN NOT NULL DEFAULT TRUE,
-  price_amount   DECIMAL(19,4) NOT NULL DEFAULT 0.0000,
-  price_currency VARCHAR(3) NOT NULL DEFAULT 'USD',
   status         ENUM('PUBLISHED','DRAFT','ARCHIVED') NOT NULL DEFAULT 'PUBLISHED',
   display_order  INT NOT NULL DEFAULT 0,
   created_at     DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -428,56 +538,6 @@ CREATE TABLE IF NOT EXISTS user_addons (
   FOREIGN KEY (addon_id) REFERENCES addons(id),
   UNIQUE KEY uq_user_addon (user_id, addon_id),
   INDEX idx_user_addons_user (user_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS plans (
-  id               INT AUTO_INCREMENT PRIMARY KEY,
-  plan_key         VARCHAR(50) UNIQUE NOT NULL,
-  name             VARCHAR(100) NOT NULL,
-  description      TEXT DEFAULT NULL,
-  price_amount     DECIMAL(19,4) NOT NULL DEFAULT 0.0000,
-  currency         VARCHAR(3) NOT NULL DEFAULT 'USD',
-  billing_interval ENUM('monthly','annual','lifetime','free') NOT NULL DEFAULT 'monthly',
-  features         JSON DEFAULT NULL,
-  is_active        BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  updated_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-  INDEX idx_plans_active (is_active)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS subscriptions (
-  id                   INT AUTO_INCREMENT PRIMARY KEY,
-  user_id              INT NOT NULL,
-  plan_id              INT NOT NULL,
-  status               ENUM('trialing','active','past_due','canceled','incomplete','expired') NOT NULL DEFAULT 'active',
-  current_period_start DATETIME(3) NOT NULL,
-  current_period_end   DATETIME(3) NOT NULL,
-  cancel_at_period_end BOOLEAN NOT NULL DEFAULT FALSE,
-  canceled_at          DATETIME(3) DEFAULT NULL,
-  payment_method       VARCHAR(50) DEFAULT NULL,
-  external_sub_id      VARCHAR(150) DEFAULT NULL,
-  created_at           DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  updated_at           DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-  FOREIGN KEY (user_id) REFERENCES users(id),
-  FOREIGN KEY (plan_id) REFERENCES plans(id),
-  INDEX idx_sub_user_status (user_id, status),
-  INDEX idx_sub_period_end (current_period_end)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS billing_events (
-  id              INT AUTO_INCREMENT PRIMARY KEY,
-  user_id         INT NOT NULL,
-  subscription_id INT DEFAULT NULL,
-  event_type      VARCHAR(50) NOT NULL,
-  amount          DECIMAL(19,4) NOT NULL,
-  currency        VARCHAR(3) NOT NULL DEFAULT 'USD',
-  status          ENUM('succeeded','failed','pending','refunded') NOT NULL DEFAULT 'succeeded',
-  payload         JSON DEFAULT NULL,
-  created_at      DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  FOREIGN KEY (user_id)         REFERENCES users(id),
-  FOREIGN KEY (subscription_id) REFERENCES subscriptions(id) ON DELETE SET NULL,
-  INDEX idx_billing_user (user_id),
-  INDEX idx_billing_type (event_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS notifications (

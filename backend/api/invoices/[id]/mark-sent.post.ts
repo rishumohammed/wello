@@ -1,0 +1,39 @@
+// backend/api/invoices/[id]/mark-sent.post.ts
+import { defineEventHandler } from 'h3'
+import { requireAddon } from '../../../utils/addonService'
+import { getDb } from '../../../utils/db'
+import { sendSuccess, sendError } from '../../../utils/apiResponse'
+
+export default defineEventHandler(async (event) => {
+  const user = await requireAddon(event, 'basic-invoicing')
+  const idStr = event.context.params?.id
+  if (!idStr) {
+    return sendError(event, 400, 'MISSING_ID', 'Invoice ID is required.')
+  }
+
+  const db = getDb()
+  const invoice = await db('invoices')
+    .where({ id: Number(idStr), user_id: user.id })
+    .whereNull('deleted_at')
+    .first()
+
+  if (!invoice) {
+    return sendError(event, 404, 'INVOICE_NOT_FOUND', 'Invoice not found.')
+  }
+
+  const nextStatus = invoice.status === 'draft' ? 'sent' : invoice.status
+  await db('invoices')
+    .where({ id: invoice.id })
+    .update({
+      status: nextStatus,
+      sent_at: invoice.sent_at || new Date(),
+      is_immutable: true,
+      updated_at: new Date(),
+    })
+
+  return sendSuccess(event, {
+    message: `Invoice ${invoice.invoice_number} marked as sent.`,
+    status: nextStatus,
+    isImmutable: true,
+  })
+})

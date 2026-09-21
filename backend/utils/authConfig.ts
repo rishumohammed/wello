@@ -162,11 +162,21 @@ export function verifyOtpCode(email: string, code: string): { valid: boolean; er
   return { valid: true, record }
 }
 
+function redactSecrets(text: string): string {
+  if (!text) return ''
+  // Mask 6-digit codes
+  return text
+    .replace(/\b\d{6}\b/g, '••••••')
+    .replace(/re_[a-zA-Z0-9_-]{20,}/g, 're_••••••••••••••••')
+    .replace(/bearer\s+[a-zA-Z0-9_.-]+/gi, 'Bearer ••••••••')
+}
+
 export function logAuthEvent(event: Omit<AuthLog, 'id' | 'timestamp'>) {
   const log: AuthLog = {
     id: 'log_' + Math.random().toString(36).slice(2, 9),
     timestamp: new Date().toISOString(),
     ...event,
+    details: redactSecrets(event.details || ''),
   }
   authLogs.unshift(log)
   if (authLogs.length > 200) authLogs.pop() // keep last 200 logs
@@ -174,7 +184,10 @@ export function logAuthEvent(event: Omit<AuthLog, 'id' | 'timestamp'>) {
 }
 
 export function getAuthLogs(): AuthLog[] {
-  return [...authLogs]
+  return authLogs.map(l => ({
+    ...l,
+    details: redactSecrets(l.details),
+  }))
 }
 
 export function getOrCreateUser(email: string, name?: string, serviceCategory?: string, currencyCode?: string, timezone?: string, countryCode?: string): RegisteredUser {

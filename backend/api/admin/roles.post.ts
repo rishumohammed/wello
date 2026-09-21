@@ -1,8 +1,8 @@
 // server/api/admin/roles.post.ts
-import { defineEventHandler, readBody, createError } from 'h3'
-import { requirePermission } from '../../utils/authGuard'
+import { defineEventHandler, readBody, createError, getRequestHeader } from 'h3'
+import { requirePermission, extractClientIp } from '../../utils/authGuard'
 import { getDb } from '../../utils/db'
-import { revokeAllSessionsForUser } from '../../utils/authService'
+import { revokeAllSessionsForUser, verifyAdminActionOtp, isDevAuthAllowed } from '../../utils/authService'
 import { recordAuditLog } from '../../utils/auditStore'
 
 export default defineEventHandler(async (event) => {
@@ -11,10 +11,34 @@ export default defineEventHandler(async (event) => {
   const action = body?.action || 'UPDATE_ROLE'
   const db = getDb()
 
+  // Mandatory re-authentication check for sensitive role modifications
+  const reauthOtp = (body?.reauthOtp || '').trim()
+  const requireStrictOtp = !isDevAuthAllowed() || Boolean(body?.requireOtp)
+
+  if (requireStrictOtp && !reauthOtp) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: 'Step-Up Re-Authentication Required: Please enter the 6-digit OTP code to execute administrative role changes.',
+      data: { reauthRequired: true },
+    })
+  }
+
+  if (reauthOtp) {
+    const otpRes = await verifyAdminActionOtp(admin.email, reauthOtp, 'roles')
+    if (!otpRes.valid) {
+      throw createError({
+        statusCode: 403,
+        statusMessage: otpRes.error || 'Invalid or expired re-authentication code.',
+        data: { reauthRequired: true },
+      })
+    }
+  }
+
   if (action === 'CREATE_ADMIN') {
     const email = (body?.email || '').trim().toLowerCase()
     const name = (body?.name || '').trim()
     const roleKey = (body?.roleKey || 'ADMIN').trim().toUpperCase()
+    const reason = (body?.reason || 'Administrator creation').trim()
 
     if (!email || !name) {
       throw createError({ statusCode: 400, statusMessage: 'Email and name are required.' })
@@ -65,12 +89,17 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    recordAuditLog({
+    await recordAuditLog({
       adminEmail: admin.email,
+      actorId: admin.id,
       action: 'ADMIN_CREATED',
       module: 'Security',
+      permissionUsed: 'admins.manage',
       target: user.email,
-      newValue: `Role: ${roleKey}`,
+      reason,
+      ipAddress: extractClientIp(event),
+      userAgent: getRequestHeader(event, 'user-agent') || 'Admin UI',
+      newValue: `Granted role ${roleKey}`,
     })
 
     return {
@@ -90,6 +119,7 @@ export default defineEventHandler(async (event) => {
     const targetEmail = (body?.targetEmail || '').trim().toLowerCase()
     const targetUserId = body?.targetUserId ? Number(body.targetUserId) : null
     const newRoleKey = (body?.roleKey || '').trim().toUpperCase()
+    const reason = (body?.reason || 'Role change request').trim()
 
     if ((!targetEmail && !targetUserId) || !newRoleKey) {
       throw createError({ statusCode: 400, statusMessage: 'Target user identifier and roleKey are required.' })
@@ -156,11 +186,16 @@ export default defineEventHandler(async (event) => {
     // Invalidate target user's sessions to enforce role reload on subsequent requests
     await revokeAllSessionsForUser(targetUser.id)
 
-    recordAuditLog({
+    await recordAuditLog({
       adminEmail: admin.email,
+      actorId: admin.id,
       action: 'ADMIN_ROLE_UPDATED',
       module: 'Security',
+      permissionUsed: 'admins.manage',
       target: targetUser.email,
+      reason,
+      ipAddress: extractClientIp(event),
+      userAgent: getRequestHeader(event, 'user-agent') || 'Admin UI',
       prevValue: adminRecord?.role_key || 'None',
       newValue: newRoleKey,
     })

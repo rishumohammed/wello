@@ -106,6 +106,7 @@ export function computeSessionHours(sessions = []) {
   let paidMin = 0
   let unpaidClientMin = 0
   let intentionalUnpaidMin = 0
+  let commuteMin = 0
 
   for (const s of sessions) {
     let dur = Number(
@@ -118,6 +119,12 @@ export function computeSessionHours(sessions = []) {
     if (dur <= 0 && s.startedAt && s.endedAt) {
       const diffMs = new Date(s.endedAt).getTime() - new Date(s.startedAt).getTime()
       dur = Math.max(0, Math.round(diffMs / 60000))
+    }
+
+    const sessionType = (s.type || '').toLowerCase()
+    const isCommute = sessionType === 'travel' || sessionType === 'commute' || s.unpaidReason === 'commute'
+    if (isCommute) {
+      commuteMin += dur
     }
 
     const payType = (s.paymentType || 'paid').toLowerCase()
@@ -144,6 +151,8 @@ export function computeSessionHours(sessions = []) {
     unpaidClientHours: Math.round((unpaidClientMin / 60) * 100) / 100,
     intentionalUnpaidMinutes: intentionalUnpaidMin,
     intentionalUnpaidHours: Math.round((intentionalUnpaidMin / 60) * 100) / 100,
+    commuteMinutes: commuteMin,
+    commuteHours: Math.round((commuteMin / 60) * 100) / 100,
     totalClientMinutes: totalClientMin,
     totalClientHours: Math.round((totalClientMin / 60) * 100) / 100,
     clientWorkMinutes: totalClientMin,
@@ -161,32 +170,46 @@ export function computeFinancials(
   expenses = [],
   projects = [],
   overheads = [],
-  baseCurrency = 'USD'
+  baseCurrency = 'USD',
+  options = {}
 ) {
+  const includeOverhead = options.includeOverhead !== false
+
   let collected = 0
+  let expected = 0
   for (const p of payments) {
-    const amt = Number(p.baseAmount !== undefined && p.baseAmount !== null ? p.baseAmount : p.amount) || 0
-    collected += amt
+    const isExp = p.isExpected || p.is_expected || p.status === 'expected'
+    const amt = Number(p.baseAmount !== undefined && p.baseAmount !== null ? p.baseAmount : (p.base_amount !== undefined && p.base_amount !== null ? p.base_amount : p.amount)) || 0
+    if (isExp) {
+      expected += amt
+    } else {
+      collected += amt
+    }
   }
 
   let directExp = 0
   for (const e of expenses) {
-    const amt = Number(e.baseAmount !== undefined && e.baseAmount !== null ? e.baseAmount : e.amount) || 0
+    const amt = Number(e.baseAmount !== undefined && e.baseAmount !== null ? e.baseAmount : (e.base_amount !== undefined && e.base_amount !== null ? e.base_amount : e.amount)) || 0
     directExp += amt
   }
 
   let totalOverhead = 0
+  let commuteExp = 0
   for (const o of overheads) {
-    const amt = Number(o.baseAmount !== undefined && o.baseAmount !== null ? o.baseAmount : o.amount) || 0
+    const amt = Number(o.baseAmount !== undefined && o.baseAmount !== null ? o.baseAmount : (o.base_amount !== undefined && o.base_amount !== null ? o.base_amount : o.amount)) || 0
     totalOverhead += amt
+    if (o.category === 'commute') {
+      commuteExp += amt
+    }
   }
 
   let earned = 0
   const projectPaymentMap = new Map()
   for (const p of payments) {
-    if (p.projectId) {
+    const isExp = p.isExpected || p.is_expected || p.status === 'expected'
+    if (!isExp && p.projectId) {
       const pid = String(p.projectId)
-      const amt = Number(p.baseAmount !== undefined && p.baseAmount !== null ? p.baseAmount : p.amount) || 0
+      const amt = Number(p.baseAmount !== undefined && p.baseAmount !== null ? p.baseAmount : (p.base_amount !== undefined && p.base_amount !== null ? p.base_amount : p.amount)) || 0
       projectPaymentMap.set(pid, (projectPaymentMap.get(pid) || 0) + amt)
     }
   }
@@ -208,22 +231,28 @@ export function computeFinancials(
   }
 
   collected = roundToCurrencyDecimals(collected, baseCurrency)
+  expected = roundToCurrencyDecimals(expected, baseCurrency)
   earned = roundToCurrencyDecimals(earned, baseCurrency)
   directExp = roundToCurrencyDecimals(directExp, baseCurrency)
   totalOverhead = roundToCurrencyDecimals(totalOverhead, baseCurrency)
+  commuteExp = roundToCurrencyDecimals(commuteExp, baseCurrency)
 
-  const collectedNet = roundToCurrencyDecimals(collected - directExp - totalOverhead, baseCurrency)
-  const earnedNet = roundToCurrencyDecimals(earned - directExp - totalOverhead, baseCurrency)
+  const effectiveOverhead = includeOverhead ? totalOverhead : 0
+  const collectedNet = roundToCurrencyDecimals(collected - directExp - effectiveOverhead, baseCurrency)
+  const earnedNet = roundToCurrencyDecimals(earned - directExp - effectiveOverhead, baseCurrency)
   const outstanding = roundToCurrencyDecimals(Math.max(0, earned - collected), baseCurrency)
 
   return {
     collectedRevenue: collected,
     earnedRevenue: earned,
+    expectedRevenue: expected,
     directExpenses: directExp,
     allocatedOverhead: totalOverhead,
+    commuteExpenses: commuteExp,
     collectedNetIncome: collectedNet,
     earnedNetIncome: earnedNet,
     outstandingRevenue: outstanding,
+    isOverheadIncluded: includeOverhead,
   }
 }
 
@@ -278,6 +307,203 @@ export function computeDualRates(
   }
 }
 
+// ─── INCOME SOURCE & NON-PROJECT WORKER METRICS ────────────────────────────
+
+export function computeIncomeSourceMetrics(
+  incomeSources = [],
+  sessions = [],
+  payments = [],
+  expenses = [],
+  overheads = [],
+  baseCurrency = 'USD',
+  options = {}
+) {
+  const safeSources = Array.isArray(incomeSources) ? incomeSources : []
+  const safeSessions = Array.isArray(sessions) ? sessions : []
+  const safePayments = Array.isArray(payments) ? payments : []
+  const safeExpenses = Array.isArray(expenses) ? expenses : []
+  const safeOverheads = Array.isArray(overheads) ? overheads : []
+  const includeOverhead = options?.includeOverhead !== false
+
+  const totalAllSessionHours = safeSessions.reduce((acc, s) => {
+    const dur = Number(s.durationMin || s.durationMinutes || (s.durationSeconds ? s.durationSeconds / 60 : 0) || (s.duration_seconds ? s.duration_seconds / 60 : 0)) || 0
+    return acc + dur / 60
+  }, 0)
+
+  return safeSources.map(src => {
+    const srcIdStr = String(src.id)
+    const srcSessions = safeSessions.filter(s => String(s.incomeSourceId || s.income_source_id) === srcIdStr)
+    const srcPayments = safePayments.filter(p => String(p.incomeSourceId || p.income_source_id) === srcIdStr)
+    const srcExpenses = safeExpenses.filter(e => String(e.incomeSourceId || e.income_source_id) === srcIdStr)
+
+    // Direct overheads assigned to this source
+    const directOverheads = safeOverheads.filter(o => String(o.incomeSourceId || o.income_source_id) === srcIdStr)
+    let allocatedOverhead = directOverheads.reduce((acc, o) => acc + (Number(o.baseAmount ?? o.base_amount ?? o.amount) || 0), 0)
+
+    // Proportional split of general overheads if allocated per hour worked
+    const srcHrs = computeSessionHours(srcSessions)
+    if (totalAllSessionHours > 0 && srcHrs.totalAllHours > 0) {
+      const generalHourOverheads = safeOverheads.filter(o => (!o.incomeSourceId && !o.income_source_id) && ((o.allocationRule || o.allocation_rule) === 'per_hour_worked'))
+      const generalHourSum = generalHourOverheads.reduce((acc, o) => acc + (Number(o.baseAmount ?? o.base_amount ?? o.amount) || 0), 0)
+      allocatedOverhead += (generalHourSum * (srcHrs.totalAllHours / totalAllSessionHours))
+    }
+
+    const fin = computeFinancials(srcPayments, srcExpenses, [], [], baseCurrency, { includeOverhead })
+    const netIncome = roundToCurrencyDecimals(fin.collectedRevenue - fin.directExpenses - (includeOverhead ? allocatedOverhead : 0), baseCurrency)
+    const effRate = srcHrs.totalAllHours > 0
+      ? roundToCurrencyDecimals(netIncome / srcHrs.totalAllHours, baseCurrency)
+      : 0
+
+    const expAmt = Number(src.expectedAmount ?? src.expected_amount) || 0
+    const expHrs = Number(src.expectedHoursPerPeriod ?? src.expected_hours_per_period) || 0
+    const expHourly = (expAmt > 0 && expHrs > 0)
+      ? roundToCurrencyDecimals(expAmt / expHrs, baseCurrency)
+      : 0
+
+    const rateVariance = expHourly > 0 ? roundToCurrencyDecimals(effRate - expHourly, baseCurrency) : 0
+
+    return {
+      id: src.id,
+      name: src.name,
+      type: src.type,
+      payFrequency: src.payFrequency || src.pay_frequency || 'monthly',
+      currency: src.currency || baseCurrency,
+      status: src.status || ((src.isArchived || src.is_archived) ? 'archived' : 'active'),
+      hours: srcHrs,
+      collectedRevenue: fin.collectedRevenue,
+      expectedRevenue: fin.expectedRevenue,
+      directExpenses: fin.directExpenses,
+      allocatedOverhead: roundToCurrencyDecimals(allocatedOverhead, baseCurrency),
+      netIncome,
+      effectiveHourlyRate: effRate,
+      expectedHourlyRate: expHourly,
+      rateVariance,
+      notes: src.notes,
+    }
+  })
+}
+
+export function computeSalariedCommuteAnalysis(
+  incomeSources = [],
+  sessions = [],
+  payments = [],
+  overheads = [],
+  baseCurrency = 'USD'
+) {
+  const safeSources = Array.isArray(incomeSources) ? incomeSources : []
+  const safeSessions = Array.isArray(sessions) ? sessions : []
+  const safePayments = Array.isArray(payments) ? payments : []
+  const safeOverheads = Array.isArray(overheads) ? overheads : []
+
+  const salarySource = safeSources.find(s => s.type === 'salary')
+  if (!salarySource) {
+    return {
+      hasSalariedSource: false,
+      salaryCollected: 0,
+      workHours: 0,
+      commuteHours: 0,
+      totalTimeHours: 0,
+      commuteExpenses: 0,
+      nominalHourlyRate: 0,
+      nominalRate: 0,
+      trueHourlyRate: 0,
+      trueRate: 0,
+      commuteDragPct: 0,
+      monthlyCommuteCost: 0,
+    }
+  }
+
+  const srcIdStr = String(salarySource.id)
+  const salarySessions = safeSessions.filter(s => !s.incomeSourceId || String(s.incomeSourceId || s.income_source_id) === srcIdStr)
+  const salaryPayments = safePayments.filter(p => !p.incomeSourceId || String(p.incomeSourceId || p.income_source_id) === srcIdStr)
+
+  let salaryCollected = 0
+  for (const p of salaryPayments) {
+    const isExp = p.isExpected || p.is_expected || p.status === 'expected'
+    if (!isExp) {
+      salaryCollected += Number(p.baseAmount ?? p.base_amount ?? p.amount) || 0
+    }
+  }
+
+  let workMin = 0
+  let commuteMin = 0
+  for (const s of salarySessions) {
+    let dur = Number(s.durationMin || s.durationMinutes || (s.durationSeconds ? s.durationSeconds / 60 : 0) || (s.duration_seconds ? s.duration_seconds / 60 : 0)) || 0
+    if (dur <= 0 && s.startedAt && s.endedAt) {
+      const diffMs = new Date(s.endedAt).getTime() - new Date(s.startedAt).getTime()
+      dur = Math.max(0, Math.round(diffMs / 60000))
+    }
+    const sessionType = (s.type || '').toLowerCase()
+    if (sessionType === 'travel' || sessionType === 'commute' || s.unpaidReason === 'commute') {
+      commuteMin += dur
+    } else {
+      workMin += dur
+    }
+  }
+
+  const workHours = Math.round((workMin / 60) * 100) / 100
+  const commuteHours = Math.round((commuteMin / 60) * 100) / 100
+  const totalTimeHours = Math.round((workHours + commuteHours) * 100) / 100
+
+  const commuteOverheads = safeOverheads.filter(o => o.category === 'commute')
+  const commuteExpenses = commuteOverheads.reduce((acc, o) => acc + (Number(o.baseAmount ?? o.base_amount ?? o.amount) || 0), 0)
+
+  const nominalRate = workHours > 0 ? roundToCurrencyDecimals(salaryCollected / workHours, baseCurrency) : 0
+  const trueRate = totalTimeHours > 0
+    ? roundToCurrencyDecimals(Math.max(0, salaryCollected - commuteExpenses) / totalTimeHours, baseCurrency)
+    : 0
+
+  const commuteDragPct = nominalRate > 0
+    ? Math.round(((nominalRate - trueRate) / nominalRate) * 100)
+    : 0
+
+  return {
+    hasSalariedSource: true,
+    sourceId: salarySource.id,
+    sourceName: salarySource.name,
+    salaryCollected: roundToCurrencyDecimals(salaryCollected, baseCurrency),
+    workHours,
+    commuteHours,
+    totalTimeHours,
+    commuteExpenses: roundToCurrencyDecimals(commuteExpenses, baseCurrency),
+    nominalHourlyRate: nominalRate,
+    nominalRate,
+    trueHourlyRate: trueRate,
+    trueRate,
+    commuteMinutes: Math.round(commuteHours * 60),
+    commuteDragPct,
+    monthlyCommuteCost: roundToCurrencyDecimals(commuteExpenses, baseCurrency),
+  }
+}
+
+export function computeMultiEmployerComparison(
+  incomeSources = [],
+  incomeSourceMetrics = [],
+  baseCurrency = 'USD'
+) {
+  const safeSources = Array.isArray(incomeSources) ? incomeSources : []
+  const safeMetrics = Array.isArray(incomeSourceMetrics) ? incomeSourceMetrics : []
+
+  const wageSources = safeMetrics.filter(m => ['hourly_wage', 'daily_wage', 'gig', 'retainer', 'other'].includes(m.type) || (safeSources.length > 1))
+  const items = wageSources.map(w => ({
+    id: w.id,
+    name: w.name,
+    type: w.type,
+    payFrequency: w.payFrequency,
+    currency: w.currency || baseCurrency,
+    hoursWorked: w.hours?.totalAllHours || 0,
+    netEarned: w.netIncome || 0,
+    effectiveHourlyRate: w.effectiveHourlyRate || 0,
+    yieldRank: 0,
+  })).sort((a, b) => b.effectiveHourlyRate - a.effectiveHourlyRate)
+
+  items.forEach((it, idx) => {
+    it.yieldRank = idx + 1
+  })
+
+  return items
+}
+
 // ─── ROLLING WINDOW SUMMARY METRICS ─────────────────────────────────────────
 
 export function filterByDateRange(items = [], startUtc, endUtc, dateExtractor) {
@@ -297,14 +523,43 @@ export function computeUnifiedMetricsSummary(
   payments = [],
   expenses = [],
   projects = [],
-  overheads = [],
-  options = {}
+  overheadsOrOptions = [],
+  incomeSourcesOrOptions = [],
+  optionsOrUndefined = {}
 ) {
+  let overheads = Array.isArray(overheadsOrOptions) ? overheadsOrOptions : []
+  let incomeSources = Array.isArray(incomeSourcesOrOptions) ? incomeSourcesOrOptions : []
+  let options = {}
+
+  if (optionsOrUndefined && typeof optionsOrUndefined === 'object' && !Array.isArray(optionsOrUndefined)) {
+    options = { ...optionsOrUndefined }
+  }
+
+  // If 5th argument is options object (e.g. computeUnifiedMetricsSummary(sess, pay, exp, proj, { range: '30d' }))
+  if (overheadsOrOptions && typeof overheadsOrOptions === 'object' && !Array.isArray(overheadsOrOptions)) {
+    options = { ...overheadsOrOptions, ...options }
+    overheads = []
+  }
+
+  // If 6th argument is options object (e.g. computeUnifiedMetricsSummary(sess, pay, exp, proj, overheads, { range: '30d' }))
+  if (incomeSourcesOrOptions && typeof incomeSourcesOrOptions === 'object' && !Array.isArray(incomeSourcesOrOptions)) {
+    options = { ...incomeSourcesOrOptions, ...options }
+    incomeSources = []
+  }
+
+  const safeSessions = Array.isArray(sessions) ? sessions : []
+  const safePayments = Array.isArray(payments) ? payments : []
+  const safeExpenses = Array.isArray(expenses) ? expenses : []
+  const safeProjects = Array.isArray(projects) ? projects : []
+  const safeOverheads = Array.isArray(overheads) ? overheads : []
+  const safeIncomeSources = Array.isArray(incomeSources) ? incomeSources : []
+
   const tz = isValidTimezone(options.timezone || '') ? options.timezone : 'UTC'
   const baseCurrency = (options.baseCurrency || 'USD').toUpperCase().slice(0, 3)
   const targetHourly = Number(options.targetHourly) || 0
   const headlinePref = options.headlinePreference || 'client_work'
   const range = options.range || '30d'
+  const includeOverhead = options.includeOverhead !== false
 
   const userTodayStr = getUserToday(tz)
   let startUtc
@@ -370,17 +625,23 @@ export function computeUnifiedMetricsSummary(
     endDateStr = userTodayStr
   }
 
-  const filteredSessions = range === 'all' ? sessions : filterByDateRange(sessions, startUtc, endUtc, s => s.startedAt)
-  const filteredPayments = range === 'all' ? payments : filterByDateRange(payments, startUtc, endUtc, p => p.paymentDate || p.createdAt)
-  const filteredExpenses = range === 'all' ? expenses : filterByDateRange(expenses, startUtc, endUtc, e => e.expenseDate || e.createdAt)
-  const filteredOverheads = range === 'all' ? overheads : filterByDateRange(overheads, startUtc, endUtc, o => o.expenseDate)
+  const filteredSessions = range === 'all' ? safeSessions : filterByDateRange(safeSessions, startUtc, endUtc, s => s.startedAt)
+  const filteredPayments = range === 'all' ? safePayments : filterByDateRange(safePayments, startUtc, endUtc, p => p.paymentDate || p.createdAt)
+  const filteredExpenses = range === 'all' ? safeExpenses : filterByDateRange(safeExpenses, startUtc, endUtc, e => e.expenseDate || e.createdAt)
+  const filteredOverheads = range === 'all' ? safeOverheads : filterByDateRange(safeOverheads, startUtc, endUtc, o => o.expenseDate)
 
   const activeProjectIds = new Set(filteredSessions.map(s => s.projectId).filter(Boolean))
-  const filteredProjects = range === 'all' ? projects : projects.filter(p => activeProjectIds.has(p.id))
+  const filteredProjects = range === 'all' ? safeProjects : safeProjects.filter(p => activeProjectIds.has(p.id))
 
   const hours = computeSessionHours(filteredSessions)
-  const financials = computeFinancials(filteredPayments, filteredExpenses, filteredProjects, filteredOverheads, baseCurrency)
+  const financials = computeFinancials(filteredPayments, filteredExpenses, filteredProjects, filteredOverheads, baseCurrency, { includeOverhead })
   const rates = computeDualRates(financials, hours, targetHourly, headlinePref, baseCurrency)
+
+  const incomeSourcesBreakdown = computeIncomeSourceMetrics(safeIncomeSources, filteredSessions, filteredPayments, filteredExpenses, filteredOverheads, baseCurrency, { includeOverhead })
+  const salariedSummary = computeSalariedCommuteAnalysis(safeIncomeSources, filteredSessions, filteredPayments, filteredOverheads, baseCurrency)
+  const multiEmployerSummary = computeMultiEmployerComparison(safeIncomeSources, incomeSourcesBreakdown, baseCurrency)
+
+  const activeIncomeSourceIds = new Set(filteredSessions.map(s => s.incomeSourceId || s.income_source_id).filter(Boolean))
 
   return {
     rangeKey: range,
@@ -390,8 +651,14 @@ export function computeUnifiedMetricsSummary(
     hours,
     financials,
     rates,
+    incomeSourcesBreakdown,
+    salariedSummary,
+    salariedCommuteAnalysis: salariedSummary,
+    multiEmployerSummary,
+    multiEmployerComparison: multiEmployerSummary,
     sessionsCount: filteredSessions.length,
     activeProjectsCount: activeProjectIds.size,
+    activeIncomeSourcesCount: activeIncomeSourceIds.size,
   }
 }
 

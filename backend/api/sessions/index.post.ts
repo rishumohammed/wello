@@ -5,13 +5,15 @@ import { requireUser } from '../../utils/authGuard'
 import { getDb } from '../../utils/authService'
 import { sendSuccess, sendError, formatZodError } from '../../utils/apiResponse'
 import { getIdempotencyKey, checkIdempotency, saveIdempotency } from '../../utils/idempotency'
+import { logAnalyticsEvent } from '../../utils/analyticsService'
 
 import { classifyUnpaidReason } from '../../utils/metricsEngine'
 
 const createSessionSchema = z.object({
-  projectId: z.number().int().positive('Project ID is required'),
+  projectId: z.number().int().positive().nullable().optional(),
+  incomeSourceId: z.number().int().positive().nullable().optional(),
   title: z.string().min(1).max(255).optional().default('Work session'),
-  type: z.enum(['meeting', 'call', 'discussion', 'planning', 'proposal', 'travel', 'production', 'revision', 'delivery', 'other']).optional().default('production'),
+  type: z.enum(['meeting', 'call', 'discussion', 'planning', 'proposal', 'travel', 'commute', 'production', 'revision', 'delivery', 'other']).optional().default('production'),
   paymentType: z.enum(['paid', 'unpaid', 'intentional_unpaid']).optional().default('paid'),
   unpaidReason: z.string().nullable().optional(),
   unpaidCategory: z.enum(['unpaid_client', 'intentional_unpaid']).nullable().optional(),
@@ -19,6 +21,7 @@ const createSessionSchema = z.object({
   startedAt: z.string().optional(),
   endedAt: z.string().optional(),
   durationMinutes: z.number().min(1).max(99999).optional(),
+  durationMin: z.number().min(1).max(99999).optional(),
   durationSeconds: z.number().min(1).max(5999999).optional(),
   allowOverlap: z.boolean().optional().default(false),
 })
@@ -45,14 +48,31 @@ export default defineEventHandler(async (event) => {
   const data = parsed.data
   const db = getDb()
 
-  // Verify project belongs to user
-  const project = await db('projects')
-    .where({ id: data.projectId, user_id: user.id })
-    .whereNull('deleted_at')
-    .first()
+  if (!data.projectId && !data.incomeSourceId) {
+    return sendError(event, 400, 'MISSING_TARGET', 'Either a project or an income source must be specified.')
+  }
 
-  if (!project) {
-    return sendError(event, 400, 'INVALID_PROJECT', 'Specified project does not exist or does not belong to you.')
+  // Verify project belongs to user if provided
+  if (data.projectId) {
+    const project = await db('projects')
+      .where({ id: data.projectId, user_id: user.id })
+      .whereNull('deleted_at')
+      .first()
+
+    if (!project) {
+      return sendError(event, 400, 'INVALID_PROJECT', 'Specified project does not exist or does not belong to you.')
+    }
+  }
+
+  // Verify income source belongs to user if provided
+  if (data.incomeSourceId) {
+    const source = await db('income_sources')
+      .where({ id: data.incomeSourceId, user_id: user.id })
+      .first()
+
+    if (!source) {
+      return sendError(event, 400, 'INVALID_INCOME_SOURCE', 'Specified income source does not exist or does not belong to you.')
+    }
   }
 
   const now = new Date()
@@ -64,6 +84,8 @@ export default defineEventHandler(async (event) => {
     durationSeconds = data.durationSeconds
   } else if (data.durationMinutes) {
     durationSeconds = Math.round(data.durationMinutes * 60)
+  } else if (data.durationMin) {
+    durationSeconds = Math.round(data.durationMin * 60)
   }
 
   if (data.startedAt && data.endedAt) {
@@ -142,7 +164,8 @@ export default defineEventHandler(async (event) => {
 
   const [sessionId] = await db('work_sessions').insert({
     user_id: user.id,
-    project_id: data.projectId,
+    project_id: data.projectId || null,
+    income_source_id: data.incomeSourceId || null,
     title: data.title,
     type: data.type,
     payment_type: data.paymentType,
@@ -164,6 +187,7 @@ export default defineEventHandler(async (event) => {
   const responseData = {
     id: newSession.id,
     projectId: newSession.project_id,
+    incomeSourceId: newSession.income_source_id,
     title: newSession.title,
     type: newSession.type,
     paymentType: newSession.payment_type,
@@ -184,6 +208,14 @@ export default defineEventHandler(async (event) => {
   if (idempotencyKey) {
     await saveIdempotency(user.id, idempotencyKey, path, 201, responseData)
   }
+
+  // Emit trusted analytics event
+  await logAnalyticsEvent(user.id, 'session_logged', {
+    session_id: newSession.id,
+    duration_minutes: responseData.durationMinutes,
+    payment_type: data.paymentType,
+    unpaid_category: data.unpaidCategory,
+  })
 
   return sendSuccess(event, responseData, undefined, 201)
 })

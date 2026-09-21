@@ -5,6 +5,7 @@ import { requireUser } from '../../utils/authGuard'
 import { getDb } from '../../utils/authService'
 import { sendSuccess, sendError, formatZodError } from '../../utils/apiResponse'
 import { getIdempotencyKey, checkIdempotency, saveIdempotency } from '../../utils/idempotency'
+import { logAnalyticsEvent } from '../../utils/analyticsService'
 
 const createProjectSchema = z.object({
   name: z.string().min(1, 'Project name is required').max(255),
@@ -56,7 +57,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const isJob = data.isJob !== undefined ? data.isJob : ['approved', 'in_progress', 'completed'].includes(data.status)
-  const currency = data.currency || user.baseCurrency || 'USD'
+  const currency = data.currency || user.base_currency || 'USD'
   const quoteStatus = data.quoteAmount ? (data.status === 'potential' ? 'draft' : 'sent') : 'draft'
 
   const [projectId] = await db('projects').insert({
@@ -128,6 +129,14 @@ export default defineEventHandler(async (event) => {
   if (idempotencyKey) {
     await saveIdempotency(user.id, idempotencyKey, path, 201, responseData)
   }
+
+  // Emit trusted analytics event
+  await logAnalyticsEvent(user.id, 'project_created', {
+    project_id: newProject.id,
+    status: newProject.status,
+    has_quote: Boolean(newProject.quote_amount),
+    quote_amount: newProject.quote_amount !== null ? Number(newProject.quote_amount) : null,
+  })
 
   return sendSuccess(event, responseData, undefined, 201)
 })

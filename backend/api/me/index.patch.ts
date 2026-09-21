@@ -3,6 +3,7 @@ import { defineEventHandler, readBody } from 'h3'
 import { z } from 'zod'
 import { requireUser } from '../../utils/authGuard'
 import { getDb } from '../../utils/authService'
+import { applyPersonaDefaults } from '../../utils/addonService'
 import { sendSuccess, sendError, formatZodError } from '../../utils/apiResponse'
 
 const updateProfileSchema = z.object({
@@ -29,7 +30,20 @@ const updateProfileSchema = z.object({
   headlineRateMetric: z.enum(['client_work', 'all_in']).optional(),
   headline_rate_metric: z.enum(['client_work', 'all_in']).optional(),
   maxTimerHours: z.number().int().min(1).max(24).optional(),
-  max_timer_hours: z.number().int().min(1).max(24).optional(),
+  earningPersona: z.enum(['freelancer_projects', 'salaried', 'daily_hourly_wage', 'gig_retainer', 'mixed_hybrid']).optional(),
+  earning_persona: z.enum(['freelancer_projects', 'salaried', 'daily_hourly_wage', 'gig_retainer', 'mixed_hybrid']).optional(),
+  includeOverheadInMetrics: z.boolean().optional(),
+  include_overhead_in_metrics: z.boolean().optional(),
+  targetMonthlyIncome: z.number().min(0).nullable().optional(),
+  target_monthly_income: z.number().min(0).nullable().optional(),
+  onboardingCompleted: z.boolean().optional(),
+  onboarding_completed: z.boolean().optional(),
+  onboardingCompletedAt: z.string().nullable().optional(),
+  onboarding_completed_at: z.string().nullable().optional(),
+  analyticsConsent: z.boolean().optional(),
+  analytics_consent: z.boolean().optional(),
+  cookieConsent: z.string().optional(),
+  cookie_consent: z.string().optional(),
 })
 
 export default defineEventHandler(async (event) => {
@@ -86,11 +100,36 @@ export default defineEventHandler(async (event) => {
   else if (data.headline_rate_metric !== undefined) updates.headline_rate_metric = data.headline_rate_metric
   if (data.maxTimerHours !== undefined) updates.max_timer_hours = data.maxTimerHours
   else if (data.max_timer_hours !== undefined) updates.max_timer_hours = data.max_timer_hours
+  if (data.earningPersona !== undefined) updates.earning_persona = data.earningPersona
+  else if (data.earning_persona !== undefined) updates.earning_persona = data.earning_persona
+  if (data.includeOverheadInMetrics !== undefined) updates.include_overhead_in_metrics = data.includeOverheadInMetrics
+  else if (data.include_overhead_in_metrics !== undefined) updates.include_overhead_in_metrics = data.include_overhead_in_metrics
+  if (data.targetMonthlyIncome !== undefined) updates.target_monthly_income = data.targetMonthlyIncome
+  else if (data.target_monthly_income !== undefined) updates.target_monthly_income = data.target_monthly_income
+  if (data.onboardingCompletedAt !== undefined) updates.onboarding_completed_at = data.onboardingCompletedAt ? new Date(data.onboardingCompletedAt) : null
+  else if (data.onboarding_completed_at !== undefined) updates.onboarding_completed_at = data.onboarding_completed_at ? new Date(data.onboarding_completed_at) : null
+  else if (data.onboardingCompleted !== undefined || data.onboarding_completed !== undefined) {
+    const isCompleted = data.onboardingCompleted ?? data.onboarding_completed
+    updates.onboarding_completed_at = isCompleted ? now : null
+  }
+  if (data.analyticsConsent !== undefined) updates.analytics_consent = data.analyticsConsent
+  else if (data.analytics_consent !== undefined) updates.analytics_consent = data.analytics_consent
+  if (data.cookieConsent !== undefined) updates.cookie_consent = data.cookieConsent
+  else if (data.cookie_consent !== undefined) updates.cookie_consent = data.cookie_consent
 
   await db('users')
     .where({ id: user.id })
     .whereNull('deleted_at')
     .update(updates)
+
+  const personaVal = data.earningPersona || data.earning_persona
+  if (personaVal) {
+    try {
+      await applyPersonaDefaults(user.id, personaVal)
+    } catch (e) {
+      console.warn('[Addon Persona Defaults] Failed to apply:', e)
+    }
+  }
 
   const updatedUser = await db('users').where({ id: user.id }).first()
 
@@ -123,6 +162,20 @@ export default defineEventHandler(async (event) => {
     businessLogo: updatedUser.business_logo,
     defaultInvoiceNotes: updatedUser.default_invoice_notes,
     maxTimerHours: updatedUser.max_timer_hours !== undefined && updatedUser.max_timer_hours !== null ? Number(updatedUser.max_timer_hours) : 8,
+    earningPersona: updatedUser.earning_persona || 'freelancer_projects',
+    includeOverheadInMetrics: updatedUser.include_overhead_in_metrics !== 0 && updatedUser.include_overhead_in_metrics !== false,
+    targetMonthlyIncome: updatedUser.target_monthly_income !== null && updatedUser.target_monthly_income !== undefined ? Number(updatedUser.target_monthly_income) : null,
+    onboardingCompletedAt: updatedUser.onboarding_completed_at || null,
+    analyticsConsent: updatedUser.analytics_consent !== 0 && updatedUser.analytics_consent !== false,
+    cookieConsent: updatedUser.cookie_consent || 'accepted',
+    scheduledDeletionAt: updatedUser.scheduled_deletion_at || null,
+    deletionGracePeriodDays: updatedUser.deletion_grace_period_days || 14,
+    digestFrequency: updatedUser.digest_frequency || 'weekly',
+    digestDayOfWeek: updatedUser.digest_day_of_week !== undefined && updatedUser.digest_day_of_week !== null ? Number(updatedUser.digest_day_of_week) : 1,
+    digestHourUtc: updatedUser.digest_hour_utc !== undefined && updatedUser.digest_hour_utc !== null ? Number(updatedUser.digest_hour_utc) : 9,
+    digestEnabled: updatedUser.digest_frequency !== 'disabled' && !updatedUser.email_unsubscribed_at,
+    unsubscribeToken: updatedUser.unsubscribe_token || String(updatedUser.id),
+    emailUnsubscribedAt: updatedUser.email_unsubscribed_at,
     createdAt: updatedUser.created_at,
     updatedAt: updatedUser.updated_at,
   })

@@ -1,16 +1,18 @@
 // server/api/admin/users/status.post.ts
-import { defineEventHandler, readBody, createError } from 'h3'
-import { requirePermission } from '../../../utils/authGuard'
+import { defineEventHandler, readBody, createError, getRequestHeader } from 'h3'
+import { requirePermission, extractClientIp } from '../../../utils/authGuard'
 import { getDb } from '../../../utils/db'
-import { revokeAllSessionsForUser } from '../../../utils/authService'
+import { revokeAllSessionsForUser, verifyAdminActionOtp, isDevAuthAllowed } from '../../../utils/authService'
 import { recordAuditLog } from '../../../utils/auditStore'
 
 export default defineEventHandler(async (event) => {
-  const admin = await requirePermission(event, 'users.manage')
+  const admin = await requirePermission(event, 'users.suspend')
   const body = await readBody(event)
   const userId = body?.userId
   const email = (body?.email || '').trim().toLowerCase()
   const newStatus = body?.status
+  const reason = (body?.reason || '').trim()
+  const reauthOtp = (body?.reauthOtp || '').trim()
 
   const validStatuses = ['REGISTERED', 'EMAIL_PENDING', 'VERIFICATION_PENDING', 'VERIFIED', 'ACTIVE', 'INACTIVE', 'SUSPENDED', 'BLOCKED']
 
@@ -19,6 +21,29 @@ export default defineEventHandler(async (event) => {
       statusCode: 400,
       statusMessage: `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
     })
+  }
+
+  // Step-Up Re-Authentication for account suspension/blocking
+  if (['SUSPENDED', 'BLOCKED'].includes(newStatus)) {
+    const requireStrictOtp = !isDevAuthAllowed() || Boolean(body?.requireOtp)
+    if (requireStrictOtp && !reauthOtp) {
+      throw createError({
+        statusCode: 403,
+        statusMessage: 'Step-Up Re-Authentication Required: 6-digit OTP code required to suspend or block user accounts.',
+        data: { reauthRequired: true },
+      })
+    }
+
+    if (reauthOtp) {
+      const otpRes = await verifyAdminActionOtp(admin.email, reauthOtp, 'user_status')
+      if (!otpRes.valid) {
+        throw createError({
+          statusCode: 403,
+          statusMessage: otpRes.error || 'Invalid or expired re-authentication code.',
+          data: { reauthRequired: true },
+        })
+      }
+    }
   }
 
   const db = getDb()
@@ -77,21 +102,28 @@ export default defineEventHandler(async (event) => {
     await revokeAllSessionsForUser(targetUser.id)
   }
 
-  // Record Immutable Audit Log
-  recordAuditLog({
+  // Record Tamper-Evident Audit Log
+  await recordAuditLog({
     adminEmail: admin.email,
+    actorId: admin.id,
     action: `USER_STATUS_${newStatus}`,
     module: 'Users',
+    permissionUsed: 'users.suspend',
     target: `${targetUser.name} (${targetUser.email})`,
+    reason: reason || `Status changed to ${newStatus}`,
+    ipAddress: extractClientIp(event),
+    userAgent: getRequestHeader(event, 'user-agent') || 'Admin UI',
     prevValue: prevStatus,
     newValue: newStatus,
   })
 
   return {
     success: true,
-    message: `Updated status for ${targetUser.name} to ${newStatus}.`,
+    message: `Account status for ${targetUser.name} updated to ${newStatus}.`,
     user: {
-      ...targetUser,
+      id: targetUser.id,
+      name: targetUser.name,
+      email: targetUser.email,
       status: newStatus,
     },
   }

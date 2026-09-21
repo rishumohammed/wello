@@ -1,7 +1,7 @@
 // backend/utils/fxService.ts
 // Foreign Exchange (FX) Rate Engine, Triangular Conversion & Pluggable Providers
 
-import { getDb } from './authService'
+import { getDb } from './db'
 import { roundToCurrencyDecimals, getCurrencyDecimals } from './currencyUtils'
 
 export interface FxRateRecord {

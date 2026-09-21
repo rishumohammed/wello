@@ -48,7 +48,7 @@ export default defineEventHandler(async (event) => {
 
   const now = new Date()
   const expenseDate = data.expenseDate || now.toISOString().slice(0, 10)
-  const currency = data.currency || project.currency || user.baseCurrency || 'USD'
+  const currency = data.currency || project.currency || user.base_currency || 'USD'
 
   const [expenseId] = await db('project_expenses').insert({
     user_id: user.id,

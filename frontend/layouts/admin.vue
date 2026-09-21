@@ -66,15 +66,6 @@
 
               <div class="py-1.5">
                 <NuxtLink
-                  to="/"
-                  @click="showDropdown = false"
-                  class="dropdown-menu-item"
-                >
-                  <IconHome :size="15" class="text-tertiary" />
-                  <span>User Workspace</span>
-                </NuxtLink>
-
-                <NuxtLink
                   to="/admin/roles"
                   @click="showDropdown = false"
                   class="dropdown-menu-item"
@@ -123,7 +114,6 @@ import IconAlert from '~/components/IconAlert.vue'
 import IconBriefcase from '~/components/IconBriefcase.vue'
 import IconInsights from '~/components/IconInsights.vue'
 import IconSettings from '~/components/IconSettings.vue'
-import IconHome from '~/components/IconHome.vue'
 import IconShield from '~/components/IconShield.vue'
 import IconLogOut from '~/components/IconLogOut.vue'
 import IconChevronDown from '~/components/IconChevronDown.vue'

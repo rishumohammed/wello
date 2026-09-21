@@ -5,7 +5,7 @@
       <div class="flex items-center justify-between flex-wrap gap-4 mb-4">
         <div>
           <h1 class="text-xl font-bold text-primary mb-1">Admin Console Settings</h1>
-          <p class="text-xs text-secondary mb-0">System configuration, email engine, security RBAC, and audit logs.</p>
+          <p class="text-xs text-secondary mb-0">System configuration, email engine, 5-tier RBAC security, and tamper-evident audit logs.</p>
         </div>
       </div>
 
@@ -18,6 +18,7 @@
           @click="activeTab = tab.id"
           class="admin-tab-btn"
           :class="{ active: activeTab === tab.id }"
+          :id="`tab-btn-${tab.id}`"
         >
           <component :is="tab.icon" :size="14" />
           <span>{{ tab.label }}</span>
@@ -139,7 +140,7 @@
         <div class="card-header flex items-center justify-between">
           <div>
             <div class="card-title text-base">Transactional Email Delivery Logs</div>
-            <div class="card-subtitle text-xs">History of all OTP and transactional email dispatches</div>
+            <div class="card-subtitle text-xs">History of all OTP and transactional email dispatches (Secrets & Codes Redacted)</div>
           </div>
         </div>
 
@@ -148,10 +149,10 @@
             <thead>
               <tr>
                 <th>Timestamp</th>
-                <th>Recipient Email</th>
-                <th>Subject</th>
+                <th>Recipient</th>
+                <th>Type / Subject</th>
                 <th>Status</th>
-                <th>Provider ID</th>
+                <th>Details</th>
               </tr>
             </thead>
             <tbody>
@@ -160,14 +161,14 @@
               </tr>
               <tr v-for="log in emailLogs" :key="log.id">
                 <td class="text-tertiary whitespace-nowrap">{{ formatTime(log.timestamp || log.createdAt) }}</td>
-                <td class="font-bold text-primary">{{ log.recipient || log.email }}</td>
-                <td class="text-secondary max-w-xs truncate">{{ log.subject || 'Wello Verification' }}</td>
+                <td class="font-bold text-primary font-mono">{{ log.email || log.recipient }}</td>
+                <td class="text-secondary max-w-xs truncate">{{ log.type || log.subject || 'Verification' }}</td>
                 <td>
                   <span class="badge" :class="log.status === 'DELIVERED' || log.status === 'success' ? 'badge-completed' : 'badge-lost'">
                     {{ log.status }}
                   </span>
                 </td>
-                <td class="font-mono text-tertiary text-xs">{{ log.resendId || log.id }}</td>
+                <td class="text-secondary max-w-md truncate">{{ log.details || '—' }}</td>
               </tr>
             </tbody>
           </table>
@@ -175,36 +176,68 @@
       </div>
     </div>
 
-    <!-- TAB 4: Immutable Audit Trail -->
-    <div v-if="activeTab === 'audit'" class="tab-content animate-fade-in">
-      <div class="card">
-        <div class="card-header flex items-center justify-between">
+    <!-- TAB 4: Cryptographically Tamper-Evident Audit Trail -->
+    <div v-if="activeTab === 'audit'" class="tab-content animate-fade-in flex flex-col gap-4">
+      <!-- Chain Verification Action Card -->
+      <div class="card card-padded bg-off-white border-soft">
+        <div class="flex items-center justify-between flex-wrap gap-4">
           <div>
-            <div class="card-title text-base">Immutable System Audit Log</div>
-            <div class="card-subtitle text-xs">Complete event audit trail across all administrative operations</div>
+            <div class="text-sm font-bold text-primary flex items-center gap-2">
+              <span>🛡️ Tamper-Evident Append-Only Audit Trail</span>
+              <span class="badge badge-purple-soft font-mono text-2xs">SHA-256 Hash Chain</span>
+            </div>
+            <div class="text-xs text-secondary mt-1">
+              Every sensitive read and admin mutation is chained using previous hash pointers to guarantee non-repudiation and cryptographic integrity.
+            </div>
           </div>
+
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            @click="runChainVerification"
+            :disabled="isVerifyingChain"
+            id="verify-chain-btn"
+          >
+            <span v-if="isVerifyingChain">Verifying Cryptographic Chain…</span>
+            <span v-else>🔍 Verify Chain Integrity</span>
+          </button>
         </div>
 
+        <!-- Verification Results Banner -->
+        <div v-if="chainStatus" class="mt-3 p-3 rounded-8 text-xs flex items-center justify-between animate-fade-in" :class="chainStatus.valid ? 'bg-green-subtle text-green border-green' : 'bg-danger-subtle text-danger border-danger'">
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-sm">{{ chainStatus.valid ? '✓ Cryptographic Chain Intact' : '⚠ Tampering Detected' }}</span>
+            <span>— {{ chainStatus.valid ? `All ${chainStatus.totalEntries} entries verified unaltered from Genesis.` : chainStatus.reason }}</span>
+          </div>
+          <span class="font-mono text-2xs opacity-75">Verified at {{ formatTime(chainStatus.verifiedAt) }}</span>
+        </div>
+      </div>
+
+      <!-- Audit Logs Table -->
+      <div class="card">
         <div class="table-responsive">
           <table class="table text-xs">
             <thead>
               <tr>
                 <th>Timestamp</th>
-                <th>Module</th>
+                <th>Actor</th>
+                <th>Permission</th>
                 <th>Action</th>
-                <th>Admin Email</th>
-                <th>Details</th>
+                <th>Target</th>
+                <th>Reason / Details</th>
+                <th>Hash Pointer</th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="auditLogs.length === 0">
-                <td colspan="5" class="text-center py-6 text-tertiary">No audit events recorded yet.</td>
+                <td colspan="7" class="text-center py-6 text-tertiary">No audit events recorded yet.</td>
               </tr>
-              <tr v-for="log in auditLogs" :key="log.id">
+              <tr v-for="log in auditLogs" :key="log.id" :id="`audit-row-${log.id}`">
                 <td class="text-tertiary whitespace-nowrap">{{ formatTime(log.createdAt) }}</td>
+                <td class="font-bold text-primary font-mono">{{ log.adminEmail || 'System' }}</td>
                 <td>
-                  <span class="badge bg-off-white border-soft text-secondary text-2xs">
-                    {{ log.module }}
+                  <span class="badge bg-white border-soft text-purple text-2xs font-mono">
+                    {{ log.permissionUsed || 'system' }}
                   </span>
                 </td>
                 <td>
@@ -212,8 +245,16 @@
                     {{ log.action }}
                   </span>
                 </td>
-                <td class="font-bold text-primary">{{ log.adminEmail || 'System' }}</td>
-                <td class="text-secondary max-w-md truncate">{{ log.details || '—' }}</td>
+                <td class="text-secondary max-w-xs truncate">{{ log.target || '—' }}</td>
+                <td class="text-secondary max-w-sm truncate" :title="log.reason || log.newValue || log.prevValue">
+                  <span v-if="log.reason" class="fw-600 text-primary">"{{ log.reason }}"</span>
+                  <span v-else>{{ log.newValue || log.prevValue || '—' }}</span>
+                </td>
+                <td>
+                  <span class="font-mono text-2xs text-tertiary" :title="`Hash: ${log.hash}\nPrev: ${log.previousHash}`">
+                    {{ (log.hash || '').slice(0, 10) }}…
+                  </span>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -226,8 +267,8 @@
       <div class="grid-1 md:grid-2 gap-6">
         <!-- Roles List Card -->
         <div class="card card-padded">
-          <div class="card-title text-base mb-1">Admin Roles Definition</div>
-          <div class="card-subtitle text-xs mb-4">Configured RBAC role hierarchies</div>
+          <div class="card-title text-base mb-1">5-Tier Admin Roles Matrix</div>
+          <div class="card-subtitle text-xs mb-4">Configured RBAC role hierarchies and permissions</div>
 
           <div class="flex flex-col gap-3">
             <div
@@ -242,7 +283,7 @@
               <p class="text-xs text-secondary mb-2">{{ role.description }}</p>
               <div class="text-xs text-tertiary font-semibold">Permissions ({{ role.permissions?.length || 0 }}):</div>
               <div class="flex flex-wrap gap-1 mt-1">
-                <span v-for="p in role.permissions" :key="p" class="badge bg-white border-subtle text-purple text-2xs">
+                <span v-for="p in role.permissions" :key="p" class="badge bg-white border-subtle text-purple text-2xs font-mono">
                   {{ p }}
                 </span>
               </div>
@@ -252,21 +293,89 @@
 
         <!-- System Administrators List -->
         <div class="card card-padded">
-          <div class="card-title text-base mb-1">Active Administrators</div>
-          <div class="card-subtitle text-xs mb-4">Platform accounts with administrative privileges</div>
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <div class="card-title text-base mb-0">Active Administrators</div>
+              <div class="card-subtitle text-xs">Accounts with administrative RBAC roles</div>
+            </div>
+            <button class="btn btn-secondary btn-sm" @click="showAddAdminModal = true">
+              + Add Admin
+            </button>
+          </div>
 
           <div class="flex flex-col gap-2.5">
             <div v-for="admin in admins" :key="admin.id" class="p-3 border-radius-sm flex items-center justify-between border-soft bg-white">
               <div>
                 <div class="font-bold text-sm text-primary">{{ admin.name }}</div>
-                <div class="text-xs text-tertiary">{{ admin.email }}</div>
+                <div class="text-xs text-tertiary font-mono">{{ admin.email }}</div>
               </div>
-              <span class="badge badge-purple-soft fw-700">
-                {{ admin.roleKey || admin.role }}
-              </span>
+              <div class="flex items-center gap-2">
+                <span class="badge badge-purple-soft fw-700">
+                  {{ admin.roleKey || admin.role }}
+                </span>
+                <button
+                  v-if="admin.email !== 'admin@wello.com'"
+                  type="button"
+                  class="btn btn-ghost btn-xs text-secondary"
+                  @click="openEditAdminRole(admin)"
+                >
+                  Edit
+                </button>
+              </div>
             </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- STEP-UP RE-AUTH OTP MODAL -->
+    <div v-if="pendingRoleAction" class="modal-backdrop" @click="pendingRoleAction = null">
+      <div class="modal-box modal-md animate-fade-in" @click.stop>
+        <div class="modal-header flex items-center justify-between border-b pb-3 mb-4">
+          <h3 class="text-base font-bold text-primary mb-0">Admin Re-Authentication Required</h3>
+          <button class="btn btn-ghost btn-sm" @click="pendingRoleAction = null">✕</button>
+        </div>
+
+        <div class="p-3 bg-purple-subtle border-purple-soft rounded-8 text-xs text-purple mb-4">
+          🔐 Modifying administrator roles is a sensitive action. Enter the 6-digit OTP code dispatched to your email (<strong>{{ authStore.user?.email }}</strong>).
+        </div>
+
+        <form @submit.prevent="submitRoleChangeWithOtp" class="flex flex-col gap-4">
+          <div class="form-group">
+            <label class="form-label text-xs">Target Action</label>
+            <input :value="`Set ${pendingRoleAction.targetEmail} to ${pendingRoleAction.newRoleKey}`" disabled class="form-input text-xs bg-off-white" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label text-xs">6-Digit Verification Code <span class="text-danger">*</span></label>
+            <div class="flex items-center gap-2">
+              <input
+                v-model="reauthOtpCode"
+                type="text"
+                class="form-input text-center font-mono text-base font-bold tracking-wider"
+                placeholder="123456"
+                maxlength="6"
+                required
+              />
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm whitespace-nowrap"
+                @click="requestReauthOtp"
+                :disabled="isRequestingOtp"
+              >
+                {{ isRequestingOtp ? 'Sending…' : 'Resend Code' }}
+              </button>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-2 border-t">
+            <button type="button" class="btn btn-secondary btn-sm" @click="pendingRoleAction = null">Cancel</button>
+            <button type="submit" class="btn btn-primary btn-sm" :disabled="isSubmittingRole || reauthOtpCode.length < 6">
+              <span v-if="isSubmittingRole">Verifying & Applying…</span>
+              <span v-else>Confirm & Update Role</span>
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   </div>
@@ -274,6 +383,7 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue'
+import { useAuthStore } from '~/stores/auth'
 import { useToast } from '~/composables/useToast'
 import IconSettings from '~/components/IconSettings.vue'
 import IconEdit from '~/components/IconEdit.vue'
@@ -289,6 +399,7 @@ definePageMeta({
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
+const authStore = useAuthStore()
 
 const activeTab = ref(route.query.tab || 'resend')
 
@@ -296,7 +407,7 @@ const tabs = [
   { id: 'resend', label: 'Resend API Settings', icon: IconSettings },
   { id: 'templates', label: 'Email Templates', icon: IconEdit },
   { id: 'email-logs', label: 'Email Delivery Logs', icon: IconClock },
-  { id: 'audit', label: 'Immutable Audit Trail', icon: IconShield },
+  { id: 'audit', label: 'Tamper-Evident Audit Trail', icon: IconShield },
   { id: 'roles', label: 'Admin Roles & RBAC', icon: IconUser },
 ]
 
@@ -313,6 +424,17 @@ const emailLogs = ref([])
 const auditLogs = ref([])
 const roles = ref([])
 const admins = ref([])
+
+// Chain verification state
+const isVerifyingChain = ref(false)
+const chainStatus = ref(null)
+
+// Step-up OTP modal state
+const pendingRoleAction = ref(null)
+const reauthOtpCode = ref('')
+const isRequestingOtp = ref(false)
+const isSubmittingRole = ref(false)
+const showAddAdminModal = ref(false)
 
 watch(activeTab, (newTab) => {
   router.replace({ query: { ...route.query, tab: newTab } })
@@ -351,6 +473,81 @@ async function fetchAllSettingsData() {
     }
   } catch (err) {
     console.error('Failed to load settings data:', err)
+  }
+}
+
+async function runChainVerification() {
+  isVerifyingChain.value = true
+  try {
+    const res = await $fetch('/api/admin/audit-logs/verify')
+    chainStatus.value = res
+    if (res?.valid) {
+      toast.success(`Cryptographic chain intact: ${res.totalEntries} entries verified.`)
+    } else {
+      toast.error('Audit chain tampering detected!')
+    }
+  } catch (err) {
+    toast.error('Failed to run chain verification.')
+  } finally {
+    isVerifyingChain.value = false
+  }
+}
+
+function openEditAdminRole(admin) {
+  const currentRole = admin.roleKey || 'ADMIN'
+  const nextRole = currentRole === 'ADMIN' ? 'SUPPORT' : currentRole === 'SUPPORT' ? 'ANALYST' : 'ADMIN'
+  pendingRoleAction.value = {
+    targetEmail: admin.email,
+    targetUserId: admin.userId || admin.id,
+    newRoleKey: nextRole,
+  }
+  reauthOtpCode.value = ''
+  requestReauthOtp()
+}
+
+async function requestReauthOtp() {
+  isRequestingOtp.value = true
+  try {
+    const res = await $fetch('/api/admin/security/request-otp', {
+      method: 'POST',
+      body: { actionType: 'roles' },
+    })
+    toast.success(res?.message || 'Verification code sent to your email.')
+    if (res?.devOtp) {
+      reauthOtpCode.value = res.devOtp
+    }
+  } catch (err) {
+    toast.error('Failed to dispatch re-authentication code.')
+  } finally {
+    isRequestingOtp.value = false
+  }
+}
+
+async function submitRoleChangeWithOtp() {
+  if (!reauthOtpCode.value || reauthOtpCode.value.length < 6) {
+    toast.error('Please enter 6-digit code.')
+    return
+  }
+
+  isSubmittingRole.value = true
+  try {
+    await $fetch('/api/admin/roles', {
+      method: 'POST',
+      body: {
+        action: 'UPDATE_ROLE',
+        targetEmail: pendingRoleAction.value.targetEmail,
+        targetUserId: pendingRoleAction.value.targetUserId,
+        roleKey: pendingRoleAction.value.newRoleKey,
+        reauthOtp: reauthOtpCode.value.trim(),
+      },
+    })
+    toast.success(`Role updated for ${pendingRoleAction.value.targetEmail}.`)
+    pendingRoleAction.value = null
+    await fetchAllSettingsData()
+  } catch (err) {
+    toast.error(err?.data?.statusMessage || 'Failed to update role.')
+  } finally {
+    isSubmittingRole.value = false
   }
 }
 
@@ -399,8 +596,9 @@ function formatTime(isoStr) {
 
 function getActionBadgeClass(action) {
   if (!action) return 'badge-secondary'
-  if (action.includes('APPROVED') || action.includes('CREATED')) return 'badge-completed'
-  if (action.includes('REJECTED') || action.includes('SUSPENDED')) return 'badge-lost'
+  if (action.includes('APPROVED') || action.includes('CREATED') || action.includes('VERIFIED')) return 'badge-completed'
+  if (action.includes('REJECTED') || action.includes('SUSPENDED') || action.includes('FLAG')) return 'badge-lost'
+  if (action.includes('FINANCIAL') || action.includes('IMPERSONATION')) return 'badge-purple-soft text-purple'
   return 'badge-quoted'
 }
 </script>

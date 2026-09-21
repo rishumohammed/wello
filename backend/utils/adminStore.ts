@@ -31,30 +31,34 @@ export const ALL_PERMISSIONS: AdminPermission[] = [
   { key: 'users.view', module: 'Users', name: 'View Users', description: 'View user directory and profiles' },
   { key: 'users.manage', module: 'Users', name: 'Manage Users', description: 'Edit user details and roles' },
   { key: 'users.suspend', module: 'Users', name: 'Suspend Users', description: 'Suspend, block, or reactivate accounts' },
+  { key: 'users.financial_view', module: 'Users', name: 'View User Financials', description: 'View individual user quotes, invoices, payments, and rates. Requires a business justification reason.' },
+  { key: 'users.impersonate', module: 'Users', name: 'Impersonate User', description: 'Time-boxed read-only support impersonation with mandatory reason logging.' },
   { key: 'categories.view', module: 'Categories', name: 'View Categories', description: 'View job and service categories' },
   { key: 'categories.manage', module: 'Categories', name: 'Manage Categories', description: 'Create, edit, reorder, and disable categories' },
   { key: 'category_requests.manage', module: 'Categories', name: 'Manage Category Requests', description: 'Approve, reject, or merge category requests' },
-  { key: 'jobs.view', module: 'Jobs', name: 'View Jobs', description: 'View jobs and service listings' },
-  { key: 'jobs.manage', module: 'Jobs', name: 'Manage Jobs', description: 'Moderate or update job listings' },
-  { key: 'analytics.view', module: 'Analytics', name: 'View Analytics', description: 'Access Analytics Center and reports' },
-  { key: 'email.manage', module: 'Communications', name: 'Manage Email', description: 'Configure Resend API, templates, and view logs' },
-  { key: 'audit_logs.view', module: 'Audit', name: 'View Audit Logs', description: 'View system audit logs and event trails' },
+  { key: 'jobs.view', module: 'Jobs', name: 'View Jobs', description: 'View job listings and insights' },
+  { key: 'jobs.manage', module: 'Jobs', name: 'Manage Jobs', description: 'Moderate or update job listings and resolve flags' },
+  { key: 'analytics.view', module: 'Analytics', name: 'View Analytics', description: 'Access Analytics Center and aggregate reports' },
+  { key: 'analytics.export', module: 'Analytics', name: 'Export Analytics', description: 'Export platform aggregated analytics datasets' },
+  { key: 'store.manage', module: 'Store', name: 'Manage Store Addons', description: 'Configure addons, persona defaults, and limits' },
+  { key: 'email.manage', module: 'Communications', name: 'Manage Email', description: 'Configure Resend API, templates, and view delivery logs' },
+  { key: 'audit_logs.view', module: 'Audit', name: 'View Audit Logs', description: 'View immutable audit logs and verify cryptographic chain' },
   { key: 'admins.manage', module: 'Security', name: 'Manage Admins', description: 'Manage admin users and assign RBAC roles' },
-  { key: 'settings.manage', module: 'Settings', name: 'Manage System Settings', description: 'Configure global system parameters' },
+  { key: 'settings.manage', module: 'Settings', name: 'Manage System Settings', description: 'Configure global system parameters and IP allowlist' },
 ]
 
 export const ROLE_DEFINITIONS: Record<AdminRoleKey, AdminRole> = {
   SUPER_ADMIN: {
     roleKey: 'SUPER_ADMIN',
     name: 'Super Administrator',
-    description: 'Full unmitigated access to all administrative modules, security controls, and admin management.',
+    description: 'Full unmitigated access to all administrative modules, security controls, admin management, and personal financial data.',
     permissions: ALL_PERMISSIONS.map(p => p.key),
   },
   ADMIN: {
     roleKey: 'ADMIN',
     name: 'Platform Administrator',
-    description: 'Full access to user management, categories, jobs, analytics, and email dispatches.',
-    permissions: ALL_PERMISSIONS.filter(p => p.key !== 'admins.manage').map(p => p.key),
+    description: 'Full access to user management, categories, jobs insights, analytics, store management, and email dispatches.',
+    permissions: ALL_PERMISSIONS.filter(p => p.key !== 'admins.manage' && p.key !== 'users.financial_view').map(p => p.key),
   },
   MODERATOR: {
     roleKey: 'MODERATOR',
@@ -65,14 +69,14 @@ export const ROLE_DEFINITIONS: Record<AdminRoleKey, AdminRole> = {
   SUPPORT: {
     roleKey: 'SUPPORT',
     name: 'Support Specialist',
-    description: 'Access to view users, view jobs, handle category requests, and inspect email logs.',
-    permissions: ['users.view', 'categories.view', 'category_requests.manage', 'jobs.view', 'email.manage'],
+    description: 'Access to view users, view jobs, handle category requests, inspect email logs, and start time-boxed read-only impersonation.',
+    permissions: ['users.view', 'categories.view', 'category_requests.manage', 'jobs.view', 'email.manage', 'users.impersonate'],
   },
   ANALYST: {
     roleKey: 'ANALYST',
     name: 'Data & Growth Analyst',
-    description: 'Read-only access to Analytics Center, registration funnels, category demand, and audit logs.',
-    permissions: ['users.view', 'categories.view', 'jobs.view', 'analytics.view', 'audit_logs.view'],
+    description: 'Read-only access to Analytics Center, aggregate funnels, cohorts, reports, and audit logs. Strictly cannot view individual user financial records.',
+    permissions: ['users.view', 'categories.view', 'jobs.view', 'analytics.view', 'analytics.export', 'audit_logs.view'],
   },
 }
 

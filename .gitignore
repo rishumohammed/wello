@@ -12,8 +12,14 @@ dist/
 .env.*
 !.env.example
 
+# Local Backups & User Uploads
+backups/
+backend/uploads/*
+!backend/uploads/.gitkeep
+
 # IDE & OS
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
+

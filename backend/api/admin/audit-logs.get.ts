@@ -8,11 +8,13 @@ export default defineEventHandler(async (event) => {
 
   const query = getQuery(event)
   const moduleFilter = query?.module as string | undefined
+  const limit = Math.min(500, Math.max(10, Number(query?.limit) || 200))
 
-  const logs = getAuditLogs(200, moduleFilter)
+  const logs = await getAuditLogs(limit, moduleFilter)
 
   return {
     success: true,
+    count: logs.length,
     logs,
   }
 })

@@ -1,5 +1,4 @@
-// backend/utils/idempotency.ts
-import { getDb } from './authService'
+import { getDb } from './db'
 import { H3Event, getHeader } from 'h3'
 
 export function getIdempotencyKey(event: H3Event): string | null {

@@ -3,7 +3,7 @@
 
 import { defineEventHandler, getQuery } from 'h3'
 import { requireUser } from '../../utils/authGuard'
-import { getDb } from '../../utils/authService'
+import { getDb } from '../../utils/db'
 import { sendSuccess } from '../../utils/apiResponse'
 import {
   computeUnifiedMetricsSummary,
@@ -12,6 +12,7 @@ import {
   ExpenseData,
   ProjectData,
   OverheadData,
+  IncomeSourceData,
 } from '../../utils/metricsEngine'
 
 export default defineEventHandler(async (event) => {
@@ -26,6 +27,9 @@ export default defineEventHandler(async (event) => {
   const baseCurrency = (query.currency ? String(query.currency) : (user.base_currency || 'USD')).toUpperCase().slice(0, 3)
   const targetHourly = user.target_hourly ? Number(user.target_hourly) : 100
   const headlinePreference = (user.headline_rate_metric as any) || 'client_work'
+  const includeOverhead = query.includeOverhead !== undefined
+    ? (query.includeOverhead === 'true' || query.includeOverhead === true)
+    : (user.include_overhead_in_metrics !== 0 && user.include_overhead_in_metrics !== false)
 
   // Fetch user data from DB
   const rawSessions = await db('work_sessions')
@@ -49,14 +53,19 @@ export default defineEventHandler(async (event) => {
 
   const rawOverheads = await db('overhead_expenses')
     .where({ user_id: user.id })
-    .whereNull('deleted_at')
     .orderBy('expense_date', 'asc')
+
+  const rawIncomeSources = await db('income_sources')
+    .where({ user_id: user.id })
+    .orderBy('created_at', 'asc')
 
   // Map to Engine Types
   const sessions: SessionData[] = rawSessions.map(s => ({
     id: s.id,
     projectId: s.project_id,
+    incomeSourceId: s.income_source_id,
     clientId: s.client_id,
+    type: s.type,
     startedAt: s.started_at,
     endedAt: s.ended_at,
     durationMin: s.duration_seconds ? Math.round(s.duration_seconds / 60) : (s.duration_minutes || 0),
@@ -69,10 +78,13 @@ export default defineEventHandler(async (event) => {
   const payments: PaymentData[] = rawPayments.map(p => ({
     id: p.id,
     projectId: p.project_id,
+    incomeSourceId: p.income_source_id,
     amount: Number(p.amount),
     currency: p.currency,
     baseAmount: p.base_amount !== null ? Number(p.base_amount) : Number(p.amount),
     paymentDate: p.paid_date,
+    status: p.status,
+    isExpected: Boolean(p.is_expected),
     createdAt: p.created_at,
   }))
 
@@ -88,10 +100,30 @@ export default defineEventHandler(async (event) => {
 
   const overheads: OverheadData[] = rawOverheads.map(o => ({
     id: o.id,
+    incomeSourceId: o.income_source_id,
+    category: o.category,
+    name: o.description || o.name || 'Overhead',
     amount: Number(o.amount),
     currency: o.currency,
     baseAmount: o.base_amount !== null ? Number(o.base_amount) : Number(o.amount),
     expenseDate: o.expense_date,
+    frequency: o.recurring_period || (o.is_recurring ? 'monthly' : 'one_off'),
+    allocationRule: o.allocation_rule || 'none',
+  }))
+
+  const incomeSources: IncomeSourceData[] = rawIncomeSources.map(src => ({
+    id: src.id,
+    userId: src.user_id,
+    type: src.type,
+    name: src.name,
+    currency: src.currency,
+    payFrequency: src.pay_frequency || src.frequency || 'monthly',
+    expectedAmount: src.expected_amount !== null ? Number(src.expected_amount) : null,
+    expectedHoursPerPeriod: src.expected_hours_per_period !== null ? Number(src.expected_hours_per_period) : null,
+    status: src.is_active ? 'active' : 'archived',
+    isArchived: !src.is_active,
+    notes: src.notes,
+    createdAt: src.created_at,
   }))
 
   const projects: ProjectData[] = rawProjects.map(p => ({
@@ -114,6 +146,7 @@ export default defineEventHandler(async (event) => {
     expenses,
     projects,
     overheads,
+    incomeSources,
     {
       range,
       from: fromStr,
@@ -122,6 +155,7 @@ export default defineEventHandler(async (event) => {
       baseCurrency,
       targetHourly,
       headlinePreference,
+      includeOverhead,
     }
   )
 
@@ -132,24 +166,28 @@ export default defineEventHandler(async (event) => {
     expenses,
     projects,
     overheads,
+    incomeSources,
     {
       range: 'today',
       timezone,
       baseCurrency,
       targetHourly,
       headlinePreference,
+      includeOverhead,
     }
   )
 
   // Compute 7d, 30d, 90d, YTD baselines for rolling comparison
-  const summary7d = computeUnifiedMetricsSummary(sessions, payments, expenses, projects, overheads, { range: '7d', timezone, baseCurrency, targetHourly, headlinePreference })
-  const summary30d = computeUnifiedMetricsSummary(sessions, payments, expenses, projects, overheads, { range: '30d', timezone, baseCurrency, targetHourly, headlinePreference })
-  const summary90d = computeUnifiedMetricsSummary(sessions, payments, expenses, projects, overheads, { range: '90d', timezone, baseCurrency, targetHourly, headlinePreference })
-  const summaryYtd = computeUnifiedMetricsSummary(sessions, payments, expenses, projects, overheads, { range: 'ytd', timezone, baseCurrency, targetHourly, headlinePreference })
+  const summary7d = computeUnifiedMetricsSummary(sessions, payments, expenses, projects, overheads, incomeSources, { range: '7d', timezone, baseCurrency, targetHourly, headlinePreference, includeOverhead })
+  const summary30d = computeUnifiedMetricsSummary(sessions, payments, expenses, projects, overheads, incomeSources, { range: '30d', timezone, baseCurrency, targetHourly, headlinePreference, includeOverhead })
+  const summary90d = computeUnifiedMetricsSummary(sessions, payments, expenses, projects, overheads, incomeSources, { range: '90d', timezone, baseCurrency, targetHourly, headlinePreference, includeOverhead })
+  const summaryYtd = computeUnifiedMetricsSummary(sessions, payments, expenses, projects, overheads, incomeSources, { range: 'ytd', timezone, baseCurrency, targetHourly, headlinePreference, includeOverhead })
 
   return sendSuccess(event, {
     summary,
     today: todaySummary,
+    salariedCommuteAnalysis: summary.salariedCommuteAnalysis,
+    multiEmployerComparison: summary.multiEmployerComparison,
     rolling: {
       '7d': summary7d,
       '30d': summary30d,
@@ -161,6 +199,7 @@ export default defineEventHandler(async (event) => {
       baseCurrency,
       targetHourly,
       headlinePreference,
+      includeOverhead,
     }
   })
 })

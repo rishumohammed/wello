@@ -1,0 +1,69 @@
+{
+  "name": "Wello – Dual Hourly Rate & Value Manager",
+  "short_name": "Wello",
+  "description": "Know your real hourly rate across every client, project, and hour worked.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#FAFAFC",
+  "theme_color": "#FF9F1C",
+  "lang": "en",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Start Timer",
+      "short_name": "Timer",
+      "description": "Start tracking billable time immediately",
+      "url": "/work?action=timer",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Quick Entry",
+      "short_name": "Quick Add",
+      "description": "Log session, payment or expense in one tap",
+      "url": "/?action=quick-entry",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Invoices",
+      "short_name": "Invoices",
+      "description": "View and manage client invoices",
+      "url": "/invoicing",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Pricing Calculator",
+      "short_name": "Calculator",
+      "description": "Calculate project quotes and target rates",
+      "url": "/calculator",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    }
+  ]
+}

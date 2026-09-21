@@ -14,14 +14,16 @@ import {
 } from '../../utils/authConfig'
 import { sendSmsViaProvider, formatOtpSmsBody } from '../../utils/smsEngine'
 
+import { requireRateLimit } from '../../utils/rateLimiter'
+
 const sendOtpSchema = z.object({
-  email: z.string().optional(),
-  phone: z.string().optional(),
-  identifier: z.string().optional(),
+  email: z.string().max(255).optional(),
+  phone: z.string().max(50).optional(),
+  identifier: z.string().max(255).optional(),
   type: z.enum(['login', 'register']).optional().default('login'),
-  name: z.string().optional().default(''),
-  defaultCountry: z.string().optional().default('US'),
-})
+  name: z.string().max(100).optional().default(''),
+  defaultCountry: z.string().max(10).optional().default('US'),
+}).strict()
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
@@ -45,7 +47,16 @@ export default defineEventHandler(async (event) => {
   const normalized = normalizeIdentifier(inputTarget, defaultCountry)
   const name = rawName.trim()
 
-  // 1. Enforce database-backed rate limit (3 / 10m, 10 / 1hr)
+  // 1. Enforce distributed database-backed rate limit
+  await requireRateLimit(event, {
+    keyPrefix: 'auth_send_otp',
+    limit: 5,
+    windowSeconds: 300,
+    identifier: normalized.value,
+    customErrorMessage: 'Too many verification code requests. Please wait before requesting another code.',
+  })
+
+  // 2. Check internal OTP table rate limit (3 / 10m, 10 / 1hr)
   const rateLimit = await checkOtpRateLimit(normalized.value)
   if (!rateLimit.allowed) {
     throw createError({

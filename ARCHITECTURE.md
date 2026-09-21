@@ -97,8 +97,6 @@ erDiagram
     USERS ||--o{ INVOICE_SEQUENCES : "increments"
     USERS ||--o{ AUTH_SESSIONS : "authenticates"
     USERS ||--o{ USER_ADDONS : "entitled_to"
-    USERS ||--o{ SUBSCRIPTIONS : "subscribes"
-    USERS ||--o{ BILLING_EVENTS : "records"
     USERS ||--o{ NOTIFICATIONS : "receives"
     USERS ||--o{ NOTIFICATION_PREFERENCES : "configures"
     USERS ||--o{ ADMIN_USERS : "delegates"
@@ -123,14 +121,13 @@ erDiagram
     INVOICES ||--o{ INVOICE_TAXES : "applies"
 
     ADDONS ||--o{ USER_ADDONS : "installed_by"
-    PLANS ||--o{ SUBSCRIPTIONS : "plans_for"
 
     ADMIN_ROLES ||--o{ ADMIN_ROLE_PERMISSIONS : "defines"
     ADMIN_PERMISSIONS ||--o{ ADMIN_ROLE_PERMISSIONS : "grants"
     ADMIN_USERS }o--|| ADMIN_ROLES : "assigned"
 ```
 
-### Table Dictionary (28 Core & Operational Tables)
+### Table Dictionary (25 Core & Operational Tables)
 
 | Domain | Table | Purpose | Primary Key | Soft Delete | Key Indexes & Constraints |
 |---|---|---|---|---|---|
@@ -154,9 +151,6 @@ erDiagram
 | **Auth** | `auth_sessions` | Token-hashed authenticated sessions with device & IP info | `id` (INT) | No | `token_hash` (UQ), `user_id` (FK), `expires_at` |
 | **Platform** | `addons` | Modular platform feature extensions (Basic Invoicing, etc.) | `id` (INT) | No | `slug` (UQ), `status` |
 | **Platform** | `user_addons` | User addon entitlements & activation state | `id` (INT) | No | `(user_id, addon_id)` (UQ) |
-| **Platform** | `plans` | Platform subscription tier definitions | `id` (INT) | No | `plan_key` (UQ), `is_active` |
-| **Platform** | `subscriptions` | Active user billing subscriptions | `id` (INT) | No | `user_id` (FK), `plan_id` (FK), `(user_id, status)` |
-| **Platform** | `billing_events` | Immutable billing & payment transaction audit log | `id` (INT) | No | `user_id` (FK), `subscription_id` (FK), `event_type` |
 | **Platform** | `notifications` | In-app user notifications | `id` (INT) | No | `user_id` (FK), `(user_id, is_read)` |
 | **Platform** | `notification_preferences` | User notification channel & topic preferences | `id` (INT) | No | `(user_id, channel, topic)` (UQ) |
 | **Admin** | `category_requests` | Community-requested service categories with workflow | `id` (INT) | No | `user_id` (FK), `status`, `user_email` |
@@ -276,9 +270,9 @@ erDiagram
 * **Backend API:** [index.get.ts](file:///d:/Apps/Hexpines/Wello/backend/api/store/addons/index.get.ts), [activate.post.ts](file:///d:/Apps/Hexpines/Wello/backend/api/store/addons/activate.post.ts)
 * **Store:** [storeEngine.ts](file:///d:/Apps/Hexpines/Wello/backend/utils/storeEngine.ts)
 * **Features:**
-  - In-app store for activating modular platform extensions.
-  - One-click enable/disable for addons like Basic Invoicing without separate accounts.
-  - Pricing badges distinguishing `FREE ADDON` from future `PRO` modules.
+  - In-app store for activating modular platform extensions (e.g. Basic Invoicing, Recurring Retainers).
+  - One-click enable/disable for addons with immediate workspace integration.
+  - 100% free addon model: all addons are free to activate with no paid plans, subscriptions, or platform checkout fees.
 
 ---
 

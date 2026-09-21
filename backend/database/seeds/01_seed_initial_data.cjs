@@ -21,9 +21,6 @@ exports.seed = async function(knex) {
     'category_requests',
     'notification_preferences',
     'notifications',
-    'billing_events',
-    'subscriptions',
-    'plans',
     'user_addons',
     'addons',
     'auth_sessions',
@@ -187,13 +184,7 @@ exports.seed = async function(knex) {
     },
   ])
 
-  // 6. PLANS & ADDONS
-  await knex('plans').insert([
-    { plan_key: 'free', name: 'Free Starter', description: 'Essential work tracking and hourly analytics', price_amount: 0, currency: 'USD', billing_interval: 'free', is_active: true },
-    { plan_key: 'pro_monthly', name: 'Wello Pro Monthly', description: 'Full value intelligence, client reports, invoicing, and integrations', price_amount: 19.00, currency: 'USD', billing_interval: 'monthly', is_active: true },
-    { plan_key: 'pro_annual', name: 'Wello Pro Annual', description: 'Full value intelligence with 2 months free', price_amount: 190.00, currency: 'USD', billing_interval: 'annual', is_active: true },
-  ])
-
+  // 6. STORE ADDONS (100% Free)
   const [addonId] = await knex('addons').insert({
     slug: 'basic-invoicing',
     name: 'Basic Invoicing',
@@ -209,8 +200,6 @@ exports.seed = async function(knex) {
       '100% Free forever with no payment processing fees'
     ]),
     is_free: true,
-    price_amount: 0,
-    price_currency: 'USD',
     status: 'PUBLISHED',
     display_order: 1,
   })

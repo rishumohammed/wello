@@ -1,0 +1,153 @@
+services:
+  # MySQL 8.0 Primary Relational Database
+  mysql:
+    image: mysql:8.0
+    container_name: wello_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword_secret}
+      MYSQL_DATABASE: ${DB_NAME:-wello}
+      MYSQL_USER: ${DB_USER:-wello_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-wello_secret_password}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    networks:
+      - wello_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-rootpassword_secret}"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  # Redis 7 In-Memory Cache and Rate Limiting Store
+  redis:
+    image: redis:7-alpine
+    container_name: wello_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_secret_pass}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - wello_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_secret_pass}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # Mailpit Local SMTP & Web Mail Viewer for Dev/Staging Sandbox
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: wello_mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025" # SMTP port
+      - "8025:8025" # Web UI
+    networks:
+      - wello_network
+
+  # Backend Nitro API & Business Logic Server
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: wello_backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3001
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-wello_user}
+      DB_PASSWORD: ${DB_PASSWORD:-wello_secret_password}
+      DB_NAME: ${DB_NAME:-wello}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secret_pass}
+      SESSION_SECRET: ${SESSION_SECRET:-replace_with_64_char_secure_random_hex_string}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost,http://localhost:3000,http://localhost:80}
+      EMAIL_DEV_MODE: ${EMAIL_DEV_MODE:-false}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-Wello <noreply@wello.app>}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      STORAGE_LOCAL_DIR: /app/uploads
+      BASE_CURRENCY: ${BASE_CURRENCY:-USD}
+      CURRENCY_SYMBOL: ${CURRENCY_SYMBOL:-$}
+      RATE_LIMIT_AUTH_MAX: ${RATE_LIMIT_AUTH_MAX:-10}
+      RATE_LIMIT_API_MAX: ${RATE_LIMIT_API_MAX:-120}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+    volumes:
+      - uploads_data:/app/uploads
+    ports:
+      - "3001:3001"
+    networks:
+      - wello_network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # Frontend Nuxt 3 Client Web App
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: wello_frontend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3000
+      NUXT_PUBLIC_API_BASE: /api
+    ports:
+      - "3000:3000"
+    networks:
+      - wello_network
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # Nginx Unified Reverse Proxy & Static Asset Accelerator
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: wello_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - wello_network
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+  uploads_data:
+    driver: local
+
+networks:
+  wello_network:
+    driver: bridge

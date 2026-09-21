@@ -8,7 +8,8 @@ import { sendSuccess, sendError, formatZodError } from '../../utils/apiResponse'
 import { classifyUnpaidReason } from '../../utils/metricsEngine'
 
 const updateSessionSchema = z.object({
-  projectId: z.number().int().positive().optional(),
+  projectId: z.number().int().positive().nullable().optional(),
+  incomeSourceId: z.number().int().positive().nullable().optional(),
   title: z.string().min(1).max(255).optional(),
   type: z.enum(['meeting', 'call', 'discussion', 'planning', 'proposal', 'travel', 'production', 'revision', 'delivery', 'other']).optional(),
   paymentType: z.enum(['paid', 'unpaid', 'intentional_unpaid']).optional(),
@@ -57,6 +58,15 @@ export default defineEventHandler(async (event) => {
       .first()
     if (!project) {
       return sendError(event, 400, 'INVALID_PROJECT', 'Specified project does not exist or does not belong to you.')
+    }
+  }
+
+  if (data.incomeSourceId) {
+    const source = await db('income_sources')
+      .where({ id: data.incomeSourceId, user_id: user.id })
+      .first()
+    if (!source) {
+      return sendError(event, 400, 'INVALID_INCOME_SOURCE', 'Specified income source does not exist or does not belong to you.')
     }
   }
 
@@ -134,6 +144,7 @@ export default defineEventHandler(async (event) => {
   }
 
   if (data.projectId !== undefined) updates.project_id = data.projectId
+  if (data.incomeSourceId !== undefined) updates.income_source_id = data.incomeSourceId
   if (data.title !== undefined) updates.title = data.title.trim()
   if (data.type !== undefined) updates.type = data.type
   if (data.paymentType !== undefined) {
@@ -205,6 +216,7 @@ export default defineEventHandler(async (event) => {
   return sendSuccess(event, {
     id: updated.id,
     projectId: updated.project_id,
+    incomeSourceId: updated.income_source_id,
     title: updated.title,
     type: updated.type,
     paymentType: updated.payment_type,

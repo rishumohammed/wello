@@ -1,9 +1,8 @@
 // server/api/admin/analytics.get.ts
 import { defineEventHandler, getQuery } from 'h3'
 import { requirePermission } from '../../utils/authGuard'
-import { getFunnelMetrics, getGeographicAnalytics } from '../../utils/analyticsEngine'
-import { getCategoryIntelligenceMetrics } from '../../utils/categoryStore'
-import { getAllUsers } from '../../utils/authConfig'
+import { getAdminAnalyticsOverview } from '../../utils/analyticsMetricsService'
+import { evaluateFunnel } from '../../utils/analyticsRollupService'
 
 export default defineEventHandler(async (event) => {
   await requirePermission(event, 'analytics.view')
@@ -11,23 +10,41 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const range = (query?.range || '30days').toString()
 
-  const funnel = getFunnelMetrics()
-  const geo = getGeographicAnalytics()
-  const categories = getCategoryIntelligenceMetrics()
-  const users = getAllUsers()
+  const [overview, funnelData] = await Promise.all([
+    getAdminAnalyticsOverview(range),
+    evaluateFunnel('default_activation_funnel').catch(() => null),
+  ])
+
+  // Map to legacy funnel format for backwards compatibility
+  const legacyFunnel = funnelData?.steps?.map(s => ({
+    stageKey: s.stepKey,
+    stageName: s.stepName,
+    count: s.count,
+    conversionRate: s.conversionRate,
+    dropOffRate: s.dropOffRate,
+  })) || []
 
   return {
     success: true,
     range,
     overview: {
-      totalUsers: users.length,
-      activeUsers: users.filter(u => (u.status || 'ACTIVE') === 'ACTIVE').length,
-      verifiedRatePercent: 87.5,
-      jobCompletionRatePercent: 92.0,
-      connectionConversionRatePercent: 42.8,
+      totalUsers: overview.kpis.totalUsers,
+      activeUsers: overview.kpis.activeUsers,
+      dau: overview.kpis.dau,
+      wau: overview.kpis.wau,
+      mau: overview.kpis.mau,
+      stickinessPercent: overview.kpis.stickinessPercent,
+      activationRatePercent: overview.kpis.activationRatePercent,
+      avgTimeToActivateHours: overview.kpis.avgTimeToActivateHours,
+      churnRatePercent: overview.kpis.churnRatePercent,
+      totalHoursTracked: overview.kpis.totalHoursTracked,
+      totalRevenueTrackedUsd: overview.kpis.totalRevenueTrackedUsd,
     },
-    funnel,
-    geography: geo,
-    categoryDemand: categories,
+    funnel: legacyFunnel,
+    geography: overview.geography,
+    categoryDemand: overview.categoryDemand,
+    kpis: overview.kpis,
+    dailyTrend: overview.dailyTrend,
+    featureAdoption: overview.featureAdoption,
   }
 })

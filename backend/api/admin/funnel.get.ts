@@ -1,28 +1,31 @@
 // server/api/admin/funnel.get.ts
 import { defineEventHandler, getQuery } from 'h3'
 import { requirePermission } from '../../utils/authGuard'
-import { getFunnelMetrics } from '../../utils/analyticsEngine'
+import { evaluateFunnel } from '../../utils/analyticsRollupService'
 
 export default defineEventHandler(async (event) => {
   await requirePermission(event, 'analytics.view')
   const query = getQuery(event)
   const startDate = query?.startDate as string | undefined
   const endDate = query?.endDate as string | undefined
+  const country = query?.country as string | undefined
+  const slug = (query?.slug || 'default_activation_funnel').toString()
 
-  const metrics = getFunnelMetrics(startDate, endDate)
+  const result = await evaluateFunnel(slug, { startDate, endDate, country })
 
-  const initialCount = metrics[0]?.count || 0
-  const finalCount = metrics[metrics.length - 1]?.count || 0
-  const overallConversion = initialCount > 0 ? Number(((finalCount / initialCount) * 100).toFixed(1)) : 0
+  const legacyFunnel = result.steps.map(s => ({
+    stageKey: s.stepKey,
+    stageName: s.stepName,
+    count: s.count,
+    conversionRate: s.conversionRate,
+    dropOffRate: s.dropOffRate,
+  }))
 
   return {
     success: true,
-    funnel: metrics,
-    summary: {
-      totalStarted: initialCount,
-      totalCompleted: finalCount,
-      overallConversionRate: overallConversion,
-      overallDropOffRate: Number((100 - overallConversion).toFixed(1)),
-    },
+    funnel: legacyFunnel,
+    steps: result.steps,
+    definition: result.funnel,
+    summary: result.summary,
   }
 })

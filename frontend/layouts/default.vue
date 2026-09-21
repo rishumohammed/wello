@@ -25,6 +25,28 @@
 
     <!-- Main area -->
     <div class="app-main">
+      <!-- Sticky Support Impersonation Banner -->
+      <div
+        v-if="authStore.user?.isImpersonation"
+        class="bg-amber-600 text-white px-4 py-2 text-xs flex items-center justify-between shadow-sm z-50 sticky top-0"
+        id="support-impersonation-banner"
+        style="background-color: #D97706; color: #FFFFFF;"
+      >
+        <div class="flex items-center gap-2">
+          <span class="font-bold">⚠️ Support Impersonation Mode:</span>
+          <span>You are viewing Wello as <strong>{{ authStore.user?.name }}</strong> ({{ authStore.user?.email }}). All actions are strictly <strong>Read-Only</strong>.</span>
+        </div>
+        <button
+          type="button"
+          @click="exitImpersonation"
+          class="cursor-pointer"
+          style="background: white; color: #78350F; border: none; border-radius: 4px; padding: 4px 10px; font-weight: 700;"
+          id="exit-impersonation-btn"
+        >
+          Exit Impersonation →
+        </button>
+      </div>
+
       <!-- Topbar -->
       <header class="app-topbar">
         <div class="topbar-left">
@@ -35,6 +57,9 @@
         <div class="topbar-right">
           <!-- Network / Offline status badge -->
           <OfflineBadge />
+
+          <!-- In-App Notification Center Bell & Dropdown -->
+          <NotificationCenter v-if="authStore.isAuthenticated" />
 
           <!-- Active timer pill -->
           <div
@@ -109,10 +134,31 @@
                     to="/settings"
                     @click="showDropdown = false"
                     class="dropdown-menu-item"
+                    id="topbar-dropdown-settings"
                   >
                     <IconSettings :size="15" class="text-tertiary" />
                     <span>Settings & Profile</span>
                   </NuxtLink>
+
+                  <NuxtLink
+                    to="/help"
+                    @click="showDropdown = false"
+                    class="dropdown-menu-item"
+                    id="topbar-dropdown-help"
+                  >
+                    <span class="text-sm">❓</span>
+                    <span>Help & FAQ</span>
+                  </NuxtLink>
+
+                  <button
+                    type="button"
+                    @click="store.showFeedbackModal = true; showDropdown = false"
+                    class="dropdown-menu-item text-left w-full"
+                    id="topbar-dropdown-feedback"
+                  >
+                    <span class="text-sm">💬</span>
+                    <span>Send Feedback</span>
+                  </button>
                 </div>
 
                 <div class="border-t py-1.5 bg-danger-subtle">
@@ -139,27 +185,96 @@
       </main>
     </div>
 
-    <!-- Mobile bottom nav -->
+    <!-- Mobile bottom nav with 1-tap center action -->
     <nav class="mobile-nav">
       <div class="mobile-nav-inner">
-        <NuxtLink
-          v-for="item in visibleMobileNavItems"
-          :key="item.to"
-          :to="item.to"
-          class="mobile-nav-item"
-          :class="{ active: isActive(item) }"
-          :id="`mobile-nav-${item.id}`"
+        <NuxtLink to="/" class="mobile-nav-item" :class="{ active: route.path === '/' }" id="mobile-nav-home">
+          <IconHome />
+          <span>Home</span>
+        </NuxtLink>
+        <NuxtLink to="/work" class="mobile-nav-item" :class="{ active: route.path.startsWith('/work') }" id="mobile-nav-work">
+          <IconBriefcase />
+          <span>Work</span>
+        </NuxtLink>
+        
+        <!-- 1-Tap Center Quick Action Button -->
+        <button
+          type="button"
+          class="mobile-nav-center-btn"
+          @click="showQuickActionSheet = true"
+          aria-label="Quick Actions"
+          id="mobile-nav-quick-action"
         >
-          <component :is="item.icon" />
-          <span>{{ item.label }}</span>
+          <div class="center-btn-circle">
+            <IconPlus :size="20" class="text-white" />
+          </div>
+          <span class="center-btn-label">Quick Add</span>
+        </button>
+
+        <NuxtLink to="/invoicing" class="mobile-nav-item" :class="{ active: route.path.startsWith('/invoicing') }" id="mobile-nav-invoicing">
+          <IconReceipt />
+          <span>Invoices</span>
+        </NuxtLink>
+        <NuxtLink to="/reports" class="mobile-nav-item" :class="{ active: route.path.startsWith('/reports') }" id="mobile-nav-reports">
+          <IconFileText />
+          <span>Reports</span>
         </NuxtLink>
       </div>
     </nav>
 
-    <!-- Global timer modal for running pill -->
+    <!-- Mobile 1-Tap Quick Action Sheet -->
+    <MobileQuickActionSheet
+      :isOpen="showQuickActionSheet"
+      @close="showQuickActionSheet = false"
+      @trigger="handleQuickActionTrigger"
+    />
+
+    <!-- Global Timer Modal -->
     <TimerModal
       v-if="showTimerModal"
       @close="showTimerModal = false"
+    />
+
+    <!-- Global Session Modal -->
+    <SessionModal
+      v-if="showSessionModal"
+      @close="showSessionModal = false"
+    />
+
+    <!-- Global Payment Modal -->
+    <PaymentModal
+      v-if="showPaymentModal"
+      @close="showPaymentModal = false"
+    />
+
+    <!-- Global Expense Modal -->
+    <ExpenseModal
+      v-if="showExpenseModal"
+      @close="showExpenseModal = false"
+    />
+
+    <!-- Money Row Sync Conflict Resolution Modal -->
+    <ConflictModal />
+
+    <!-- Gated Addon 1-Click Activation Modal -->
+    <AddonActivationModal />
+
+    <!-- PWA Mobile Home Screen Install Banner -->
+    <PwaInstallBanner />
+
+    <!-- Cookie & Analytics Consent Banner -->
+    <CookieConsentBanner />
+
+    <!-- In-App User Feedback Modal -->
+    <FeedbackModal
+      v-if="store.showFeedbackModal"
+      @close="store.showFeedbackModal = false"
+    />
+
+    <!-- 4-Step User Onboarding Wizard Modal -->
+    <OnboardingWizardModal
+      v-if="store.showOnboardingWizard"
+      @close="store.showOnboardingWizard = false"
     />
 
     <!-- Global Toast Notifications -->
@@ -176,11 +291,25 @@ import IconBriefcase from '~/components/IconBriefcase.vue'
 import IconUser from '~/components/IconUser.vue'
 import IconReceipt from '~/components/IconReceipt.vue'
 import IconInsights from '~/components/IconInsights.vue'
+import IconCalculator from '~/components/IconCalculator.vue'
+import IconFileText from '~/components/IconFileText.vue'
 import IconSettings from '~/components/IconSettings.vue'
 import IconChevronDown from '~/components/IconChevronDown.vue'
 import IconShield from '~/components/IconShield.vue'
 import IconPackage from '~/components/IconPackage.vue'
 import IconLogOut from '~/components/IconLogOut.vue'
+import IconPlus from '~/components/IconPlus.vue'
+import NotificationCenter from '~/components/NotificationCenter.vue'
+import PwaInstallBanner from '~/components/PwaInstallBanner.vue'
+import CookieConsentBanner from '~/components/CookieConsentBanner.vue'
+import FeedbackModal from '~/components/FeedbackModal.vue'
+import OnboardingWizardModal from '~/components/OnboardingWizardModal.vue'
+import ConflictModal from '~/components/ConflictModal.vue'
+import MobileQuickActionSheet from '~/components/MobileQuickActionSheet.vue'
+import TimerModal from '~/components/TimerModal.vue'
+import SessionModal from '~/components/SessionModal.vue'
+import PaymentModal from '~/components/PaymentModal.vue'
+import ExpenseModal from '~/components/ExpenseModal.vue'
 
 const store = useWelloStore()
 const authStore = useAuthStore()
@@ -188,8 +317,26 @@ const route = useRoute()
 const router = useRouter()
 
 const showTimerModal = ref(false)
+const showSessionModal = ref(false)
+const showPaymentModal = ref(false)
+const showExpenseModal = ref(false)
+const showQuickActionSheet = ref(false)
 const showDropdown = ref(false)
 const dropdownContainer = ref(null)
+
+function handleQuickActionTrigger(action) {
+  if (action === 'timer') {
+    showTimerModal.value = true
+  } else if (action === 'session') {
+    showSessionModal.value = true
+  } else if (action === 'payment') {
+    showPaymentModal.value = true
+  } else if (action === 'expense') {
+    showExpenseModal.value = true
+  } else if (action === 'invoice') {
+    router.push('/invoicing')
+  }
+}
 
 function handleClickOutside(event) {
   if (dropdownContainer.value && !dropdownContainer.value.contains(event.target)) {
@@ -241,21 +388,36 @@ function handleLogout() {
   router.push('/login')
 }
 
+async function exitImpersonation() {
+  try {
+    await $fetch('/api/auth/impersonate/exit', { method: 'POST' })
+  } catch (err) {}
+  authStore.logout()
+  if (typeof window !== 'undefined') {
+    window.location.href = '/admin/users'
+  } else {
+    navigateTo('/admin/users')
+  }
+}
+
 // Nav items for User Account Workspace
 const navItems = [
-  { id: 'home',     to: '/',          label: 'Home',     icon: IconHome },
-  { id: 'work',     to: '/work',      label: 'Work Hub', icon: IconBriefcase },
-  { id: 'clients',  to: '/clients',   label: 'Clients',  icon: IconUser },
-  { id: 'invoicing', to: '/invoicing', label: 'Invoices', icon: IconReceipt },
-  { id: 'insights', to: '/insights',  label: 'Insights', icon: IconInsights },
-  { id: 'settings', to: '/settings',  label: 'Settings', icon: IconSettings },
+  { id: 'home',       to: '/',          label: 'Home',         icon: IconHome },
+  { id: 'work',       to: '/work',      label: 'Work Hub',     icon: IconBriefcase },
+  { id: 'clients',    to: '/clients',   label: 'Clients',      icon: IconUser },
+  { id: 'invoicing',  to: '/invoicing', label: 'Invoices',     icon: IconReceipt },
+  { id: 'insights',   to: '/insights',  label: 'Insights',     icon: IconInsights },
+  { id: 'calculator', to: '/calculator',label: 'Pricing Calc', icon: IconCalculator },
+  { id: 'reports',    to: '/reports',   label: 'Reports',      icon: IconFileText },
+  { id: 'settings',   to: '/settings',  label: 'Settings',     icon: IconSettings },
 ]
 
 const mobileNavItems = [
-  { id: 'home',     to: '/',          label: 'Home',     icon: IconHome },
-  { id: 'work',     to: '/work',      label: 'Work Hub', icon: IconBriefcase },
-  { id: 'clients',  to: '/clients',   label: 'Clients',  icon: IconUser },
-  { id: 'invoicing', to: '/invoicing', label: 'Invoices', icon: IconReceipt },
+  { id: 'home',       to: '/',          label: 'Home',         icon: IconHome },
+  { id: 'work',       to: '/work',      label: 'Work Hub',     icon: IconBriefcase },
+  { id: 'invoicing',  to: '/invoicing', label: 'Invoices',     icon: IconReceipt },
+  { id: 'calculator', to: '/calculator',label: 'Pricing',      icon: IconCalculator },
+  { id: 'reports',    to: '/reports',   label: 'Reports',      icon: IconFileText },
 ]
 
 const visibleNavItems = computed(() => navItems)
@@ -267,6 +429,8 @@ const pageNames = {
   '/clients': 'Clients Directory',
   '/invoicing': 'Invoices',
   '/insights': 'Insights',
+  '/calculator': 'Pricing Calculator',
+  '/reports': 'Executive Reports',
   '/settings': 'Settings',
 }
 

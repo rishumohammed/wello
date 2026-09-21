@@ -6,7 +6,8 @@ import { getDb } from '../../utils/authService'
 import { sendSuccess, sendError, formatZodError } from '../../utils/apiResponse'
 
 const startTimerSchema = z.object({
-  projectId: z.number().int().positive('Project ID is required'),
+  projectId: z.number().int().positive().nullable().optional(),
+  incomeSourceId: z.number().int().positive().nullable().optional(),
   title: z.string().min(1).max(255).optional().default('Work session'),
   type: z.enum(['meeting', 'call', 'discussion', 'planning', 'proposal', 'travel', 'production', 'revision', 'delivery', 'other']).optional().default('production'),
   paymentType: z.enum(['paid', 'unpaid', 'intentional_unpaid']).optional().default('paid'),
@@ -28,14 +29,32 @@ export default defineEventHandler(async (event) => {
   const db = getDb()
   const now = new Date()
 
-  // Verify project belongs to user
-  const project = await db('projects')
-    .where({ id: data.projectId, user_id: user.id })
-    .whereNull('deleted_at')
-    .first()
+  if (!data.projectId && !data.incomeSourceId) {
+    return sendError(event, 400, 'MISSING_TARGET', 'Either a project or an income source must be specified.')
+  }
 
-  if (!project) {
-    return sendError(event, 400, 'INVALID_PROJECT', 'Specified project does not exist or does not belong to you.')
+  let project: any = null
+  let incomeSource: any = null
+
+  if (data.projectId) {
+    project = await db('projects')
+      .where({ id: data.projectId, user_id: user.id })
+      .whereNull('deleted_at')
+      .first()
+
+    if (!project) {
+      return sendError(event, 400, 'INVALID_PROJECT', 'Specified project does not exist or does not belong to you.')
+    }
+  }
+
+  if (data.incomeSourceId) {
+    incomeSource = await db('income_sources')
+      .where({ id: data.incomeSourceId, user_id: user.id })
+      .first()
+
+    if (!incomeSource) {
+      return sendError(event, 400, 'INVALID_INCOME_SOURCE', 'Specified income source does not exist or does not belong to you.')
+    }
   }
 
   // Check for currently running active timer
@@ -46,7 +65,15 @@ export default defineEventHandler(async (event) => {
 
   if (existingActive.length > 0 && !data.forceSwitch) {
     const active = existingActive[0]
-    const activeProj = await db('projects').where({ id: active.project_id }).first()
+    let activeName = 'another activity'
+    if (active.project_id) {
+      const activeProj = await db('projects').where({ id: active.project_id }).first()
+      activeName = activeProj?.name || 'Project'
+    } else if (active.income_source_id) {
+      const activeSrc = await db('income_sources').where({ id: active.income_source_id }).first()
+      activeName = activeSrc?.name || 'Income Source'
+    }
+
     const activePause = await db('work_session_pauses')
       .where({ work_session_id: active.id })
       .whereNull('resumed_at')
@@ -65,12 +92,13 @@ export default defineEventHandler(async (event) => {
       event,
       409,
       'ACTIVE_TIMER_EXISTS',
-      `You already have an active timer running on "${activeProj?.name || 'another project'}". Please stop or switch the active timer.`,
+      `You already have an active timer running on "${activeName}". Please stop or switch the active timer.`,
       {
         activeTimer: {
           id: active.id,
           projectId: active.project_id,
-          projectName: activeProj?.name || 'Project',
+          incomeSourceId: active.income_source_id,
+          sourceName: activeName,
           title: active.title,
           elapsedSeconds: elapsed,
           isPaused: Boolean(activePause),
@@ -115,7 +143,8 @@ export default defineEventHandler(async (event) => {
   // Create new active session
   const [newSessionId] = await db('work_sessions').insert({
     user_id: user.id,
-    project_id: data.projectId,
+    project_id: data.projectId || null,
+    income_source_id: data.incomeSourceId || null,
     title: data.title,
     type: data.type,
     payment_type: data.paymentType,
@@ -138,8 +167,10 @@ export default defineEventHandler(async (event) => {
       active: true,
       timer: {
         id: newSessionId,
-        projectId: project.id,
-        project: { id: project.id, name: project.name, currency: project.currency },
+        projectId: project ? project.id : null,
+        incomeSourceId: incomeSource ? incomeSource.id : null,
+        project: project ? { id: project.id, name: project.name, currency: project.currency } : null,
+        incomeSource: incomeSource ? { id: incomeSource.id, name: incomeSource.name, currency: incomeSource.currency, type: incomeSource.type } : null,
         title: data.title,
         type: data.type,
         paymentType: data.paymentType,

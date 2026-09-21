@@ -439,22 +439,26 @@ ul, ol { list-style: none; }
 .mobile-nav-inner {
   display: flex;
   justify-content: space-around;
+  align-items: center;
+  position: relative;
 }
 
 .mobile-nav-item {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 3px;
-  padding: var(--space-2) var(--space-4);
+  padding: 6px 10px;
   border-radius: var(--radius-md);
   color: var(--text-tertiary);
-  font-size: 10px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
   transition: color var(--transition-base);
   cursor: pointer;
   text-decoration: none;
   min-width: 48px;
+  min-height: 48px;
 }
 
 .mobile-nav-item.active { color: var(--color-purple); }
@@ -462,6 +466,46 @@ ul, ol { list-style: none; }
 .mobile-nav-item svg {
   width: 22px;
   height: 22px;
+}
+
+/* 1-Tap Center Quick Action Button */
+.mobile-nav-center-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0 6px;
+  margin-top: -18px;
+  min-width: 52px;
+  min-height: 52px;
+}
+
+.center-btn-circle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--grad-brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(255, 56, 125, 0.4), 0 2px 6px rgba(122, 63, 246, 0.3);
+  transition: transform var(--transition-apple-fast), box-shadow var(--transition-apple-fast);
+}
+
+.mobile-nav-center-btn:active .center-btn-circle {
+  transform: scale(0.92);
+  box-shadow: 0 2px 8px rgba(255, 56, 125, 0.3);
+}
+
+.center-btn-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-sunrise);
+  margin-top: 3px;
+  letter-spacing: -0.2px;
 }
 
 /* =========================================
@@ -2643,17 +2687,26 @@ ul, ol { list-style: none; }
 
 @media (max-width: 768px) {
   :root {
-    --font-4xl: 36px;
-    --font-3xl: 28px;
-    --font-2xl: 22px;
+    --font-4xl: 32px;
+    --font-3xl: 26px;
+    --font-2xl: 20px;
   }
 
   .app-sidebar { display: none; }
   .mobile-nav  { display: flex; }
 
   .app-content {
-    padding: var(--space-5) var(--space-4);
-    padding-bottom: 80px;
+    padding: var(--space-4) var(--space-3);
+    padding-bottom: 88px;
+  }
+
+  /* Tap targets enforcement */
+  button, .btn, input, select, textarea, .nav-item, .tab-btn {
+    min-height: 44px;
+  }
+
+  .btn-sm {
+    min-height: 38px;
   }
 
   .grid-metrics { grid-template-columns: 1fr; }
@@ -2662,12 +2715,73 @@ ul, ol { list-style: none; }
   .project-card-stats { grid-template-columns: repeat(2, 1fr); }
   .modal { border-radius: var(--radius-xl) var(--radius-xl) 0 0; align-self: flex-end; max-width: 100%; }
   .modal-overlay { align-items: flex-end; padding: 0; }
-  .toast-container { bottom: 80px; right: var(--space-4); left: var(--space-4); }
+  .toast-container { bottom: 84px; right: var(--space-3); left: var(--space-3); }
 }
 
 @media (max-width: 480px) {
-  .app-content { padding: var(--space-4) var(--space-3); }
+  .app-content { padding: var(--space-3) 12px; padding-bottom: 88px; }
   .project-card-stats { grid-template-columns: 1fr; }
+  .topbar-right { gap: 6px; }
+  .quick-timer-pill { padding: 4px 8px; font-size: 11px; }
+}
+
+/* 390px (e.g. iPhone 13/14/15) & 360px (e.g. Galaxy S8/A-series) Viewports */
+@media (max-width: 390px) {
+  :root {
+    --font-4xl: 28px;
+    --font-3xl: 22px;
+    --font-2xl: 18px;
+  }
+
+  .app-content {
+    padding: 10px 8px;
+    padding-bottom: 92px;
+  }
+
+  .metric-card, .card {
+    padding: 14px 12px;
+  }
+
+  .modal-body {
+    padding: 14px 12px;
+  }
+
+  .modal-footer {
+    padding: 12px;
+  }
+
+  /* Prevent overflow */
+  .truncate-mobile {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 360px) {
+  .app-content {
+    padding: 8px 6px;
+    padding-bottom: 96px;
+  }
+
+  .mobile-nav-inner {
+    padding: 0 4px;
+  }
+
+  .mobile-nav-item {
+    padding: 4px 6px;
+    font-size: 10px;
+    min-width: 42px;
+  }
+
+  .mobile-nav-center-btn {
+    min-width: 46px;
+  }
+
+  .center-btn-circle {
+    width: 40px;
+    height: 40px;
+  }
 }
 
 /* =========================================

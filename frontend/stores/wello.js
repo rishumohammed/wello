@@ -27,13 +27,18 @@ import {
   computeDualRates,
   computeUnifiedMetricsSummary,
   computeIntelligenceInsights,
+  computeIncomeSourceMetrics,
+  computeSalariedCommuteAnalysis,
+  computeMultiEmployerComparison,
   UNPAID_TAXONOMY,
   categorizeUnpaidReason,
 } from '~/utils/metricsEngine'
+import { OfflineOutboxManager } from '~/utils/offlineOutbox'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function now() { return new Date().toISOString() }
+function today() { return new Date().toISOString().slice(0, 10) }
 function uid() { return Math.random().toString(36).slice(2, 9) }
 
 function minutesToHM(minutes) {
@@ -118,13 +123,13 @@ const tDate = daysAgo(0)
 const SAMPLE_SESSIONS = [
   {
     id: 's-t1', projectId: 'p1', title: 'First meeting', type: 'meeting', paymentType: 'unpaid',
-    unpaidReason: 'client_friction', unpaidCategory: 'unpaid_client', startedAt: `${tDate}T09:00:00`, endedAt: `${tDate}T09:45:00`, durationMin: 45,
+    unpaidReason: 'pitching', unpaidCategory: 'unpaid_client', startedAt: `${tDate}T09:00:00`, endedAt: `${tDate}T09:45:00`, durationMin: 45,
     notes: 'Initial scope alignment and project kickoff discussion.',
   },
   {
-    id: 's-t2', projectId: 'p1', title: 'Requirements discussion', type: 'discussion', paymentType: 'unpaid',
-    unpaidReason: 'scope_creep', unpaidCategory: 'unpaid_client', startedAt: `${tDate}T10:15:00`, endedAt: `${tDate}T11:00:00`, durationMin: 45,
-    notes: 'Detailed feature checklist and API endpoint requirements.',
+    id: 's-t2', projectId: 'p1', title: 'Revision rounds', type: 'revision', paymentType: 'unpaid',
+    unpaidReason: 'revisions_beyond_scope', unpaidCategory: 'unpaid_client', startedAt: `${tDate}T10:00:00`, endedAt: `${tDate}T11:00:00`, durationMin: 60,
+    notes: 'Extra styling tweaks requested outside the approved wireframes.',
   },
   {
     id: 's-t3', projectId: 'p2', title: 'Design work', type: 'production', paymentType: 'paid',
@@ -168,6 +173,8 @@ const SAMPLE_USER = {
   baseCurrency: 'USD',
   timezone: 'America/New_York',
   headlineRateMetric: 'client_work',
+  earningPersona: 'freelancer_projects',
+  includeOverheadInMetrics: true,
   countryCode: 'US',
   businessName: 'Morgan Global Consulting',
   businessLogo: '',
@@ -198,10 +205,30 @@ export const useWelloStore = defineStore('wello', () => {
   const sessions = ref([...SAMPLE_SESSIONS])
   const payments = ref([...SAMPLE_PAYMENTS])
   const expenses = ref([...SAMPLE_EXPENSES])
+  const incomeSources = ref([])
+  const overheadExpenses = ref([])
+  const expectedPayments = ref([])
+  const recurringProposals = ref([])
   const taxRates = ref([])
   const fxRates = ref({})
-  const metricsSummary = ref(null)
-  const metricsInsights = ref(null)
+  const notifications = ref([])
+  const unreadNotificationCount = ref(0)
+  const notificationPreferences = ref([])
+  const isNotificationsLoading = ref(false)
+
+  // Addon Platform & Store State (100% Free Addons)
+  const addons = ref([])
+  const showAddonModal = ref(false)
+  const addonModalData = ref({ key: '', name: '', description: '', isFree: true })
+
+  // Trust, Privacy, Onboarding & Feedback State
+  const showFeedbackModal = ref(false)
+  const showOnboardingWizard = ref(false)
+  const privacySettings = ref({
+    analyticsConsent: true,
+    cookieConsent: 'accepted',
+    digestFrequency: 'weekly',
+  })
 
   // Timer State (Server Synchronized)
   const activeTimer = ref(null)
@@ -211,8 +238,19 @@ export const useWelloStore = defineStore('wello', () => {
   // Status & Synchronization State
   const isLoading = ref(false)
   const isSyncing = ref(false)
-  const isOffline = ref(false)
+  const isOffline = ref(typeof navigator !== 'undefined' ? !navigator.onLine : false)
   const lastSyncedAt = ref(null)
+
+  // Offline Outbox & Conflict State
+  const outbox = new OfflineOutboxManager(() => authStore.user?.id || authStore.user?.email || 'guest')
+  const pendingOutboxCount = ref(0)
+  const activeConflict = ref(null)
+
+  if (typeof window !== 'undefined') {
+    outbox.subscribe((queue) => {
+      pendingOutboxCount.value = queue.filter((i) => i.status === 'pending' || i.status === 'processing').length
+    })
+  }
 
   // Legacy Migration State
   const showMigrationPrompt = ref(false)
@@ -242,6 +280,9 @@ export const useWelloStore = defineStore('wello', () => {
         if (Array.isArray(cached.sessions)) sessions.value = cached.sessions
         if (Array.isArray(cached.payments)) payments.value = cached.payments
         if (Array.isArray(cached.expenses)) expenses.value = cached.expenses
+        if (Array.isArray(cached.incomeSources)) incomeSources.value = cached.incomeSources
+        if (Array.isArray(cached.overheadExpenses)) overheadExpenses.value = cached.overheadExpenses
+        if (Array.isArray(cached.expectedPayments)) expectedPayments.value = cached.expectedPayments
         if (Array.isArray(cached.taxRates)) taxRates.value = cached.taxRates
         if (cached.fxRates) fxRates.value = cached.fxRates
         if (cached.lastSyncedAt) lastSyncedAt.value = cached.lastSyncedAt
@@ -264,6 +305,9 @@ export const useWelloStore = defineStore('wello', () => {
           sessions: sessions.value,
           payments: payments.value,
           expenses: expenses.value,
+          incomeSources: incomeSources.value,
+          overheadExpenses: overheadExpenses.value,
+          expectedPayments: expectedPayments.value,
           taxRates: taxRates.value,
           fxRates: fxRates.value,
           lastSyncedAt: lastSyncedAt.value,
@@ -306,6 +350,11 @@ export const useWelloStore = defineStore('wello', () => {
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
         isOffline.value = true
       }
+      if (err?.data?.data?.code === 'ADDON_NOT_ACTIVATED' || err?.data?.code === 'ADDON_NOT_ACTIVATED') {
+        const addonKey = err?.data?.data?.addonKey || err?.data?.addonKey || ''
+        const addonName = err?.data?.data?.addonName || err?.data?.addonName || ''
+        triggerAddonGatePrompt(addonKey, addonName)
+      }
       throw err
     }
   }
@@ -324,8 +373,8 @@ export const useWelloStore = defineStore('wello', () => {
     isSyncing.value = true
 
     try {
-      // Parallel fetch of core user data, tax rates, and fx rates
-      const [meRes, clientsRes, projectsRes, sessionsRes, paymentsRes, expensesRes, taxesRes, fxRes] =
+      // Parallel fetch of core user data, tax rates, fx rates, income sources, overheads, addons
+      const [meRes, clientsRes, projectsRes, sessionsRes, paymentsRes, expensesRes, incomeSourcesRes, overheadsRes, expectedPmtsRes, taxesRes, fxRes, addonsRes] =
         await Promise.allSettled([
           apiFetch('/api/me'),
           apiFetch('/api/clients?limit=100'),
@@ -333,9 +382,17 @@ export const useWelloStore = defineStore('wello', () => {
           apiFetch('/api/sessions?limit=100'),
           apiFetch('/api/payments?limit=100'),
           apiFetch('/api/expenses?limit=100'),
+          apiFetch('/api/income-sources'),
+          apiFetch('/api/overhead-expenses'),
+          apiFetch('/api/expected-payments'),
           apiFetch('/api/tax-rates'),
           apiFetch('/api/fx/rates'),
+          apiFetch('/api/store/addons'),
         ])
+
+      if (addonsRes.status === 'fulfilled' && addonsRes.value?.data?.addons) {
+        addons.value = addonsRes.value.data.addons
+      }
 
       if (meRes.status === 'fulfilled' && meRes.value?.data) {
         user.value = {
@@ -345,6 +402,8 @@ export const useWelloStore = defineStore('wello', () => {
           currencyCode: meRes.value.data.baseCurrency || 'USD',
           baseCurrency: meRes.value.data.baseCurrency || 'USD',
           timezone: meRes.value.data.timezone || getBrowserTimezone(),
+          earningPersona: meRes.value.data.earningPersona || 'freelancer_projects',
+          includeOverheadInMetrics: meRes.value.data.includeOverheadInMetrics !== false,
         }
       }
 
@@ -377,6 +436,19 @@ export const useWelloStore = defineStore('wello', () => {
           ...e,
           date: e.expenseDate || e.date,
         }))
+      }
+
+      if (incomeSourcesRes.status === 'fulfilled' && Array.isArray(incomeSourcesRes.value?.data)) {
+        incomeSources.value = incomeSourcesRes.value.data
+      }
+
+      if (overheadsRes.status === 'fulfilled' && Array.isArray(overheadsRes.value?.data)) {
+        overheadExpenses.value = overheadsRes.value.data
+      }
+
+      if (expectedPmtsRes.status === 'fulfilled' && expectedPmtsRes.value?.data) {
+        expectedPayments.value = expectedPmtsRes.value.data.expectedPayments || []
+        recurringProposals.value = expectedPmtsRes.value.data.recurringProposals || []
       }
 
       if (taxesRes.status === 'fulfilled' && Array.isArray(taxesRes.value?.data)) {
@@ -500,6 +572,31 @@ export const useWelloStore = defineStore('wello', () => {
   async function startTimer(payload) {
     const previousTimer = activeTimer.value
 
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const localTimer = {
+        id: 'local_timer_' + uid(),
+        projectId: payload.projectId,
+        title: payload.title || 'Work Session',
+        startedAt: now(),
+        isPaused: false,
+        elapsedSeconds: 0,
+      }
+      activeTimer.value = localTimer
+      isTimerPaused.value = false
+      timerElapsed.value = 0
+      initTimerTicker()
+      saveCachedState()
+      outbox.enqueue({
+        action: 'START_TIMER',
+        endpoint: '/api/timer/start',
+        method: 'POST',
+        payload,
+        entityType: 'timer',
+      })
+      toast.info('Timer started offline. Will synchronize when online.')
+      return { success: true, timer: localTimer }
+    }
+
     try {
       const res = await apiFetch('/api/timer/start', {
         method: 'POST',
@@ -514,7 +611,6 @@ export const useWelloStore = defineStore('wello', () => {
       }
       return { success: true, timer: activeTimer.value }
     } catch (err) {
-      // If 409 Conflict (active timer already running on another project)
       if (err?.statusCode === 409 || err?.data?.error?.code === 'ACTIVE_TIMER_EXISTS') {
         return {
           conflict: true,
@@ -522,9 +618,29 @@ export const useWelloStore = defineStore('wello', () => {
           activeTimer: err?.data?.error?.details?.activeTimer || null,
         }
       }
-      activeTimer.value = previousTimer
-      toast.error(err?.data?.message || err?.message || 'Failed to start timer on server.')
-      throw err
+      // Offline fallback if network fails
+      const localTimer = {
+        id: 'local_timer_' + uid(),
+        projectId: payload.projectId,
+        title: payload.title || 'Work Session',
+        startedAt: now(),
+        isPaused: false,
+        elapsedSeconds: 0,
+      }
+      activeTimer.value = localTimer
+      isTimerPaused.value = false
+      timerElapsed.value = 0
+      initTimerTicker()
+      saveCachedState()
+      outbox.enqueue({
+        action: 'START_TIMER',
+        endpoint: '/api/timer/start',
+        method: 'POST',
+        payload,
+        entityType: 'timer',
+      })
+      toast.info('Network unreachable. Timer running in offline mode.')
+      return { success: true, timer: localTimer }
     }
   }
 
@@ -533,12 +649,16 @@ export const useWelloStore = defineStore('wello', () => {
     const prevPaused = isTimerPaused.value
     isTimerPaused.value = true
 
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      outbox.enqueue({ action: 'PAUSE_TIMER', endpoint: '/api/timer/pause', method: 'POST', entityType: 'timer' })
+      return
+    }
+
     try {
       await apiFetch('/api/timer/pause', { method: 'POST' })
       broadcastTimerEvent('TIMER_PAUSED')
     } catch (err) {
-      isTimerPaused.value = prevPaused
-      toast.error('Failed to pause timer on server.')
+      outbox.enqueue({ action: 'PAUSE_TIMER', endpoint: '/api/timer/pause', method: 'POST', entityType: 'timer' })
     }
   }
 
@@ -548,12 +668,16 @@ export const useWelloStore = defineStore('wello', () => {
     isTimerPaused.value = false
     initTimerTicker()
 
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      outbox.enqueue({ action: 'RESUME_TIMER', endpoint: '/api/timer/resume', method: 'POST', entityType: 'timer' })
+      return
+    }
+
     try {
       await apiFetch('/api/timer/resume', { method: 'POST' })
       broadcastTimerEvent('TIMER_RESUMED')
     } catch (err) {
-      isTimerPaused.value = prevPaused
-      toast.error('Failed to resume timer on server.')
+      outbox.enqueue({ action: 'RESUME_TIMER', endpoint: '/api/timer/resume', method: 'POST', entityType: 'timer' })
     }
   }
 
@@ -584,6 +708,41 @@ export const useWelloStore = defineStore('wello', () => {
           customEndedAt: options.customEndedAt,
         }
 
+    const durationSec = elapsedSnapshot
+    const localSess = {
+      id: 'local_sess_' + uid(),
+      projectId: stoppingTimer.projectId,
+      title: body.title || 'Work Session',
+      startedAt: stoppingTimer.startedAt || now(),
+      endedAt: now(),
+      durationMin: Math.max(1, Math.round(durationSec / 60)),
+      durationSec,
+      paymentType: 'paid',
+      notes: body.notes || '',
+      createdAt: now(),
+      updatedAt: now(),
+    }
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      sessions.value.unshift(localSess)
+      saveCachedState()
+      outbox.enqueue({
+        action: 'STOP_TIMER',
+        endpoint: '/api/timer/stop',
+        method: 'POST',
+        payload: {
+          ...body,
+          startedAt: stoppingTimer.startedAt,
+          endedAt: localSess.endedAt,
+          durationSec,
+        },
+        entityType: 'session',
+        localId: localSess.id,
+      })
+      toast.success('Session recorded offline. Will sync when back online.')
+      return { ...stoppingTimer, session: localSess }
+    }
+
     try {
       const res = await apiFetch('/api/timer/stop', {
         method: 'POST',
@@ -601,12 +760,23 @@ export const useWelloStore = defineStore('wello', () => {
         return { ...stoppingTimer, session: sess }
       }
     } catch (err) {
-      // Revert if failed
-      activeTimer.value = stoppingTimer
-      timerElapsed.value = elapsedSnapshot
-      initTimerTicker()
-      toast.error(err?.data?.message || err?.message || 'Failed to record completed session.')
-      throw err
+      sessions.value.unshift(localSess)
+      saveCachedState()
+      outbox.enqueue({
+        action: 'STOP_TIMER',
+        endpoint: '/api/timer/stop',
+        method: 'POST',
+        payload: {
+          ...body,
+          startedAt: stoppingTimer.startedAt,
+          endedAt: localSess.endedAt,
+          durationSec,
+        },
+        entityType: 'session',
+        localId: localSess.id,
+      })
+      toast.info('Network unreachable. Session saved locally in offline outbox.')
+      return { ...stoppingTimer, session: localSess }
     }
   }
 
@@ -801,17 +971,83 @@ export const useWelloStore = defineStore('wello', () => {
     showMigrationPrompt.value = false
   }
 
-  // ── Network Status Listeners ──────────────────────────────────────────────
+  // ── Network Status Listeners & Delta Sync Flush ──────────────────────────
+
+  async function flushOutbox() {
+    if (!authStore.isAuthenticated || isOffline.value) return
+    isSyncing.value = true
+    try {
+      const result = await outbox.flush(apiFetch, (conflict) => {
+        activeConflict.value = conflict
+      })
+      if (result.processed > 0) {
+        toast.success(`Synchronized ${result.processed} offline change${result.processed > 1 ? 's' : ''}.`)
+        await loadInitialData()
+      }
+      if (result.conflicts > 0) {
+        toast.warning(`${result.conflicts} sync conflict${result.conflicts > 1 ? 's' : ''} require resolution.`)
+      }
+    } catch (err) {
+      console.warn('[Wello Sync] Outbox flush failed:', err)
+    } finally {
+      isSyncing.value = false
+    }
+  }
+
+  function dismissConflict() {
+    activeConflict.value = null
+  }
+
+  async function resolveConflict(conflictData, resolution) {
+    const { mutationId, entityType, recordId, serverRecord, clientPayload } = conflictData
+
+    if (resolution === 'ACCEPT_SERVER') {
+      if (entityType === 'payment') {
+        const idx = payments.value.findIndex((p) => String(p.id) === String(recordId))
+        if (idx !== -1) payments.value[idx] = { ...payments.value[idx], ...serverRecord }
+      }
+      outbox.remove(mutationId)
+      toast.info('Accepted server version.')
+    } else if (resolution === 'KEEP_LOCAL') {
+      try {
+        await apiFetch(`/api/payments/${recordId}`, {
+          method: 'PUT',
+          body: clientPayload,
+        })
+        outbox.remove(mutationId)
+        toast.success('Updated server with your local version.')
+      } catch (err) {
+        toast.error('Failed to update server.')
+      }
+    } else if (resolution === 'KEEP_BOTH') {
+      try {
+        await apiFetch('/api/payments', {
+          method: 'POST',
+          body: {
+            ...clientPayload,
+            notes: (clientPayload.notes || '') + ' (Offline adjustment copy)',
+          },
+        })
+        outbox.remove(mutationId)
+        toast.success('Created second payment entry.')
+      } catch (err) {
+        toast.error('Failed to create copy.')
+      }
+    }
+
+    saveCachedState()
+    activeConflict.value = null
+  }
 
   if (typeof window !== 'undefined') {
     window.addEventListener('online', () => {
       isOffline.value = false
-      toast.info('Back online! Re-synchronizing...')
-      loadInitialData()
+      toast.info('Back online! Synchronizing outbox...')
+      flushOutbox()
     })
     window.addEventListener('offline', () => {
       isOffline.value = true
-      toast.warning('Working offline — using local cache.')
+      toast.warning('Working offline — changes queued in outbox.')
     })
   }
 
@@ -1549,15 +1785,16 @@ export const useWelloStore = defineStore('wello', () => {
       payments.value,
       expenses.value,
       projects.value,
-      [],
-      { range: '30d', timezone: tz, baseCurrency: baseCur, targetHourly: target, headlinePreference: headlinePref }
+      overheadExpenses.value,
+      incomeSources.value,
+      { range: '30d', timezone: tz, baseCurrency: baseCur, targetHourly: target, headlinePreference: headlinePref, includeOverhead: user.value.includeOverheadInMetrics !== false }
     )
 
     // Compute 7d, 90d, YTD, and All Time summaries
-    const summary7d = computeUnifiedMetricsSummary(sessions.value, payments.value, expenses.value, projects.value, [], { range: '7d', timezone: tz, baseCurrency: baseCur, targetHourly: target, headlinePreference: headlinePref })
-    const summary90d = computeUnifiedMetricsSummary(sessions.value, payments.value, expenses.value, projects.value, [], { range: '90d', timezone: tz, baseCurrency: baseCur, targetHourly: target, headlinePreference: headlinePref })
-    const summaryYtd = computeUnifiedMetricsSummary(sessions.value, payments.value, expenses.value, projects.value, [], { range: 'ytd', timezone: tz, baseCurrency: baseCur, targetHourly: target, headlinePreference: headlinePref })
-    const summaryAll = computeUnifiedMetricsSummary(sessions.value, payments.value, expenses.value, projects.value, [], { range: 'all', timezone: tz, baseCurrency: baseCur, targetHourly: target, headlinePreference: headlinePref })
+    const summary7d = computeUnifiedMetricsSummary(sessions.value, payments.value, expenses.value, projects.value, overheadExpenses.value, incomeSources.value, { range: '7d', timezone: tz, baseCurrency: baseCur, targetHourly: target, headlinePreference: headlinePref, includeOverhead: user.value.includeOverheadInMetrics !== false })
+    const summary90d = computeUnifiedMetricsSummary(sessions.value, payments.value, expenses.value, projects.value, overheadExpenses.value, incomeSources.value, { range: '90d', timezone: tz, baseCurrency: baseCur, targetHourly: target, headlinePreference: headlinePref, includeOverhead: user.value.includeOverheadInMetrics !== false })
+    const summaryYtd = computeUnifiedMetricsSummary(sessions.value, payments.value, expenses.value, projects.value, overheadExpenses.value, incomeSources.value, { range: 'ytd', timezone: tz, baseCurrency: baseCur, targetHourly: target, headlinePreference: headlinePref, includeOverhead: user.value.includeOverheadInMetrics !== false })
+    const summaryAll = computeUnifiedMetricsSummary(sessions.value, payments.value, expenses.value, projects.value, overheadExpenses.value, incomeSources.value, { range: 'all', timezone: tz, baseCurrency: baseCur, targetHourly: target, headlinePreference: headlinePref, includeOverhead: user.value.includeOverheadInMetrics !== false })
 
     // Compute Today snapshot
     const todaySummary = computeUnifiedMetricsSummary(
@@ -1565,8 +1802,9 @@ export const useWelloStore = defineStore('wello', () => {
       payments.value,
       expenses.value,
       projects.value,
-      [],
-      { range: 'today', timezone: tz, baseCurrency: baseCur, targetHourly: target, headlinePreference: headlinePref }
+      overheadExpenses.value,
+      incomeSources.value,
+      { range: 'today', timezone: tz, baseCurrency: baseCur, targetHourly: target, headlinePreference: headlinePref, includeOverhead: user.value.includeOverheadInMetrics !== false }
     )
 
     const todayUnpaidValue = Math.round(todaySummary.hours.unpaidClientHours * target)
@@ -1925,9 +2163,51 @@ export const useWelloStore = defineStore('wello', () => {
     const startedAt = data.startedAt || now()
     const endedAt = data.endedAt || now()
     const durationMin = data.durationMin ?? Math.max(1, Math.round((new Date(endedAt) - new Date(startedAt)) / 60000))
-    const tempId = 'temp_s_' + uid()
+    const tempId = 'local_s_' + uid()
 
-    const snapshot = [...sessions.value]
+    const optimisticSess = {
+      id: tempId,
+      projectId: Number(data.projectId),
+      title: data.title || 'Work session',
+      type: data.type || 'production',
+      paymentType: data.paymentType || 'paid',
+      unpaidReason: data.unpaidReason || null,
+      unpaidCategory: data.unpaidCategory || null,
+      notes: data.notes || '',
+      startedAt,
+      endedAt,
+      durationMin,
+      durationSec: durationMin * 60,
+      createdAt: now(),
+      updatedAt: now(),
+    }
+
+    sessions.value.unshift(optimisticSess)
+    saveCachedState()
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      outbox.enqueue({
+        action: 'LOG_SESSION',
+        endpoint: '/api/sessions',
+        method: 'POST',
+        payload: {
+          projectId: Number(data.projectId),
+          title: data.title || 'Work session',
+          type: data.type || 'production',
+          paymentType: data.paymentType || 'paid',
+          unpaidReason: data.unpaidReason,
+          unpaidCategory: data.unpaidCategory,
+          notes: data.notes,
+          startedAt,
+          endedAt,
+          durationMinutes: durationMin,
+        },
+        entityType: 'session',
+        localId: tempId,
+      })
+      toast.info('Session saved offline.')
+      return { success: true, session: optimisticSess }
+    }
 
     try {
       const res = await apiFetch('/api/sessions', {
@@ -1947,15 +2227,16 @@ export const useWelloStore = defineStore('wello', () => {
         },
       })
       if (res?.data) {
+        const idx = sessions.value.findIndex((s) => s.id === tempId)
         const sess = {
           ...res.data,
           durationMin: res.data.durationMinutes || durationMin,
         }
-        sessions.value.unshift(sess)
+        if (idx !== -1) sessions.value[idx] = sess
         saveCachedState()
         return { success: true, session: sess }
       }
-      return { success: true }
+      return { success: true, session: optimisticSess }
     } catch (err) {
       if (err?.statusCode === 409 || err?.data?.error?.code === 'SESSION_OVERLAP_DETECTED') {
         return {
@@ -1964,10 +2245,27 @@ export const useWelloStore = defineStore('wello', () => {
           overlappingSessions: err?.data?.error?.details?.overlappingSessions || [],
         }
       }
-      sessions.value = snapshot
-      saveCachedState()
-      toast.error(err?.data?.message || err?.message || 'Failed to save session.')
-      throw err
+      outbox.enqueue({
+        action: 'LOG_SESSION',
+        endpoint: '/api/sessions',
+        method: 'POST',
+        payload: {
+          projectId: Number(data.projectId),
+          title: data.title || 'Work session',
+          type: data.type || 'production',
+          paymentType: data.paymentType || 'paid',
+          unpaidReason: data.unpaidReason,
+          unpaidCategory: data.unpaidCategory,
+          notes: data.notes,
+          startedAt,
+          endedAt,
+          durationMinutes: durationMin,
+        },
+        entityType: 'session',
+        localId: tempId,
+      })
+      toast.info('Session queued for offline sync.')
+      return { success: true, session: optimisticSess }
     }
   }
 
@@ -1976,6 +2274,8 @@ export const useWelloStore = defineStore('wello', () => {
     if (idx === -1) return false
 
     const previous = { ...sessions.value[idx] }
+    sessions.value[idx] = { ...previous, ...data, updatedAt: now() }
+    saveCachedState()
 
     try {
       const res = await apiFetch(`/api/sessions/${id}`, {
@@ -2014,18 +2314,35 @@ export const useWelloStore = defineStore('wello', () => {
     const idx = sessions.value.findIndex((s) => String(s.id) === String(id))
     if (idx === -1) return false
 
-    const snapshot = [...sessions.value]
     sessions.value = sessions.value.filter((s) => String(s.id) !== String(id))
     saveCachedState()
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      outbox.enqueue({
+        action: 'DELETE_SESSION',
+        endpoint: `/api/sessions/${id}`,
+        method: 'DELETE',
+        payload: { id },
+        entityType: 'session',
+        localId: id,
+      })
+      toast.info('Session deleted offline.')
+      return true
+    }
 
     try {
       await apiFetch(`/api/sessions/${id}`, { method: 'DELETE' })
       return true
     } catch (err) {
-      sessions.value = snapshot
-      saveCachedState()
-      toast.error('Failed to delete session on server.')
-      return false
+      outbox.enqueue({
+        action: 'DELETE_SESSION',
+        endpoint: `/api/sessions/${id}`,
+        method: 'DELETE',
+        payload: { id },
+        entityType: 'session',
+        localId: id,
+      })
+      return true
     }
   }
 
@@ -2047,20 +2364,35 @@ export const useWelloStore = defineStore('wello', () => {
 
   // 4. Payments
   async function addPayment(projectId, pmtData) {
-    const tempId = 'temp_pay_' + uid()
+    const tempId = 'local_p_' + uid()
     const optimisticPmt = {
       id: tempId,
-      projectId,
+      projectId: Number(projectId),
       amount: Number(pmtData.amount),
-      paidDate: pmtData.paidDate || today(),
+      currency: pmtData.currency || user.value.baseCurrency || 'USD',
+      paidDate: pmtData.paidDate || userToday(),
       notes: pmtData.notes || '',
+      isExpected: false,
+      status: 'paid',
       createdAt: now(),
       updatedAt: now(),
     }
 
-    const snapshot = [...payments.value]
     payments.value.unshift(optimisticPmt)
     saveCachedState()
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      outbox.enqueue({
+        action: 'CREATE_PAYMENT',
+        endpoint: '/api/payments',
+        method: 'POST',
+        payload: optimisticPmt,
+        entityType: 'payment',
+        localId: tempId,
+      })
+      toast.info('Payment recorded locally (offline mode).')
+      return optimisticPmt
+    }
 
     try {
       const res = await apiFetch('/api/payments', {
@@ -2068,7 +2400,8 @@ export const useWelloStore = defineStore('wello', () => {
         body: {
           projectId: Number(projectId),
           amount: Number(pmtData.amount),
-          paidDate: pmtData.paidDate || today(),
+          currency: pmtData.currency,
+          paidDate: pmtData.paidDate || userToday(),
           notes: pmtData.notes || '',
         },
       })
@@ -2080,10 +2413,16 @@ export const useWelloStore = defineStore('wello', () => {
       }
       return optimisticPmt
     } catch (err) {
-      payments.value = snapshot
-      saveCachedState()
-      toast.error(err?.data?.message || err?.message || 'Failed to record payment.')
-      throw err
+      outbox.enqueue({
+        action: 'CREATE_PAYMENT',
+        endpoint: '/api/payments',
+        method: 'POST',
+        payload: optimisticPmt,
+        entityType: 'payment',
+        localId: tempId,
+      })
+      toast.info('Network unreachable. Payment queued in offline outbox.')
+      return optimisticPmt
     }
   }
 
@@ -2092,35 +2431,66 @@ export const useWelloStore = defineStore('wello', () => {
     payments.value = payments.value.filter((p) => String(p.id) !== String(id))
     saveCachedState()
 
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      outbox.enqueue({
+        action: 'DELETE_PAYMENT',
+        endpoint: `/api/payments/${id}`,
+        method: 'DELETE',
+        payload: { id },
+        entityType: 'payment',
+        localId: id,
+      })
+      toast.info('Payment deleted offline.')
+      return true
+    }
+
     try {
       await apiFetch(`/api/payments/${id}`, { method: 'DELETE' })
       return true
     } catch (err) {
-      payments.value = snapshot
-      saveCachedState()
-      toast.error('Failed to delete payment.')
-      return false
+      outbox.enqueue({
+        action: 'DELETE_PAYMENT',
+        endpoint: `/api/payments/${id}`,
+        method: 'DELETE',
+        payload: { id },
+        entityType: 'payment',
+        localId: id,
+      })
+      return true
     }
   }
 
   // 5. Expenses
   async function addExpense(projectId, expData) {
-    const tempId = 'temp_exp_' + uid()
+    const tempId = 'local_exp_' + uid()
     const optimisticExp = {
       id: tempId,
-      projectId,
+      projectId: Number(projectId),
       description: expData.description || 'Project expense',
       amount: Number(expData.amount),
-      date: expData.date || today(),
-      expenseDate: expData.date || today(),
+      date: expData.date || userToday(),
+      expenseDate: expData.date || userToday(),
       category: expData.category || 'General',
+      currency: expData.currency || user.value.baseCurrency || 'USD',
       createdAt: now(),
       updatedAt: now(),
     }
 
-    const snapshot = [...expenses.value]
     expenses.value.unshift(optimisticExp)
     saveCachedState()
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      outbox.enqueue({
+        action: 'CREATE_EXPENSE',
+        endpoint: '/api/expenses',
+        method: 'POST',
+        payload: optimisticExp,
+        entityType: 'expense',
+        localId: tempId,
+      })
+      toast.info('Expense saved offline.')
+      return optimisticExp
+    }
 
     try {
       const res = await apiFetch('/api/expenses', {
@@ -2130,7 +2500,7 @@ export const useWelloStore = defineStore('wello', () => {
           description: expData.description || 'Project expense',
           amount: Number(expData.amount),
           category: expData.category || 'General',
-          expenseDate: expData.date || today(),
+          expenseDate: expData.date || userToday(),
         },
       })
       if (res?.data) {
@@ -2141,10 +2511,16 @@ export const useWelloStore = defineStore('wello', () => {
       }
       return optimisticExp
     } catch (err) {
-      expenses.value = snapshot
-      saveCachedState()
-      toast.error(err?.data?.message || err?.message || 'Failed to record expense.')
-      throw err
+      outbox.enqueue({
+        action: 'CREATE_EXPENSE',
+        endpoint: '/api/expenses',
+        method: 'POST',
+        payload: optimisticExp,
+        entityType: 'expense',
+        localId: tempId,
+      })
+      toast.info('Network unreachable. Expense queued in offline outbox.')
+      return optimisticExp
     }
   }
 
@@ -2153,14 +2529,32 @@ export const useWelloStore = defineStore('wello', () => {
     expenses.value = expenses.value.filter((e) => String(e.id) !== String(id))
     saveCachedState()
 
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      outbox.enqueue({
+        action: 'DELETE_EXPENSE',
+        endpoint: `/api/expenses/${id}`,
+        method: 'DELETE',
+        payload: { id },
+        entityType: 'expense',
+        localId: id,
+      })
+      toast.info('Expense deleted offline.')
+      return true
+    }
+
     try {
       await apiFetch(`/api/expenses/${id}`, { method: 'DELETE' })
       return true
     } catch (err) {
-      expenses.value = snapshot
-      saveCachedState()
-      toast.error('Failed to delete expense.')
-      return false
+      outbox.enqueue({
+        action: 'DELETE_EXPENSE',
+        endpoint: `/api/expenses/${id}`,
+        method: 'DELETE',
+        payload: { id },
+        entityType: 'expense',
+        localId: id,
+      })
+      return true
     }
   }
 
@@ -2326,6 +2720,554 @@ export const useWelloStore = defineStore('wello', () => {
     return null
   }
 
+  // ── Addons & Store Platform (100% Free Addons) ────────────────────────────
+
+  async function fetchAddons() {
+    try {
+      const res = await apiFetch('/api/store/addons')
+      if (res?.data?.addons) {
+        addons.value = res.data.addons
+      } else if (Array.isArray(res?.addons)) {
+        addons.value = res.addons
+      }
+      return addons.value
+    } catch (err) {
+      console.warn('[Wello Store] Failed to fetch addons:', err)
+      return addons.value
+    }
+  }
+
+  function hasAddon(keyOrSlug) {
+    if (!keyOrSlug) return true
+    const match = addons.value.find(a => a.key === keyOrSlug || a.slug === keyOrSlug)
+    if (!match) return true
+    return Boolean(match.isActivated)
+  }
+
+  function triggerAddonGatePrompt(key, name = '') {
+    const match = addons.value.find(a => a.key === key || a.slug === key)
+    addonModalData.value = {
+      key,
+      name: name || match?.name || key,
+      description: match?.description || 'This feature requires activating the official free addon.',
+      isFree: true,
+    }
+    showAddonModal.value = true
+  }
+
+  async function activateAddon(keyOrSlug) {
+    try {
+      const res = await apiFetch('/api/store/addons/activate', {
+        method: 'POST',
+        body: { addonKey: keyOrSlug, action: 'activate' },
+      })
+      if (res?.data) {
+        const match = addons.value.find(a => a.key === keyOrSlug || a.slug === keyOrSlug)
+        if (match) match.isActivated = true
+        if (res.data.activatedKeys && Array.isArray(res.data.activatedKeys)) {
+          res.data.activatedKeys.forEach(k => {
+            const m = addons.value.find(a => a.key === k || a.slug === k)
+            if (m) m.isActivated = true
+          })
+        }
+        toast.success(res.data.message || 'Free addon activated!')
+        showAddonModal.value = false
+        return true
+      }
+      return false
+    } catch (err) {
+      toast.error(err?.data?.message || err?.message || 'Failed to activate addon.')
+      return false
+    }
+  }
+
+  async function deactivateAddon(keyOrSlug) {
+    try {
+      const res = await apiFetch('/api/store/addons/activate', {
+        method: 'POST',
+        body: { addonKey: keyOrSlug, action: 'deactivate' },
+      })
+      if (res?.data) {
+        const match = addons.value.find(a => a.key === keyOrSlug || a.slug === keyOrSlug)
+        if (match) match.isActivated = false
+        toast.info(res.data.message || 'Addon deactivated. Your data is safely preserved.')
+        return true
+      }
+      return false
+    } catch (err) {
+      toast.error(err?.data?.message || err?.message || 'Failed to deactivate addon.')
+      return false
+    }
+  }
+
+  // ── Income Sources Actions ────────────────────────────────────────────────
+  async function fetchIncomeSources() {
+    try {
+      const res = await apiFetch('/api/income-sources')
+      if (res?.data && Array.isArray(res.data)) {
+        incomeSources.value = res.data
+        saveCachedState()
+      }
+      return incomeSources.value
+    } catch (e) {
+      console.warn('[Wello IncomeSources] Could not fetch', e)
+      return incomeSources.value
+    }
+  }
+
+  async function createIncomeSource(data) {
+    const tempId = 'temp_src_' + uid()
+    const optimistic = {
+      id: tempId,
+      ...data,
+      isArchived: false,
+      status: 'active',
+      createdAt: now(),
+      updatedAt: now(),
+    }
+    const snapshot = [...incomeSources.value]
+    incomeSources.value.push(optimistic)
+    saveCachedState()
+
+    try {
+      const res = await apiFetch('/api/income-sources', {
+        method: 'POST',
+        body: data,
+      })
+      if (res?.data) {
+        const idx = incomeSources.value.findIndex(s => s.id === tempId)
+        if (idx !== -1) incomeSources.value[idx] = res.data
+        saveCachedState()
+        toast.success(`Income source "${res.data.name}" created.`)
+        return res.data
+      }
+      return optimistic
+    } catch (err) {
+      incomeSources.value = snapshot
+      saveCachedState()
+      toast.error(err?.data?.message || err?.message || 'Failed to create income source.')
+      throw err
+    }
+  }
+
+  async function updateIncomeSource(id, data) {
+    const idx = incomeSources.value.findIndex(s => String(s.id) === String(id))
+    if (idx === -1) return false
+    const previous = { ...incomeSources.value[idx] }
+    incomeSources.value[idx] = { ...previous, ...data }
+    saveCachedState()
+
+    try {
+      const res = await apiFetch(`/api/income-sources/${id}`, {
+        method: 'PATCH',
+        body: data,
+      })
+      if (res?.data) {
+        incomeSources.value[idx] = { ...incomeSources.value[idx], ...res.data }
+        saveCachedState()
+        toast.success('Income source updated.')
+        return res.data
+      }
+      return true
+    } catch (err) {
+      incomeSources.value[idx] = previous
+      saveCachedState()
+      toast.error(err?.data?.message || err?.message || 'Failed to update income source.')
+      return false
+    }
+  }
+
+  async function deleteIncomeSource(id) {
+    const snapshot = [...incomeSources.value]
+    incomeSources.value = incomeSources.value.filter(s => String(s.id) !== String(id))
+    saveCachedState()
+
+    try {
+      await apiFetch(`/api/income-sources/${id}`, { method: 'DELETE' })
+      toast.success('Income source removed.')
+      return true
+    } catch (err) {
+      incomeSources.value = snapshot
+      saveCachedState()
+      toast.error('Failed to remove income source.')
+      return false
+    }
+  }
+
+  // ── Overhead Expenses Actions ─────────────────────────────────────────────
+  async function fetchOverheadExpenses() {
+    try {
+      const res = await apiFetch('/api/overhead-expenses')
+      if (res?.data && Array.isArray(res.data)) {
+        overheadExpenses.value = res.data
+        saveCachedState()
+      }
+      return overheadExpenses.value
+    } catch (e) {
+      console.warn('[Wello Overhead] Could not fetch', e)
+      return overheadExpenses.value
+    }
+  }
+
+  async function createOverheadExpense(data) {
+    const tempId = 'temp_oh_' + uid()
+    const optimistic = {
+      id: tempId,
+      ...data,
+      createdAt: now(),
+      updatedAt: now(),
+    }
+    const snapshot = [...overheadExpenses.value]
+    overheadExpenses.value.push(optimistic)
+    saveCachedState()
+
+    try {
+      const res = await apiFetch('/api/overhead-expenses', {
+        method: 'POST',
+        body: data,
+      })
+      if (res?.data) {
+        const idx = overheadExpenses.value.findIndex(o => o.id === tempId)
+        if (idx !== -1) overheadExpenses.value[idx] = res.data
+        saveCachedState()
+        toast.success(`Overhead "${res.data.name}" added.`)
+        return res.data
+      }
+      return optimistic
+    } catch (err) {
+      overheadExpenses.value = snapshot
+      saveCachedState()
+      toast.error(err?.data?.message || err?.message || 'Failed to record overhead expense.')
+      throw err
+    }
+  }
+
+  async function updateOverheadExpense(id, data) {
+    const idx = overheadExpenses.value.findIndex(o => String(o.id) === String(id))
+    if (idx === -1) return false
+    const previous = { ...overheadExpenses.value[idx] }
+    overheadExpenses.value[idx] = { ...previous, ...data }
+    saveCachedState()
+
+    try {
+      const res = await apiFetch(`/api/overhead-expenses/${id}`, {
+        method: 'PATCH',
+        body: data,
+      })
+      if (res?.data) {
+        overheadExpenses.value[idx] = { ...overheadExpenses.value[idx], ...res.data }
+        saveCachedState()
+        toast.success('Overhead updated.')
+        return res.data
+      }
+      return true
+    } catch (err) {
+      overheadExpenses.value[idx] = previous
+      saveCachedState()
+      toast.error(err?.data?.message || err?.message || 'Failed to update overhead.')
+      return false
+    }
+  }
+
+  async function deleteOverheadExpense(id) {
+    const snapshot = [...overheadExpenses.value]
+    overheadExpenses.value = overheadExpenses.value.filter(o => String(o.id) !== String(id))
+    saveCachedState()
+
+    try {
+      await apiFetch(`/api/overhead-expenses/${id}`, { method: 'DELETE' })
+      toast.success('Overhead removed.')
+      return true
+    } catch (err) {
+      overheadExpenses.value = snapshot
+      saveCachedState()
+      toast.error('Failed to delete overhead expense.')
+      return false
+    }
+  }
+
+  // ── Quick Entry Flow ──────────────────────────────────────────────────────
+  async function quickEntry(data) {
+    isLoading.value = true
+    try {
+      const res = await apiFetch('/api/quick-entry', {
+        method: 'POST',
+        body: data,
+      })
+      if (res?.data) {
+        if (res.data.session) {
+          sessions.value.push({
+            ...res.data.session,
+            durationMin: res.data.session.durationMinutes || Math.round((res.data.session.durationSeconds || 0) / 60),
+          })
+        }
+        if (res.data.payment) {
+          payments.value.push(res.data.payment)
+        }
+        saveCachedState()
+        toast.success('Logged successfully!')
+        return res.data
+      }
+    } catch (err) {
+      toast.error(err?.data?.message || err?.message || 'Failed to log quick entry.')
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  // ── Expected Payments Flow ────────────────────────────────────────────────
+  async function fetchExpectedPayments() {
+    try {
+      const res = await apiFetch('/api/expected-payments')
+      if (res?.data) {
+        expectedPayments.value = res.data.expectedPayments || []
+        recurringProposals.value = res.data.recurringProposals || []
+        saveCachedState()
+      }
+    } catch (err) {
+      console.warn('[Wello ExpectedPayments] Could not fetch', err)
+    }
+  }
+
+  async function confirmExpectedPayment(data) {
+    isLoading.value = true
+    try {
+      const res = await apiFetch('/api/expected-payments/confirm', {
+        method: 'POST',
+        body: data,
+      })
+      if (res?.data) {
+        const confirmed = res.data
+        const idx = payments.value.findIndex(p => String(p.id) === String(confirmed.id))
+        if (idx !== -1) {
+          payments.value[idx] = confirmed
+        } else {
+          payments.value.push(confirmed)
+        }
+        expectedPayments.value = expectedPayments.value.filter(p => String(p.id) !== String(confirmed.id))
+        if (data.incomeSourceId) {
+          recurringProposals.value = recurringProposals.value.filter(r => String(r.incomeSourceId) !== String(data.incomeSourceId))
+        }
+        saveCachedState()
+        toast.success('Payment confirmed and added to your collected earnings!')
+        return confirmed
+      }
+    } catch (err) {
+      toast.error(err?.data?.message || err?.message || 'Failed to confirm payment.')
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  // ── Earning Persona & Settings ────────────────────────────────────────────
+  async function updateEarningPersona(persona) {
+    try {
+      const res = await apiFetch('/api/me', {
+        method: 'PATCH',
+        body: { earningPersona: persona },
+      })
+      if (res?.data) {
+        user.value.earningPersona = res.data.earningPersona
+        saveCachedState()
+        toast.success('Earning profile updated!')
+      }
+    } catch (err) {
+      toast.error('Failed to update persona.')
+    }
+  }
+
+  async function toggleIncludeOverhead(include) {
+    try {
+      const res = await apiFetch('/api/me', {
+        method: 'PATCH',
+        body: { includeOverheadInMetrics: include },
+      })
+      if (res?.data) {
+        user.value.includeOverheadInMetrics = res.data.includeOverheadInMetrics
+        saveCachedState()
+      }
+    } catch (err) {}
+  }
+
+  // ── Computed Getters for Income Sources & Analytics ───────────────────────
+  const activeIncomeSources = computed(() => {
+    return incomeSources.value.filter(s => !s.isArchived && s.status !== 'archived')
+  })
+
+  const incomeSourcesBreakdown = computed(() => {
+    return computeIncomeSourceMetrics(
+      incomeSources.value,
+      sessions.value,
+      payments.value,
+      expenses.value,
+      overheadExpenses.value,
+      user.value.baseCurrency || 'USD',
+      { includeOverhead: user.value.includeOverheadInMetrics !== false }
+    )
+  })
+
+  const salariedCommuteSummary = computed(() => {
+    return computeSalariedCommuteAnalysis(
+      incomeSources.value,
+      sessions.value,
+      payments.value,
+      overheadExpenses.value,
+      user.value.baseCurrency || 'USD'
+    )
+  })
+
+  const multiEmployerComparison = computed(() => {
+    return computeMultiEmployerComparison(
+      incomeSources.value,
+      incomeSourcesBreakdown.value,
+      user.value.baseCurrency || 'USD'
+    )
+  })
+
+  // ── Notifications Engine Actions ──────────────────────────────────────────
+  async function fetchNotifications({ unreadOnly = false, limit = 30 } = {}) {
+    if (!authStore.isAuthenticated) return { notifications: [], unreadCount: 0 }
+    isNotificationsLoading.value = true
+    try {
+      const res = await apiFetch(`/api/notifications?unreadOnly=${unreadOnly}&limit=${limit}`)
+      if (res?.data) {
+        notifications.value = res.data.notifications || []
+        unreadNotificationCount.value = res.data.unreadCount || 0
+      }
+      return { notifications: notifications.value, unreadCount: unreadNotificationCount.value }
+    } catch (err) {
+      console.warn('[Wello Notifications] Could not fetch notifications', err)
+      return { notifications: notifications.value, unreadCount: unreadNotificationCount.value }
+    } finally {
+      isNotificationsLoading.value = false
+    }
+  }
+
+  async function markNotificationAsRead(id) {
+    const item = notifications.value.find(n => String(n.id) === String(id))
+    if (item && !item.isRead) {
+      item.isRead = true
+      item.readAt = now()
+      if (unreadNotificationCount.value > 0) unreadNotificationCount.value--
+    }
+    try {
+      await apiFetch(`/api/notifications/${id}/read`, { method: 'PATCH' })
+      return true
+    } catch (err) {
+      console.warn('[Wello Notifications] Error marking read', err)
+      return false
+    }
+  }
+
+  async function markAllNotificationsAsRead() {
+    notifications.value.forEach(n => {
+      n.isRead = true
+      n.readAt = now()
+    })
+    unreadNotificationCount.value = 0
+    try {
+      await apiFetch('/api/notifications/mark-all-read', { method: 'POST' })
+      toast.success('All notifications marked as read.')
+      return true
+    } catch (err) {
+      console.warn('[Wello Notifications] Error marking all read', err)
+      return false
+    }
+  }
+
+  async function deleteNotification(id) {
+    const item = notifications.value.find(n => String(n.id) === String(id))
+    if (item && !item.isRead && unreadNotificationCount.value > 0) {
+      unreadNotificationCount.value--
+    }
+    notifications.value = notifications.value.filter(n => String(n.id) !== String(id))
+    try {
+      await apiFetch(`/api/notifications/${id}`, { method: 'DELETE' })
+      return true
+    } catch (err) {
+      console.warn('[Wello Notifications] Error deleting notification', err)
+      return false
+    }
+  }
+
+  async function fetchNotificationPreferences() {
+    try {
+      const res = await apiFetch('/api/notifications/preferences')
+      if (res?.data?.preferences) {
+        notificationPreferences.value = res.data.preferences
+      }
+      return notificationPreferences.value
+    } catch (err) {
+      console.warn('[Wello Notifications] Error fetching preferences', err)
+      return notificationPreferences.value
+    }
+  }
+
+  async function saveNotificationPreferences(prefs) {
+    try {
+      const res = await apiFetch('/api/notifications/preferences', {
+        method: 'PUT',
+        body: { preferences: prefs }
+      })
+      if (res?.data) {
+        notificationPreferences.value = prefs
+        toast.success('Notification preferences updated!')
+        return true
+      }
+    } catch (err) {
+      toast.error('Failed to update notification preferences.')
+      return false
+    }
+  }
+
+  // ── Pricing Calculator & Reports Actions ──────────────────────────────────
+  async function calculatePricing(payload) {
+    try {
+      const res = await apiFetch('/api/calculator/pricing', {
+        method: 'POST',
+        body: payload,
+      })
+      return res?.data || null
+    } catch (err) {
+      toast.error(err?.data?.message || err?.message || 'Failed to calculate pricing.')
+      throw err
+    }
+  }
+
+  async function applyQuoteToProject(payload) {
+    try {
+      const res = await apiFetch('/api/calculator/apply-quote', {
+        method: 'POST',
+        body: payload,
+      })
+      if (res?.data?.project) {
+        const updated = res.data.project
+        const idx = projects.value.findIndex(p => String(p.id) === String(updated.id))
+        if (idx !== -1) {
+          projects.value[idx] = { ...projects.value[idx], ...updated }
+        }
+        saveCachedState()
+        toast.success('Quote applied to project successfully!')
+        return updated
+      }
+      return null
+    } catch (err) {
+      toast.error(err?.data?.message || err?.message || 'Failed to apply quote to project.')
+      throw err
+    }
+  }
+
+  async function fetchReportsSummary(params = {}) {
+    const query = new URLSearchParams()
+    if (params.period) query.set('period', params.period)
+    if (params.date) query.set('date', params.date)
+    if (params.startDate) query.set('startDate', params.startDate)
+    if (params.endDate) query.set('endDate', params.endDate)
+    const res = await apiFetch(`/api/reports/summary?${query.toString()}`)
+    return res?.data || null
+  }
 
   function resetToDefaults() {
     user.value = { ...SAMPLE_USER }
@@ -2334,6 +3276,10 @@ export const useWelloStore = defineStore('wello', () => {
     sessions.value = [...SAMPLE_SESSIONS]
     payments.value = [...SAMPLE_PAYMENTS]
     expenses.value = [...SAMPLE_EXPENSES]
+    incomeSources.value = []
+    overheadExpenses.value = []
+    expectedPayments.value = []
+    recurringProposals.value = []
     taxRates.value = []
     fxRates.value = {}
     activeTimer.value = null
@@ -2350,10 +3296,17 @@ export const useWelloStore = defineStore('wello', () => {
     sessions,
     payments,
     expenses,
+    incomeSources,
+    overheadExpenses,
+    overheads: overheadExpenses,
+    expectedPayments,
+    recurringProposals,
     taxRates,
     fxRates,
-    metricsSummary,
-    metricsInsights,
+    notifications,
+    unreadNotificationCount,
+    notificationPreferences,
+    isNotificationsLoading,
     activeTimer,
     timerElapsed,
     isTimerPaused,
@@ -2369,10 +3322,17 @@ export const useWelloStore = defineStore('wello', () => {
     enrichedProjects,
     dashboardStats,
     recentInsights,
+    activeIncomeSources,
+    incomeSourcesBreakdown,
+    salariedCommuteSummary,
+    multiEmployerComparison,
 
     // Authoritative Metrics & Taxonomy Engine
     computeUnifiedMetricsSummary,
     computeIntelligenceInsights,
+    computeIncomeSourceMetrics,
+    computeSalariedCommuteAnalysis,
+    computeMultiEmployerComparison,
     UNPAID_TAXONOMY,
     categorizeUnpaidReason,
     fetchMetricsSummary,
@@ -2412,6 +3372,25 @@ export const useWelloStore = defineStore('wello', () => {
     minutesToHM,
     userToday,
 
+    // Income Sources & Non-Project Actions
+    fetchIncomeSources,
+    createIncomeSource,
+    updateIncomeSource,
+    deleteIncomeSource,
+    fetchOverheadExpenses,
+    fetchOverheads: fetchOverheadExpenses,
+    createOverheadExpense,
+    createOverhead: createOverheadExpense,
+    updateOverheadExpense,
+    updateOverhead: updateOverheadExpense,
+    deleteOverheadExpense,
+    deleteOverhead: deleteOverheadExpense,
+    quickEntry,
+    fetchExpectedPayments,
+    confirmExpectedPayment,
+    updateEarningPersona,
+    toggleIncludeOverhead,
+
     // FX Engine
     fetchFxRates,
     convertToBaseCurrency,
@@ -2444,6 +3423,54 @@ export const useWelloStore = defineStore('wello', () => {
     stopTimer,
     timerDisplay,
 
+    // Notifications Engine
+    fetchNotifications,
+    markNotificationAsRead,
+    markAllNotificationsAsRead,
+    deleteNotification,
+    fetchNotificationPreferences,
+    saveNotificationPreferences,
+
+    // Offline Outbox & Conflict Resolution
+    outbox,
+    pendingOutboxCount,
+    activeConflict,
+    flushOutbox,
+    dismissConflict,
+    resolveConflict,
+
+    // Addon Platform & Store Actions (100% Free Addons)
+    addons,
+    showAddonModal,
+    addonModalData,
+    fetchAddons,
+    hasAddon,
+    triggerAddonGatePrompt,
+    activateAddon,
+    deactivateAddon,
+
+    // Pricing Calculator & Reporting
+    calculatePricing,
+    applyQuoteToProject,
+    fetchReportsSummary,
+
+    // Trust, Privacy, Export/Import, Lifecycle & Support Actions
+    showFeedbackModal,
+    showOnboardingWizard,
+    privacySettings,
+    submitFeedback,
+    fetchPrivacySettings,
+    updatePrivacySettings,
+    exportAllZip,
+    exportJson,
+    exportCsv,
+    previewImport,
+    executeImport,
+    deleteAccount,
+    cancelAccountDeletion,
+    resetWorkData,
+    completeOnboarding,
+
     // Optimistic CRUD Actions
     createProject,
     updateProject,
@@ -2463,5 +3490,153 @@ export const useWelloStore = defineStore('wello', () => {
     deleteClient,
     updateProfile,
     resetToDefaults,
+  }
+
+  // ── Trust & Lifecycle Action Implementations ─────────────────────────────────
+
+  async function submitFeedback(payload) {
+    const res = await apiFetch('/api/feedback', {
+      method: 'POST',
+      body: payload,
+    })
+    return res
+  }
+
+  async function fetchPrivacySettings() {
+    const res = await apiFetch('/api/me/privacy')
+    if (res?.data) {
+      privacySettings.value = res.data
+    }
+    return privacySettings.value
+  }
+
+  async function updatePrivacySettings(settings) {
+    const res = await apiFetch('/api/me/privacy', {
+      method: 'POST',
+      body: settings,
+    })
+    if (res?.data) {
+      privacySettings.value = { ...privacySettings.value, ...res.data }
+      user.value.analyticsConsent = res.data.analyticsConsent
+      user.value.cookieConsent = res.data.cookieConsent
+      user.value.digestFrequency = res.data.digestFrequency
+    }
+    return res
+  }
+
+  async function exportAllZip() {
+    const token = authStore.token
+    const res = await fetch('/api/export/all', {
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    })
+    const blob = await res.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `wello-backup-${new Date().toISOString().slice(0, 10)}.zip`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    window.URL.revokeObjectURL(url)
+  }
+
+  async function exportJson() {
+    const token = authStore.token
+    const res = await fetch('/api/export/json', {
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    })
+    const blob = await res.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `wello-export-${new Date().toISOString().slice(0, 10)}.json`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    window.URL.revokeObjectURL(url)
+  }
+
+  async function exportCsv(entity = 'sessions') {
+    const token = authStore.token
+    const res = await fetch(`/api/export/csv?entity=${entity}`, {
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    })
+    const blob = await res.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `wello-${entity}-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    window.URL.revokeObjectURL(url)
+  }
+
+  async function previewImport(csvText, targetEntity, mapping) {
+    const res = await apiFetch('/api/import/preview', {
+      method: 'POST',
+      body: { csvText, targetEntity, mapping },
+    })
+    return res?.data || res
+  }
+
+  async function executeImport(csvText, entityType, mapping) {
+    const res = await apiFetch('/api/import/execute', {
+      method: 'POST',
+      body: { csvText, entityType, mapping },
+    })
+    await loadInitialData()
+    return res?.data || res
+  }
+
+  async function deleteAccount(gracePeriodDays = 14) {
+    const res = await apiFetch('/api/me/delete-account', {
+      method: 'POST',
+      body: { gracePeriodDays },
+    })
+    if (res?.data) {
+      user.value.status = 'pending_deletion'
+      user.value.scheduledDeletionAt = res.data.scheduledDeletionAt
+    }
+    return res
+  }
+
+  async function cancelAccountDeletion() {
+    const res = await apiFetch('/api/me/cancel-deletion', {
+      method: 'POST',
+    })
+    if (res) {
+      user.value.status = 'active'
+      user.value.scheduledDeletionAt = null
+    }
+    return res
+  }
+
+  async function resetWorkData() {
+    const res = await apiFetch('/api/me/reset-work-data', {
+      method: 'POST',
+    })
+    sessions.value = []
+    payments.value = []
+    expenses.value = []
+    projects.value = []
+    clients.value = []
+    incomeSources.value = []
+    overheadExpenses.value = []
+    expectedPayments.value = []
+    saveCachedState()
+    return res
+  }
+
+  async function completeOnboarding(onboardingData) {
+    const res = await apiFetch('/api/me', {
+      method: 'PATCH',
+      body: onboardingData,
+    })
+    if (res?.data) {
+      user.value = { ...user.value, ...res.data }
+      saveCachedState()
+    }
+    return res
   }
 })

@@ -1,8 +1,9 @@
 // backend/api/projects/[id]/quotes.post.ts
 import { defineEventHandler, getRouterParam, readBody } from 'h3'
 import { z } from 'zod'
+import crypto from 'node:crypto'
 import { requireUser } from '../../../utils/authGuard'
-import { getDb } from '../../../utils/authService'
+import { getDb } from '../../../utils/db'
 import { sendSuccess, sendError, formatZodError } from '../../../utils/apiResponse'
 
 const createQuoteSchema = z.object({
@@ -44,7 +45,7 @@ export default defineEventHandler(async (event) => {
   const data = parsed.data
   const now = new Date()
   const quoteDate = data.quoteDate || now.toISOString().slice(0, 10)
-  const currency = data.currency || project.currency || user.baseCurrency || 'USD'
+  const currency = data.currency || project.currency || user.base_currency || 'USD'
 
   // Determine next version number
   const [maxVersionResult] = await db('project_quotes')
@@ -61,6 +62,8 @@ export default defineEventHandler(async (event) => {
       .update({ status: 'superseded', updated_at: now })
   }
 
+  const publicToken = crypto.randomBytes(24).toString('hex')
+
   const [quoteId] = await db('project_quotes').insert({
     user_id: user.id,
     project_id: projectId,
@@ -72,6 +75,7 @@ export default defineEventHandler(async (event) => {
     valid_until: data.validUntil || null,
     status: data.status,
     notes: data.notes || null,
+    public_token: publicToken,
     created_at: now,
     updated_at: now,
   })
@@ -107,6 +111,20 @@ export default defineEventHandler(async (event) => {
       validUntil: newQuote.valid_until,
       status: newQuote.status,
       notes: newQuote.notes,
+      publicToken: newQuote.public_token,
+      quote: {
+        id: newQuote.id,
+        projectId: newQuote.project_id,
+        version: newQuote.version,
+        quoteAmount: Number(newQuote.quote_amount),
+        currency: newQuote.currency,
+        estHours: newQuote.est_hours !== null ? Number(newQuote.est_hours) : null,
+        quoteDate: newQuote.quote_date,
+        validUntil: newQuote.valid_until,
+        status: newQuote.status,
+        notes: newQuote.notes,
+        publicToken: newQuote.public_token,
+      },
       createdAt: newQuote.created_at,
       updatedAt: newQuote.updated_at,
     },

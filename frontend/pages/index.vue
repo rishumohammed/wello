@@ -1,34 +1,75 @@
 <template>
   <div class="dashboard-page animate-fade-in">
     <!-- Greeting & Header -->
-    <div class="page-header mb-5">
-      <h1 class="page-title">Good {{ greeting }}, {{ firstName }}</h1>
-      <p class="page-subtitle">{{ formattedDate }} · Personal work-value dashboard</p>
+    <div class="page-header flex items-center justify-between flex-wrap gap-4 mb-5">
+      <div>
+        <div class="flex items-center gap-2 mb-1">
+          <h1 class="page-title mb-0">Good {{ greeting }}, {{ firstName }}</h1>
+          <button
+            class="badge badge-purple text-xs font-semibold hover:opacity-80 transition-all cursor-pointer flex items-center gap-1"
+            @click="showPersonaModal = true"
+            title="Switch Earning Persona & Setup"
+            id="btn-header-persona"
+          >
+            <span>{{ currentPersonaIcon }}</span>
+            <span>{{ currentPersonaTitle }}</span>
+            <span class="text-2xs opacity-75">▾</span>
+          </button>
+        </div>
+        <p class="page-subtitle">{{ formattedDate }} · Personal work-value intelligence dashboard</p>
+      </div>
+
+      <!-- Header Pending Expected Income Banner (if any) -->
+      <div v-if="pendingExpectedCount > 0" class="flex items-center gap-2">
+        <button
+          class="btn btn-secondary btn-sm bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 border-purple-300 dark:border-purple-800 flex items-center gap-1.5 shadow-sm"
+          @click="showExpectedIncomeModal = true"
+          id="btn-header-expected-income"
+        >
+          <span>✨</span>
+          <span class="fw-600">{{ pendingExpectedCount }} Recurring Income Pending</span>
+        </button>
+      </div>
     </div>
+
+    <!-- First Run Onboarding Tour Checklist -->
+    <FirstRunTour />
 
     <!-- Quick Actions Toolbar -->
     <div class="quick-actions-toolbar" id="home-quick-actions">
+      <!-- 2-Tap Quick Entry Flow -->
+      <button class="quick-action-btn action-quick-entry" @click="showQuickEntryModal = true" id="action-quick-entry">
+        <span class="text-base">⚡</span>
+        <span class="fw-700">Quick Entry</span>
+      </button>
+
       <button class="quick-action-btn action-start" @click="showTimerModal = true" id="action-start-work">
         <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <polygon points="5 3 19 12 5 21 5 3"/>
         </svg>
-        <span>Start Work</span>
+        <span>Start Timer</span>
       </button>
+
+      <button class="quick-action-btn" @click="showIncomeSourceModal = true" id="action-add-income-source">
+        <span class="text-base">💼</span>
+        <span>Income Source</span>
+      </button>
+
       <button class="quick-action-btn" @click="showNewProject = true" id="action-create-project">
         <IconFolders class="action-icon text-brand" />
         <span>Create Project</span>
       </button>
+
       <button class="quick-action-btn" @click="showPaymentModal = true" id="action-add-income">
         <svg class="action-icon text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
         </svg>
-        <span>Add Income</span>
+        <span>Add Payment</span>
       </button>
-      <button class="quick-action-btn" @click="showExpenseModal = true" id="action-add-expense">
-        <svg class="action-icon text-danger" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
-        </svg>
-        <span>Add Expense</span>
+
+      <button class="quick-action-btn" @click="showOverheadModal = true" id="action-add-overhead">
+        <span class="text-base">🚆</span>
+        <span>Add Overhead</span>
       </button>
     </div>
 
@@ -43,7 +84,7 @@
               <span v-if="isTimerForgotten" class="badge badge-warning text-xs font-semibold">⚠️ Exceeds Max Hours</span>
               <span v-else-if="store.isTimerPaused" class="badge badge-secondary text-xs">Paused</span>
             </div>
-            <div class="text-tertiary text-xs">Running: {{ store.activeTimer.title }} · {{ timerProjectName }}</div>
+            <div class="text-tertiary text-xs">Running: {{ store.activeTimer.title }} · {{ timerTargetName }}</div>
           </div>
         </div>
         <div class="flex items-center gap-2">
@@ -56,10 +97,13 @@
     <!-- PRIMARY HERO: ROLLING WORK-VALUE & DUAL RATES -->
     <div class="metric-card-hero mb-6" id="home-hero-metric">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
           <div class="metric-label uppercase tracking-wide fw-700">Work Value Return</div>
           <span class="badge badge-purple text-2xs font-semibold">
             {{ isAllInMetric ? 'All-In Metric' : 'Client-Work Metric' }}
+          </span>
+          <span v-if="hasOverheadIncluded" class="badge badge-secondary text-2xs" title="Overhead costs are factored into this rate">
+            Overhead Deducted
           </span>
         </div>
 
@@ -146,9 +190,9 @@
         </div>
 
         <div class="hero-sub-metric" id="sub-metric-expenses">
-          <div class="hero-sub-label">Earned Revenue</div>
-          <div class="hero-sub-value kpi-val-3">{{ store.fmtCurrency(activeEarnedRev) }}</div>
-          <div class="text-tertiary text-xs mt-1">invoiced & accepted quotes</div>
+          <div class="hero-sub-label">Direct & Overhead Costs</div>
+          <div class="hero-sub-value kpi-val-3">{{ store.fmtCurrency(activeExpenses) }}</div>
+          <div class="text-tertiary text-xs mt-1">expenses & allocations</div>
         </div>
 
         <div class="hero-sub-metric" id="sub-metric-net">
@@ -160,7 +204,7 @@
     </div>
 
     <!-- RECENT INSIGHT (Exactly ONE Meaningful Insight at a Time) -->
-    <div class="insight-banner-card" v-if="currentInsight" id="home-recent-insight">
+    <div class="insight-banner-card mb-6" v-if="currentInsight" id="home-recent-insight">
       <div class="insight-banner-left">
         <div class="insight-sparkle-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -177,13 +221,119 @@
       </button>
     </div>
 
+    <!-- PERSONA CARDS: Salaried Commute Drag & Multi-Employer Comparison -->
+    <div v-if="showSalariedCard || showMultiEmployerCard" class="grid-1 lg:grid-2 gap-6 mb-6">
+      <!-- 1. SALARIED COMMUTE & TRUE RATE CARD -->
+      <div v-if="showSalariedCard" class="card" id="card-salaried-commute">
+        <div class="card-header flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-lg">🏢</span>
+            <div>
+              <div class="card-title text-base">Salaried True Rate Analysis</div>
+              <div class="card-subtitle text-xs">Real value accounting for commute time and transit costs</div>
+            </div>
+          </div>
+          <span class="badge badge-purple text-2xs font-semibold">Commute Drag</span>
+        </div>
+
+        <div class="card-body">
+          <div class="grid grid-cols-2 gap-3 mb-4">
+            <div class="p-3 bg-off-white rounded-xl border-subtle-box">
+              <div class="text-xs text-tertiary uppercase fw-600">Nominal Contract Rate</div>
+              <div class="fw-800 text-lg text-primary mt-1">
+                {{ store.fmtHourly(salariedAnalysis.nominalRate) }}
+              </div>
+              <div class="text-[11px] text-tertiary mt-0.5">Contract salary / base hours</div>
+            </div>
+
+            <div class="p-3 bg-purple-50 dark:bg-purple-950/40 rounded-xl border border-purple-200 dark:border-purple-800">
+              <div class="text-xs text-purple-700 dark:text-purple-300 uppercase fw-600">True Real Rate</div>
+              <div class="fw-800 text-lg text-purple-900 dark:text-purple-100 mt-1">
+                {{ store.fmtHourly(salariedAnalysis.trueRate) }}
+              </div>
+              <div class="text-[11px] text-purple-700 dark:text-purple-300 mt-0.5">
+                {{ salariedAnalysis.commuteDragPct }}% drag from commute
+              </div>
+            </div>
+          </div>
+
+          <div class="p-3 bg-surface border border-neutral/60 rounded-xl text-xs flex items-center justify-between flex-wrap gap-2">
+            <div class="flex items-center gap-2">
+              <span>🚆 Commute: <strong>{{ store.minutesToHM(salariedAnalysis.commuteMinutes) }}</strong></span>
+              <span class="text-tertiary">|</span>
+              <span>Cost: <strong>{{ store.fmtCurrency(salariedAnalysis.commuteExpenses) }}</strong></span>
+            </div>
+            <div class="text-tertiary text-[11px]">
+              Formula: (Salary - Commute Cost) / (Hours + Commute)
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. MULTI-EMPLOYER COMPARISON CARD -->
+      <div v-if="showMultiEmployerCard" class="card" id="card-multi-employer">
+        <div class="card-header flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-lg">⏱️</span>
+            <div>
+              <div class="card-title text-base">Multi-Employer / Income Sources</div>
+              <div class="card-subtitle text-xs">Real hourly value comparison across employers and gigs</div>
+            </div>
+          </div>
+          <NuxtLink to="/work" class="section-action text-xs">View All Sources →</NuxtLink>
+        </div>
+
+        <div class="card-body p-0">
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Employer / Source</th>
+                  <th class="table-text-right">Hours</th>
+                  <th class="table-text-right">Net Income</th>
+                  <th class="table-text-right">Real Hourly Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(source, idx) in multiEmployerList" :key="source.id" :id="`source-rank-row-${source.id}`">
+                  <td>
+                    <div class="flex items-center gap-2">
+                      <span v-if="idx === 0" class="badge badge-success text-2xs font-bold">Top</span>
+                      <span class="fw-600 text-sm">{{ source.name }}</span>
+                      <span class="badge badge-secondary text-2xs">{{ source.type }}</span>
+                    </div>
+                  </td>
+                  <td class="table-text-right tabular text-sm">
+                    {{ store.minutesToHM(source.totalMinutes) }}
+                  </td>
+                  <td class="table-text-right tabular fw-600 text-sm">
+                    {{ store.fmtCurrency(source.netIncome, source.currency) }}
+                  </td>
+                  <td class="table-text-right">
+                    <span class="fw-700 text-brand text-sm">
+                      {{ store.fmtHourly(source.effectiveHourlyRate, source.currency) }}
+                    </span>
+                  </td>
+                </tr>
+                <tr v-if="multiEmployerList.length === 0">
+                  <td colspan="4" class="text-center py-5 text-tertiary text-xs">
+                    No income sources recorded yet. Click "Quick Entry" or "Income Source" to track work across employers.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- UNPAID PROJECT INSIGHT BLOCK -->
     <div class="unpaid-insight-card mb-6" id="home-unpaid-insight">
       <div class="unpaid-insight-top">
         <div>
           <div class="badge badge-unpaid mb-1 text-2xs">Time invested before payment</div>
-          <div class="unpaid-insight-title mt-1">{{ stats.todayUnpaidHM }} unpaid project work today</div>
-          <div class="unpaid-insight-subtitle">Discovery, meetings, requirements & proposals before project billing.</div>
+          <div class="unpaid-insight-title mt-1">{{ stats.todayUnpaidHM }} unpaid work today</div>
+          <div class="unpaid-insight-subtitle">Discovery, meetings, travel, requirements & proposals before billing.</div>
         </div>
         <div class="unpaid-val-badge">
           <div class="unpaid-val-amount">{{ store.fmtCurrency(stats.unpaidEstValue) }}</div>
@@ -217,17 +367,25 @@
             <div class="card-title">Today's Work</div>
             <div class="card-subtitle">{{ (stats.todaySessions || []).length }} chronological session{{ (stats.todaySessions || []).length !== 1 ? 's' : '' }}</div>
           </div>
-          <button class="btn btn-secondary btn-sm" @click="showNewSession = true" id="btn-add-session-today">
-            <IconPlus :size="13" /> Log Work
-          </button>
+          <div class="flex items-center gap-2">
+            <button class="btn btn-secondary btn-sm" @click="showQuickEntryModal = true" id="btn-quick-entry-today">
+              ⚡ Quick Entry
+            </button>
+            <button class="btn btn-secondary btn-sm" @click="showNewSession = true" id="btn-add-session-today">
+              <IconPlus :size="13" /> Log Session
+            </button>
+          </div>
         </div>
 
         <div class="card-body p-0">
           <div v-if="!stats.todaySessions || stats.todaySessions.length === 0" class="empty-state py-8 px-4">
             <div class="empty-icon"><IconClock /></div>
             <div class="empty-title text-base">No work logged today</div>
-            <div class="empty-desc text-xs">Use Start Work or Log Session to record time.</div>
-            <button class="btn btn-primary btn-sm mt-3" @click="showTimerModal = true">Start Work</button>
+            <div class="empty-desc text-xs">Use Quick Entry, Start Timer, or Log Session to record work.</div>
+            <div class="flex items-center gap-2 mt-3">
+              <button class="btn btn-primary btn-sm" @click="showQuickEntryModal = true">⚡ 2-Tap Quick Entry</button>
+              <button class="btn btn-secondary btn-sm" @click="showTimerModal = true">Start Timer</button>
+            </div>
           </div>
 
           <div v-else class="chronological-stream">
@@ -242,13 +400,12 @@
                 {{ formatTimeRange(sess) }}
               </div>
 
-              <!-- Project -->
+              <!-- Project / Source Badge -->
               <div
                 class="session-proj-badge truncate"
-                @click="navigateTo(`/projects/${sess.projectId}`)"
-                :title="projectName(sess.projectId)"
+                :title="getSessionTargetName(sess)"
               >
-                {{ projectName(sess.projectId) }}
+                {{ getSessionTargetName(sess) }}
               </div>
 
               <!-- Title / Task Description -->
@@ -369,9 +526,9 @@
       <div class="card-header">
         <div>
           <div class="card-title">Project Summary</div>
-          <div class="card-subtitle">Active projects, hours, and economic return</div>
+          <div class="card-subtitle">Active client projects, hours, and economic return</div>
         </div>
-        <NuxtLink to="/projects" class="section-action" id="link-all-projects">View All Projects →</NuxtLink>
+        <NuxtLink to="/work" class="section-action" id="link-all-projects">View Work Hub →</NuxtLink>
       </div>
 
       <div class="table-wrap">
@@ -430,6 +587,11 @@
     </div>
 
     <!-- Global Modals Integration -->
+    <QuickEntryModal v-if="showQuickEntryModal" @close="showQuickEntryModal = false" @saved="showQuickEntryModal = false" />
+    <IncomeSourceModal v-if="showIncomeSourceModal" @close="showIncomeSourceModal = false" @saved="showIncomeSourceModal = false" />
+    <OverheadModal v-if="showOverheadModal" @close="showOverheadModal = false" @saved="showOverheadModal = false" />
+    <ExpectedIncomeModal v-if="showExpectedIncomeModal" @close="showExpectedIncomeModal = false" @confirmed="showExpectedIncomeModal = false" />
+    <PersonaSetupModal v-if="showPersonaModal" @close="showPersonaModal = false" @saved="showPersonaModal = false" />
     <SessionModal v-if="showNewSession" @close="showNewSession = false" @saved="showNewSession = false" />
     <TimerModal v-if="showTimerModal" @close="showTimerModal = false" />
     <ProjectFormModal v-if="showNewProject" @close="showNewProject = false" @created="onProjectCreated" />
@@ -450,18 +612,24 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useWelloStore } from '~/stores/wello'
 import { useAuthStore } from '~/stores/auth'
 import { useToast } from '~/composables/useToast'
+import FirstRunTour from '~/components/FirstRunTour.vue'
 
 const store = useWelloStore()
 const authStore = useAuthStore()
 const toast = useToast()
 
 // Modal states
-const showNewSession   = ref(false)
-const showTimerModal   = ref(false)
-const showNewProject   = ref(false)
-const showPaymentModal = ref(false)
-const showExpenseModal = ref(false)
-const confirmDelete    = ref(null)
+const showQuickEntryModal     = ref(false)
+const showIncomeSourceModal   = ref(false)
+const showOverheadModal       = ref(false)
+const showExpectedIncomeModal = ref(false)
+const showPersonaModal        = ref(false)
+const showNewSession          = ref(false)
+const showTimerModal          = ref(false)
+const showNewProject          = ref(false)
+const showPaymentModal        = ref(false)
+const showExpenseModal        = ref(false)
+const confirmDelete           = ref(null)
 
 // Chart period state: 'day' | 'week' | 'month'
 const chartPeriod = ref('week')
@@ -512,6 +680,71 @@ const stats = computed(() => store.dashboardStats || defaultStats)
 
 const isAllInMetric = computed(() => {
   return (store.user?.headlineRateMetric || stats.value?.headlinePreference) === 'all_in'
+})
+
+const hasOverheadIncluded = computed(() => {
+  return !!store.user?.includeOverheadInMetrics
+})
+
+const pendingExpectedCount = computed(() => {
+  return (store.expectedPayments || []).filter(p => !p.isConfirmed).length
+})
+
+// Persona title and icons
+const currentPersonaTitle = computed(() => {
+  const persona = store.user?.earningPersona || 'freelancer_projects'
+  switch (persona) {
+    case 'salaried': return 'Salaried'
+    case 'daily_hourly_wage': return 'Daily / Hourly'
+    case 'gig_retainer': return 'Gig / Retainers'
+    case 'mixed_hybrid': return 'Hybrid Portfolio'
+    case 'freelancer_projects':
+    default: return 'Freelancer'
+  }
+})
+
+const currentPersonaIcon = computed(() => {
+  const persona = store.user?.earningPersona || 'freelancer_projects'
+  switch (persona) {
+    case 'salaried': return '🏢'
+    case 'daily_hourly_wage': return '⏱️'
+    case 'gig_retainer': return '🛵'
+    case 'mixed_hybrid': return '⚡'
+    case 'freelancer_projects':
+    default: return '💼'
+  }
+})
+
+// Salaried commute analysis computed
+const salariedAnalysis = computed(() => {
+  return store.salariedCommuteAnalysis || {
+    nominalRate: 0,
+    trueRate: 0,
+    commuteDragPct: 0,
+    commuteMinutes: 0,
+    commuteExpenses: 0,
+  }
+})
+
+const showSalariedCard = computed(() => {
+  const persona = store.user?.earningPersona
+  return persona === 'salaried' ||
+         persona === 'mixed_hybrid' ||
+         salariedAnalysis.value.commuteMinutes > 0 ||
+         store.incomeSources.some(s => s.type === 'salary')
+})
+
+// Multi-employer comparison computed
+const multiEmployerList = computed(() => {
+  return store.multiEmployerComparison || []
+})
+
+const showMultiEmployerCard = computed(() => {
+  const persona = store.user?.earningPersona
+  return persona === 'daily_hourly_wage' ||
+         persona === 'gig_retainer' ||
+         persona === 'mixed_hybrid' ||
+         store.incomeSources.length > 0
 })
 
 const activeWindowSummary = computed(() => {
@@ -598,7 +831,7 @@ const activeExpenses = computed(() => {
   if (selectedWindow.value === 'today') {
     return stats.value?.todayExp || 0
   }
-  return activeWindowSummary.value?.financials?.directExpenses || 0
+  return (activeWindowSummary.value?.financials?.directExpenses || 0) + (activeWindowSummary.value?.financials?.allocatedOverhead || 0)
 })
 
 const activeNet = computed(() => {
@@ -645,9 +878,16 @@ const formattedDate = computed(() => {
   })
 })
 
-const timerProjectName = computed(() => {
+const timerTargetName = computed(() => {
   if (!store.activeTimer) return ''
-  return store.getProject(store.activeTimer.projectId)?.name || 'Project'
+  if (store.activeTimer.incomeSourceId) {
+    const src = store.incomeSources.find(s => s.id === store.activeTimer.incomeSourceId)
+    if (src) return src.name
+  }
+  if (store.activeTimer.projectId) {
+    return store.getProject(store.activeTimer.projectId)?.name || 'Project'
+  }
+  return 'Work Session'
 })
 
 const isTimerForgotten = computed(() => {
@@ -686,8 +926,12 @@ const activeProjectsList = computed(() => {
     .slice(0, 6)
 })
 
-function projectName(projectId) {
-  return store.getProject(projectId)?.name || 'General Project'
+function getSessionTargetName(sess) {
+  if (sess.incomeSourceId) {
+    const src = store.incomeSources.find(s => s.id === sess.incomeSourceId)
+    if (src) return src.name
+  }
+  return store.getProject(sess.projectId)?.name || 'General Work'
 }
 
 function formatTimeRange(sess) {
@@ -700,10 +944,19 @@ function formatTimeRange(sess) {
 }
 
 function getSessionEffectiveRate(sess) {
-  const proj = store.getProject(sess.projectId)
-  if (!proj) return `${store.currency}750/hr`
-  const rate = store.projectNetHourlyValue(proj)
-  if (rate > 0) return store.fmtHourly(rate)
+  if (sess.projectId) {
+    const proj = store.getProject(sess.projectId)
+    if (proj) {
+      const rate = store.projectNetHourlyValue(proj)
+      if (rate > 0) return store.fmtHourly(rate)
+    }
+  }
+  if (sess.incomeSourceId) {
+    const src = store.incomeSources.find(s => s.id === sess.incomeSourceId)
+    if (src && src.effectiveHourlyRate > 0) {
+      return store.fmtHourly(src.effectiveHourlyRate, src.currency)
+    }
+  }
   return `${store.currency}750/hr`
 }
 
@@ -731,8 +984,13 @@ function onProjectCreated(proj) {
 
 // Live timer ticker
 let ticker = null
-onMounted(() => {
+onMounted(async () => {
   ticker = setInterval(() => {}, 1000)
+  await Promise.allSettled([
+    store.fetchIncomeSources(),
+    store.fetchOverheads(),
+    store.fetchExpectedPayments(),
+  ])
 })
 onUnmounted(() => {
   if (ticker) clearInterval(ticker)

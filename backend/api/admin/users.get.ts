@@ -15,7 +15,6 @@ export default defineEventHandler(async (event) => {
       'users.name',
       'users.email',
       'users.avatar_initials as avatarInitials',
-      'users.target_hourly as targetHourly',
       'users.base_currency as currencyCode',
       'users.timezone',
       'users.country as countryCode',
