@@ -1,10 +1,11 @@
 // server/api/store/addons/index.get.ts
-import { defineEventHandler, getQuery } from 'h3'
+import { defineEventHandler } from 'h3'
+import { requireUser } from '../../../utils/authGuard'
 import { getAvailableAddons, getUserAddons, recordStoreVisit } from '../../../utils/storeEngine'
 
 export default defineEventHandler(async (event) => {
-  const query = getQuery(event)
-  const userId = (query?.userId as string) || 'u1'
+  const user = await requireUser(event)
+  const userId = String(user.id)
 
   // Increment store visits for analytics
   recordStoreVisit()

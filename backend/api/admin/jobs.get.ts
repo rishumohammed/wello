@@ -1,8 +1,10 @@
 // server/api/admin/jobs.get.ts
 import { defineEventHandler } from 'h3'
+import { requirePermission } from '../../utils/authGuard'
 
-export default defineEventHandler(() => {
-  // Return structured jobs/services for admin moderation
+export default defineEventHandler(async (event) => {
+  await requirePermission(event, 'jobs.view')
+
   const sampleJobs = [
     { id: 'job_101', title: 'Full-Stack Nuxt 3 E-Commerce Platform', userEmail: 'rahul@mehtatech.in', userName: 'Rahul Mehta', category: 'Software & Web Development', status: 'in_progress', quoteAmount: 125000, estHours: 80, createdAt: new Date(Date.now() - 5 * 86400000).toISOString() },
     { id: 'job_102', title: 'Fintech Mobile App UI/UX Redesign', userEmail: 'priya.sharma@design.io', userName: 'Priya Sharma', category: 'UI/UX & Visual Design', status: 'approved', quoteAmount: 85000, estHours: 50, createdAt: new Date(Date.now() - 10 * 86400000).toISOString() },

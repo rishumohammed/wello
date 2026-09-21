@@ -1,18 +1,12 @@
 // server/api/admin/store/addons.post.ts
 import { defineEventHandler, readBody, createError } from 'h3'
+import { requirePermission } from '../../../utils/authGuard'
 import { createOrUpdateAddon, getAddonById } from '../../../utils/storeEngine'
 import { recordAuditLog } from '../../../utils/auditStore'
 
 export default defineEventHandler(async (event) => {
+  const admin = await requirePermission(event, 'store.manage')
   const body = await readBody(event)
-  const role = body?.role || 'admin'
-  const adminEmail = body?.adminEmail || 'admin@wello.com'
-
-  // Server-side security check: reject non-admin users
-  if (role !== 'admin') {
-    throw createError({ statusCode: 403, statusMessage: 'Forbidden: Server-side admin authorization required.' })
-  }
-
   const action = body?.action || 'CREATE'
 
   if (action === 'CREATE' || action === 'UPDATE') {
@@ -35,7 +29,7 @@ export default defineEventHandler(async (event) => {
     })
 
     recordAuditLog({
-      adminEmail,
+      adminEmail: admin.email,
       action: action === 'CREATE' ? 'ADDON_CREATED' : 'ADDON_UPDATED',
       module: 'Wello Store',
       target: addon.name,
@@ -62,7 +56,7 @@ export default defineEventHandler(async (event) => {
     })
 
     recordAuditLog({
-      adminEmail,
+      adminEmail: admin.email,
       action: newStatus === 'PUBLISHED' ? 'ADDON_PUBLISHED' : 'ADDON_UNPUBLISHED',
       module: 'Wello Store',
       target: updated.name,

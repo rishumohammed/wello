@@ -1,5 +1,6 @@
 // server/api/admin/test-email.post.ts
 import { defineEventHandler, readBody, createError } from 'h3'
+import { requirePermission } from '../../utils/authGuard'
 import {
   sendEmailViaResend,
   logAuthEvent,
@@ -7,6 +8,7 @@ import {
 } from '../../utils/authConfig'
 
 export default defineEventHandler(async (event) => {
+  await requirePermission(event, 'email.manage')
   const body = await readBody(event)
   const toEmail = (body?.to || body?.email || '').trim().toLowerCase()
 

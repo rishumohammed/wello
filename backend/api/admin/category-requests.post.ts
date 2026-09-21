@@ -1,13 +1,14 @@
 // server/api/admin/category-requests.post.ts
 import { defineEventHandler, readBody, createError } from 'h3'
+import { requirePermission } from '../../utils/authGuard'
 import { processCategoryRequest } from '../../utils/categoryStore'
 import { recordAuditLog } from '../../utils/auditStore'
 
 export default defineEventHandler(async (event) => {
+  const admin = await requirePermission(event, 'category_requests.manage')
   const body = await readBody(event)
   const requestId = body?.requestId
   const action = body?.action // 'APPROVE' | 'REJECT' | 'MERGE' | 'UNDER_REVIEW'
-  const adminEmail = body?.adminEmail || 'admin@wello.com'
   const adminNotes = body?.adminNotes
 
   if (!requestId || !action) {
@@ -20,14 +21,14 @@ export default defineEventHandler(async (event) => {
   const result = processCategoryRequest({
     requestId,
     action,
-    adminEmail,
+    adminEmail: admin.email,
     adminNotes,
     targetCategoryId: body?.targetCategoryId,
   })
 
   // Record Audit Log
   recordAuditLog({
-    adminEmail,
+    adminEmail: admin.email,
     action: `CATEGORY_REQUEST_${action}`,
     module: 'Categories',
     target: result.request.requestedName,

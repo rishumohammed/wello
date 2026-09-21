@@ -1,8 +1,10 @@
 // server/api/admin/funnel.get.ts
 import { defineEventHandler, getQuery } from 'h3'
+import { requirePermission } from '../../utils/authGuard'
 import { getFunnelMetrics } from '../../utils/analyticsEngine'
 
-export default defineEventHandler((event) => {
+export default defineEventHandler(async (event) => {
+  await requirePermission(event, 'analytics.view')
   const query = getQuery(event)
   const startDate = query?.startDate as string | undefined
   const endDate = query?.endDate as string | undefined

@@ -1,29 +1,39 @@
 // server/api/invoices/status.post.ts
 import { defineEventHandler, readBody, createError } from 'h3'
-import { updateInvoiceStatus, InvoiceStatus } from '../../utils/invoiceStore'
+import { z } from 'zod'
+import { requireUser } from '../../utils/authGuard'
+import { updateInvoiceStatus, getInvoiceById } from '../../utils/invoiceStore'
+
+const statusSchema = z.object({
+  id: z.string().min(1, 'Invoice ID is required.'),
+  status: z.enum(['DRAFT', 'SENT', 'PAID', 'OVERDUE', 'CANCELLED'], {
+    errorMap: () => ({ message: 'Status must be one of DRAFT, SENT, PAID, OVERDUE, CANCELLED.' }),
+  }),
+})
 
 export default defineEventHandler(async (event) => {
+  const user = await requireUser(event)
   const body = await readBody(event)
-  const id = body?.id
-  const status = body?.status as InvoiceStatus
-
-  if (!id || !status) {
-    throw createError({ statusCode: 400, statusMessage: 'Invoice ID and status are required.' })
+  const parseResult = statusSchema.safeParse(body)
+  if (!parseResult.success) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: parseResult.error.errors[0]?.message || 'Invoice ID and status are required.',
+    })
   }
 
-  const validStatuses: InvoiceStatus[] = ['DRAFT', 'SENT', 'PAID', 'OVERDUE', 'CANCELLED']
-  if (!validStatuses.includes(status)) {
-    throw createError({ statusCode: 400, statusMessage: `Invalid status "${status}". Must be one of DRAFT, SENT, PAID, OVERDUE, CANCELLED.` })
-  }
+  const { id, status } = parseResult.data
 
-  const updated = updateInvoiceStatus(id, status)
-  if (!updated) {
+  const existing = getInvoiceById(id)
+  if (!existing || (existing.userId !== String(user.id) && user.role !== 'admin')) {
     throw createError({ statusCode: 404, statusMessage: 'Invoice not found.' })
   }
 
+  const updated = updateInvoiceStatus(id, status)
+
   return {
     success: true,
-    message: `Invoice ${updated.invoiceNumber} status updated to ${updated.status}.`,
+    message: `Invoice ${updated?.invoiceNumber || id} status updated to ${status}.`,
     invoice: updated,
   }
 })

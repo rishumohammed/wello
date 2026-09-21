@@ -1,8 +1,10 @@
 // server/api/admin/config.get.ts
 import { defineEventHandler } from 'h3'
+import { requirePermission } from '../../utils/authGuard'
 import { getResendConfig } from '../../utils/authConfig'
 
-export default defineEventHandler(() => {
+export default defineEventHandler(async (event) => {
+  await requirePermission(event, 'settings.manage')
   const config = getResendConfig()
 
   // Mask API key for security (e.g. re_abc123...xyz)

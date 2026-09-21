@@ -1,15 +1,31 @@
 // server/api/category-requests/index.post.ts
 import { defineEventHandler, readBody, createError } from 'h3'
+import { z } from 'zod'
 import { submitCategoryRequest } from '../../utils/categoryStore'
 import { pushAdminNotification } from '../../utils/auditStore'
 import { logAnalyticsEvent } from '../../utils/analyticsEngine'
 
+const categoryRequestSchema = z.object({
+  userEmail: z.string().email('Please enter a valid email address.').optional(),
+  email: z.string().email('Please enter a valid email address.').optional(),
+  requestedName: z.string().optional(),
+  name: z.string().optional(),
+  description: z.string().optional(),
+  reason: z.string().optional(),
+})
+
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
-  const userEmail = (body?.userEmail || body?.email || '').trim().toLowerCase()
-  const requestedName = (body?.requestedName || body?.name || '').trim()
-  const description = body?.description
-  const reason = body?.reason
+  const parseResult = categoryRequestSchema.safeParse(body)
+  if (!parseResult.success) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: parseResult.error.errors[0]?.message || 'Invalid request data.',
+    })
+  }
+
+  const userEmail = (parseResult.data.userEmail || parseResult.data.email || '').trim().toLowerCase()
+  const requestedName = (parseResult.data.requestedName || parseResult.data.name || '').trim()
 
   if (!userEmail || !requestedName) {
     throw createError({
@@ -21,8 +37,8 @@ export default defineEventHandler(async (event) => {
   const req = submitCategoryRequest({
     userEmail,
     requestedName,
-    description,
-    reason,
+    description: parseResult.data.description,
+    reason: parseResult.data.reason,
   })
 
   // Push notification for Admin
@@ -46,3 +62,4 @@ export default defineEventHandler(async (event) => {
     request: req,
   }
 })
+

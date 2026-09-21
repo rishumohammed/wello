@@ -1,12 +1,13 @@
 // server/api/admin/categories.post.ts
 import { defineEventHandler, readBody, createError } from 'h3'
+import { requirePermission } from '../../utils/authGuard'
 import { createCategory, updateCategory, toggleCategoryStatus } from '../../utils/categoryStore'
 import { recordAuditLog } from '../../utils/auditStore'
 
 export default defineEventHandler(async (event) => {
+  const admin = await requirePermission(event, 'categories.manage')
   const body = await readBody(event)
   const action = body?.action || 'CREATE'
-  const adminEmail = body?.adminEmail || 'admin@wello.com'
 
   if (action === 'CREATE') {
     if (!body?.name) {
@@ -20,7 +21,7 @@ export default defineEventHandler(async (event) => {
     })
 
     recordAuditLog({
-      adminEmail,
+      adminEmail: admin.email,
       action: 'CATEGORY_CREATED',
       module: 'Categories',
       target: created.name,
@@ -36,7 +37,7 @@ export default defineEventHandler(async (event) => {
     if (!updated) throw createError({ statusCode: 404, statusMessage: 'Category not found.' })
 
     recordAuditLog({
-      adminEmail,
+      adminEmail: admin.email,
       action: 'CATEGORY_UPDATED',
       module: 'Categories',
       target: updated.name,
@@ -52,7 +53,7 @@ export default defineEventHandler(async (event) => {
     if (!toggled) throw createError({ statusCode: 404, statusMessage: 'Category not found.' })
 
     recordAuditLog({
-      adminEmail,
+      adminEmail: admin.email,
       action: toggled.isActive ? 'CATEGORY_ENABLED' : 'CATEGORY_DISABLED',
       module: 'Categories',
       target: toggled.name,

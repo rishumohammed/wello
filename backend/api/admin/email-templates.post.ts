@@ -1,15 +1,16 @@
 // server/api/admin/email-templates.post.ts
 import { defineEventHandler, readBody, createError } from 'h3'
+import { requirePermission } from '../../utils/authGuard'
 import { updateEmailTemplate } from '../../utils/emailEngine'
 import { recordAuditLog } from '../../utils/auditStore'
 
 export default defineEventHandler(async (event) => {
+  const admin = await requirePermission(event, 'email.manage')
   const body = await readBody(event)
   const key = body?.key
   const subject = body?.subject
   const bodyHtml = body?.bodyHtml
   const isActive = body?.isActive
-  const adminEmail = body?.adminEmail || 'admin@wello.com'
 
   if (!key) {
     throw createError({ statusCode: 400, statusMessage: 'Template key required.' })
@@ -21,7 +22,7 @@ export default defineEventHandler(async (event) => {
   }
 
   recordAuditLog({
-    adminEmail,
+    adminEmail: admin.email,
     action: 'EMAIL_TEMPLATE_UPDATED',
     module: 'Communications',
     target: updated.name,

@@ -1,7 +1,7 @@
 // test_admin_apis.mjs
 import http from 'http';
 
-function request(urlPath, method = 'GET', data = null) {
+function request(urlPath, method = 'GET', data = null, token = null) {
   return new Promise((resolve, reject) => {
     const payload = data ? JSON.stringify(data) : null;
     const req = http.request(
@@ -13,6 +13,7 @@ function request(urlPath, method = 'GET', data = null) {
         headers: {
           'Content-Type': 'application/json',
           ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {}),
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
       },
       (res) => {
@@ -52,8 +53,16 @@ async function runApiVerification() {
   }
 
   try {
+    // 0. Authenticate Super Admin
+    console.log('📌 Testing 0: Authenticate Super Admin');
+    const sendRes = await request('/api/auth/send-otp', 'POST', { email: 'admin@wello.com', type: 'login' });
+    const otpCode = sendRes.body?.devOtp;
+    const verifyRes = await request('/api/auth/verify-otp', 'POST', { email: 'admin@wello.com', code: otpCode });
+    const adminToken = verifyRes.body?.token;
+    assert(Boolean(adminToken), 'Admin authenticated with session token');
+
     // 1. Public Categories
-    console.log('📌 Testing 1: Public Categories API (/api/categories)');
+    console.log('\n📌 Testing 1: Public Categories API (/api/categories)');
     const catRes = await request('/api/categories');
     assert(catRes.statusCode === 200, 'GET /api/categories returns 200 OK');
     assert(Array.isArray(catRes.body?.categories), 'Categories array returned');
@@ -72,7 +81,7 @@ async function runApiVerification() {
 
     // 3. Admin Category Requests List
     console.log('\n📌 Testing 3: Admin Category Requests List (/api/admin/category-requests)');
-    const adminReqs = await request('/api/admin/category-requests');
+    const adminReqs = await request('/api/admin/category-requests', 'GET', null, adminToken);
     assert(adminReqs.statusCode === 200, 'GET /api/admin/category-requests returns 200 OK');
     assert(Array.isArray(adminReqs.body?.requests), 'Admin requests list returned');
     assert(adminReqs.body?.requests.some(r => r.requestedName === '3D Motion Graphics'), 'Submitted request is present in admin queue');
@@ -83,53 +92,56 @@ async function runApiVerification() {
       const approveRes = await request('/api/admin/category-requests', 'POST', {
         requestId: createdReqId,
         action: 'APPROVE',
-      });
+      }, adminToken);
       assert(approveRes.statusCode === 200, 'POST /api/admin/category-requests (APPROVE) returns 200 OK');
       assert(approveRes.body?.success === true, 'Category request marked APPROVED and created in master categories');
     }
 
     // 5. Admin Category Intelligence
     console.log('\n📌 Testing 5: Category Intelligence (/api/admin/categories/intelligence)');
-    const intelRes = await request('/api/admin/categories/intelligence');
+    const intelRes = await request('/api/admin/categories/intelligence', 'GET', null, adminToken);
     assert(intelRes.statusCode === 200, 'GET /api/admin/categories/intelligence returns 200 OK');
     assert(Array.isArray(intelRes.body?.intelligence) && intelRes.body.intelligence.length > 0, 'Category intelligence metrics calculated');
 
     // 6. Admin Stats Dashboard
     console.log('\n📌 Testing 6: Admin Dashboard Stats (/api/admin/stats)');
-    const statsRes = await request('/api/admin/stats');
+    const statsRes = await request('/api/admin/stats', 'GET', null, adminToken);
     assert(statsRes.statusCode === 200, 'GET /api/admin/stats returns 200 OK');
     assert(typeof statsRes.body?.stats?.totalUsers === 'number', 'Total users metric returned');
 
     // 7. Admin Funnel Engine
     console.log('\n📌 Testing 7: Admin Funnel Analytics (/api/admin/funnel)');
-    const funnelRes = await request('/api/admin/funnel');
+    const funnelRes = await request('/api/admin/funnel', 'GET', null, adminToken);
     assert(funnelRes.statusCode === 200, 'GET /api/admin/funnel returns 200 OK');
     assert(Array.isArray(funnelRes.body?.funnel) && funnelRes.body.funnel.length === 11, '11 Funnel stages returned');
 
     // 8. Admin Jobs Moderation
     console.log('\n📌 Testing 8: Admin Jobs Moderation (/api/admin/jobs)');
-    const jobsRes = await request('/api/admin/jobs');
+    const jobsRes = await request('/api/admin/jobs', 'GET', null, adminToken);
     assert(jobsRes.statusCode === 200, 'GET /api/admin/jobs returns 200 OK');
     assert(Array.isArray(jobsRes.body?.jobs), 'Jobs list returned');
 
     // 9. Admin Audit Logs
     console.log('\n📌 Testing 9: Admin Audit Logs (/api/admin/audit-logs)');
-    const logsRes = await request('/api/admin/audit-logs');
+    const logsRes = await request('/api/admin/audit-logs', 'GET', null, adminToken);
     assert(logsRes.statusCode === 200, 'GET /api/admin/audit-logs returns 200 OK');
     assert(Array.isArray(logsRes.body?.logs), 'Audit logs array returned');
 
     // 10. Admin Roles Manager
     console.log('\n📌 Testing 10: Admin Roles Manager (/api/admin/roles)');
-    const rolesRes = await request('/api/admin/roles');
+    const rolesRes = await request('/api/admin/roles', 'GET', null, adminToken);
     assert(rolesRes.statusCode === 200, 'GET /api/admin/roles returns 200 OK');
     assert(Array.isArray(rolesRes.body?.roles), 'Roles array returned');
-    assert(rolesRes.body?.roles.some(r => r.roleKey === 'SUPER_ADMIN'), 'Super Admin role present');
+    assert(rolesRes.body?.roles.some(r => r.role_key === 'SUPER_ADMIN' || r.roleKey === 'SUPER_ADMIN'), 'Super Admin role present');
 
     console.log('\n====================================================');
     console.log(`🏁 API TEST SUITE COMPLETE: ${passed} PASSED, ${failed} FAILED`);
     console.log('====================================================');
+
+    process.exit(failed === 0 ? 0 : 1);
   } catch (err) {
     console.error('❌ Network / execution error during test run:', err);
+    process.exit(1);
   }
 }
 

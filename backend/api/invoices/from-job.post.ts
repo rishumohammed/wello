@@ -1,29 +1,47 @@
 // server/api/invoices/from-job.post.ts
 import { defineEventHandler, readBody, createError } from 'h3'
+import { z } from 'zod'
+import { requireUser } from '../../utils/authGuard'
 import { createInvoiceFromJob } from '../../utils/invoiceStore'
 
-export default defineEventHandler(async (event) => {
-  const body = await readBody(event)
-  const userId = body?.userId || 'u1'
+const fromJobSchema = z.object({
+  jobId: z.string().optional().default('job_1'),
+  jobName: z.string().min(1, 'Job name is required.'),
+  jobDescription: z.string().optional(),
+  clientName: z.string().optional(),
+  clientContact: z.string().optional(),
+  quoteAmount: z.number().optional(),
+  hoursWorked: z.number().optional(),
+  rate: z.number().optional(),
+})
 
-  if (!body?.jobName) {
-    throw createError({ statusCode: 400, statusMessage: 'Job name is required.' })
+export default defineEventHandler(async (event) => {
+  const user = await requireUser(event)
+  const body = await readBody(event)
+  const parseResult = fromJobSchema.safeParse(body)
+  if (!parseResult.success) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: parseResult.error.errors[0]?.message || 'Invalid job data.',
+    })
   }
 
+  const { jobId, jobName, jobDescription, clientName, clientContact, quoteAmount, hoursWorked, rate } = parseResult.data
+
   const invoice = createInvoiceFromJob({
-    id: body.jobId || 'job_1',
-    name: body.jobName,
-    description: body.jobDescription,
-    clientName: body.clientName,
-    clientContact: body.clientContact,
-    quoteAmount: body.quoteAmount,
-    hoursWorked: body.hoursWorked,
-    rate: body.rate,
-  }, userId)
+    id: jobId,
+    name: jobName,
+    description: jobDescription,
+    clientName,
+    clientContact,
+    quoteAmount,
+    hoursWorked,
+    rate,
+  }, String(user.id))
 
   return {
     success: true,
-    message: `Invoice ${invoice.invoiceNumber} created from job "${body.jobName}".`,
+    message: `Invoice ${invoice.invoiceNumber} created from job "${jobName}".`,
     invoice,
   }
 })

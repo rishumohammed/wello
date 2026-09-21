@@ -1,14 +1,29 @@
 // server/api/invoices/index.get.ts
-import { defineEventHandler, getQuery } from 'h3'
+import { defineEventHandler, getQuery, createError } from 'h3'
+import { z } from 'zod'
+import { requireUser } from '../../utils/authGuard'
 import { getInvoicesForUser, getInvoiceAnalytics } from '../../utils/invoiceStore'
 
-export default defineEventHandler(async (event) => {
-  const query = getQuery(event)
-  const userId = (query?.userId as string) || 'u1'
-  const statusFilter = (query?.status as string) || 'ALL'
-  const searchQuery = (query?.q as string) || ''
+const querySchema = z.object({
+  status: z.string().optional().default('ALL'),
+  q: z.string().optional().default(''),
+})
 
-  const invoices = getInvoicesForUser(userId, statusFilter, searchQuery)
+export default defineEventHandler(async (event) => {
+  const user = await requireUser(event)
+
+  const query = getQuery(event)
+  const parseResult = querySchema.safeParse(query)
+  if (!parseResult.success) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: parseResult.error.errors[0]?.message || 'Invalid query parameters.',
+    })
+  }
+
+  const { status: statusFilter, q: searchQuery } = parseResult.data
+
+  const invoices = getInvoicesForUser(String(user.id), statusFilter, searchQuery)
   const analytics = getInvoiceAnalytics()
 
   return {

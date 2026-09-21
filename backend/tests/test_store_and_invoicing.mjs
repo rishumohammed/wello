@@ -3,6 +3,22 @@
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3001'
 
+async function loginUser(email) {
+  const sendRes = await fetch(`${BASE_URL}/api/auth/send-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, type: 'login' })
+  })
+  const sendData = await sendRes.json()
+  const verifyRes = await fetch(`${BASE_URL}/api/auth/verify-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, code: sendData.devOtp })
+  })
+  const verifyData = await verifyRes.json()
+  return verifyData.token
+}
+
 async function runTests() {
   console.log('====================================================')
   console.log('🧪 WELLO STORE & BASIC INVOICING ADDON TEST SUITE')
@@ -22,11 +38,19 @@ async function runTests() {
   }
 
   try {
+    // Authenticate demo user and admin
+    const testUserEmail = `rahul_${Date.now()}@mehtatech.in`
+    const userToken = await loginUser(testUserEmail)
+    const adminToken = await loginUser('admin@wello.com')
+
+    const userHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${userToken}` }
+    const adminHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` }
+
     // ----------------------------------------------------
     // TEST 1: User Wello Store Catalog & Addons List
     // ----------------------------------------------------
     console.log('📌 Testing 1: User Store Catalog (/api/store/addons)')
-    const catalogRes = await fetch(`${BASE_URL}/api/store/addons?userId=u1`)
+    const catalogRes = await fetch(`${BASE_URL}/api/store/addons`, { headers: userHeaders })
     assert(catalogRes.status === 200, 'GET /api/store/addons returns 200 OK')
 
     const catalogData = await catalogRes.json()
@@ -35,7 +59,6 @@ async function runTests() {
     const invoicingAddon = catalogData.addons.find(a => a.slug === 'basic-invoicing')
     assert(Boolean(invoicingAddon), 'Basic Invoicing Addon exists in store')
     assert(invoicingAddon?.isFree === true, 'Basic Invoicing Addon is 100% FREE')
-    assert(invoicingAddon?.isActivated === true, 'Basic Invoicing is activated for demo user')
 
     // ----------------------------------------------------
     // TEST 2: Addon Activation & Toggle
@@ -43,8 +66,8 @@ async function runTests() {
     console.log('\n📌 Testing 2: Addon Activation & Toggle (/api/store/addons/activate)')
     const toggleRes = await fetch(`${BASE_URL}/api/store/addons/activate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: 'u1', addonId: 'addon_invoicing' })
+      headers: userHeaders,
+      body: JSON.stringify({ addonId: 'addon_invoicing' })
     })
     assert(toggleRes.status === 200, 'POST /api/store/addons/activate returns 200 OK')
     const toggleData = await toggleRes.json()
@@ -53,15 +76,15 @@ async function runTests() {
     // Reactivate for subsequent tests
     await fetch(`${BASE_URL}/api/store/addons/activate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: 'u1', addonId: 'addon_invoicing' })
+      headers: userHeaders,
+      body: JSON.stringify({ addonId: 'addon_invoicing' })
     })
 
     // ----------------------------------------------------
     // TEST 3: User Invoices List & Analytics
     // ----------------------------------------------------
     console.log('\n📌 Testing 3: Invoices Directory (/api/invoices)')
-    const invoicesRes = await fetch(`${BASE_URL}/api/invoices?userId=u1`)
+    const invoicesRes = await fetch(`${BASE_URL}/api/invoices`, { headers: userHeaders })
     assert(invoicesRes.status === 200, 'GET /api/invoices returns 200 OK')
 
     const invoicesData = await invoicesRes.json()
@@ -74,9 +97,8 @@ async function runTests() {
     console.log('\n📌 Testing 4: Create Invoice & Save Draft (/api/invoices)')
     const createInvRes = await fetch(`${BASE_URL}/api/invoices`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: userHeaders,
       body: JSON.stringify({
-        userId: 'u1',
         customerName: 'Starlight Media Pvt Ltd',
         customerContact: 'finance@starlight.com',
         customerAddress: 'Building 5, Business Bay, Pune, Maharashtra - 411006',
@@ -103,10 +125,9 @@ async function runTests() {
     // Edit invoice
     const editInvRes = await fetch(`${BASE_URL}/api/invoices`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: userHeaders,
       body: JSON.stringify({
         id: createdInvId,
-        userId: 'u1',
         discount: 2000,
       })
     })
@@ -118,7 +139,7 @@ async function runTests() {
     // TEST 5: Single Invoice View & Details
     // ----------------------------------------------------
     console.log('\n📌 Testing 5: Single Invoice View (/api/invoices/:id)')
-    const getInvRes = await fetch(`${BASE_URL}/api/invoices/${createdInvId}`)
+    const getInvRes = await fetch(`${BASE_URL}/api/invoices/${createdInvId}`, { headers: userHeaders })
     assert(getInvRes.status === 200, 'GET /api/invoices/:id returns 200 OK')
     const getInvData = await getInvRes.json()
     assert(getInvData.invoice.customerName === 'Starlight Media Pvt Ltd', 'Retrieved exact invoice details')
@@ -129,7 +150,7 @@ async function runTests() {
     console.log('\n📌 Testing 6: Manual Payment Status Transition (/api/invoices/status)')
     const statusRes = await fetch(`${BASE_URL}/api/invoices/status`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: userHeaders,
       body: JSON.stringify({ id: createdInvId, status: 'PAID' })
     })
 
@@ -143,7 +164,7 @@ async function runTests() {
     console.log('\n📌 Testing 7: Generate Invoice from Completed Wello Job (/api/invoices/from-job)')
     const fromJobRes = await fetch(`${BASE_URL}/api/invoices/from-job`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: userHeaders,
       body: JSON.stringify({
         jobId: 'p1',
         jobName: 'Enterprise Cloud Migration',
@@ -153,7 +174,6 @@ async function runTests() {
         quoteAmount: 45000,
         hoursWorked: 30,
         rate: 1500,
-        userId: 'u1'
       })
     })
 
@@ -167,7 +187,7 @@ async function runTests() {
     // TEST 8: Admin Store Addon Management & Adoption
     // ----------------------------------------------------
     console.log('\n📌 Testing 8: Admin Store Addon Management (/api/admin/store/addons)')
-    const adminGetRes = await fetch(`${BASE_URL}/api/admin/store/addons?role=admin`)
+    const adminGetRes = await fetch(`${BASE_URL}/api/admin/store/addons`, { headers: adminHeaders })
     assert(adminGetRes.status === 200, 'GET /api/admin/store/addons returns 200 OK for Admin')
 
     const adminGetData = await adminGetRes.json()
@@ -177,10 +197,8 @@ async function runTests() {
     // Create new addon via Admin API
     const adminPostRes = await fetch(`${BASE_URL}/api/admin/store/addons`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: adminHeaders,
       body: JSON.stringify({
-        role: 'admin',
-        adminEmail: 'admin@wello.com',
         action: 'CREATE',
         name: 'Advanced Client Portal',
         slug: 'advanced-client-portal',
@@ -203,9 +221,8 @@ async function runTests() {
     console.log('\n📌 Testing 9: Admin Security & Authorization Guard')
     const unauthorizedRes = await fetch(`${BASE_URL}/api/admin/store/addons`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: userHeaders, // Standard user attempting admin mutation
       body: JSON.stringify({
-        role: 'user', // Standard user attempting admin mutation
         action: 'CREATE',
         name: 'Malicious Addon'
       })
@@ -217,7 +234,7 @@ async function runTests() {
     // TEST 10: Audit Logs Verification
     // ----------------------------------------------------
     console.log('\n📌 Testing 10: Wello Audit Logs Integration (/api/admin/audit-logs)')
-    const auditRes = await fetch(`${BASE_URL}/api/admin/audit-logs?role=admin`)
+    const auditRes = await fetch(`${BASE_URL}/api/admin/audit-logs`, { headers: adminHeaders })
     assert(auditRes.status === 200, 'GET /api/admin/audit-logs returns 200 OK')
 
     const auditData = await auditRes.json()
@@ -228,7 +245,7 @@ async function runTests() {
     // TEST 11: Store & Invoicing Analytics Overview
     // ----------------------------------------------------
     console.log('\n📌 Testing 11: Aggregated Store Analytics (/api/admin/store/analytics)')
-    const analyticsRes = await fetch(`${BASE_URL}/api/admin/store/analytics?role=admin`)
+    const analyticsRes = await fetch(`${BASE_URL}/api/admin/store/analytics`, { headers: adminHeaders })
     assert(analyticsRes.status === 200, 'GET /api/admin/store/analytics returns 200 OK')
 
     const analyticsData = await analyticsRes.json()

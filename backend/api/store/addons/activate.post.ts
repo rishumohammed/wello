@@ -1,15 +1,26 @@
 // server/api/store/addons/activate.post.ts
 import { defineEventHandler, readBody, createError } from 'h3'
+import { z } from 'zod'
+import { requireUser } from '../../../utils/authGuard'
 import { activateUserAddon, getAddonById } from '../../../utils/storeEngine'
 
-export default defineEventHandler(async (event) => {
-  const body = await readBody(event)
-  const userId = body?.userId || 'u1'
-  const addonId = body?.addonId
+const activateSchema = z.object({
+  addonId: z.string().min(1, 'Addon ID is required.'),
+})
 
-  if (!addonId) {
-    throw createError({ statusCode: 400, statusMessage: 'Addon ID is required.' })
+export default defineEventHandler(async (event) => {
+  const user = await requireUser(event)
+  const body = await readBody(event)
+  const parseResult = activateSchema.safeParse(body)
+  if (!parseResult.success) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: parseResult.error.errors[0]?.message || 'Addon ID is required.',
+    })
   }
+
+  const { addonId } = parseResult.data
+  const userId = String(user.id)
 
   const addon = getAddonById(addonId)
   if (!addon) {

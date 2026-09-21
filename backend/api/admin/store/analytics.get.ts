@@ -1,15 +1,11 @@
 // server/api/admin/store/analytics.get.ts
-import { defineEventHandler, getQuery, createError } from 'h3'
+import { defineEventHandler } from 'h3'
+import { requirePermission } from '../../../utils/authGuard'
 import { getStoreAnalytics } from '../../../utils/storeEngine'
 import { getInvoiceAnalytics } from '../../../utils/invoiceStore'
 
 export default defineEventHandler(async (event) => {
-  const query = getQuery(event)
-  const role = (query?.role as string) || 'admin'
-
-  if (role !== 'admin') {
-    throw createError({ statusCode: 403, statusMessage: 'Forbidden: Admin authorization required.' })
-  }
+  await requirePermission(event, 'store.manage')
 
   const storeStats = getStoreAnalytics()
   const invoiceStats = getInvoiceAnalytics()

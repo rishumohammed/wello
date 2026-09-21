@@ -1,10 +1,13 @@
 // server/api/admin/analytics.get.ts
 import { defineEventHandler, getQuery } from 'h3'
+import { requirePermission } from '../../utils/authGuard'
 import { getFunnelMetrics, getGeographicAnalytics } from '../../utils/analyticsEngine'
 import { getCategoryIntelligenceMetrics } from '../../utils/categoryStore'
 import { getAllUsers } from '../../utils/authConfig'
 
-export default defineEventHandler((event) => {
+export default defineEventHandler(async (event) => {
+  await requirePermission(event, 'analytics.view')
+
   const query = getQuery(event)
   const range = (query?.range || '30days').toString()
 

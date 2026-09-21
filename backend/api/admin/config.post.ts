@@ -1,8 +1,11 @@
 // server/api/admin/config.post.ts
 import { defineEventHandler, readBody } from 'h3'
-import { updateResendConfig, logAuthEvent } from '../../utils/authConfig'
+import { requirePermission } from '../../utils/authGuard'
+import { updateResendConfig } from '../../utils/authConfig'
+import { recordAuditLog } from '../../utils/auditStore'
 
 export default defineEventHandler(async (event) => {
+  const admin = await requirePermission(event, 'settings.manage')
   const body = await readBody(event)
 
   const updated = updateResendConfig({
@@ -14,13 +17,6 @@ export default defineEventHandler(async (event) => {
     devMode: body?.devMode,
   })
 
-  logAuthEvent({
-    type: 'send_otp',
-    email: 'admin',
-    status: 'success',
-    details: `Admin updated Resend configuration (From: ${updated.fromName} <${updated.fromEmail}>, Expiry: ${updated.otpExpiryMinutes}m, HasKey: ${Boolean(updated.apiKey)})`,
-  })
-
   let maskedKey = ''
   if (updated.apiKey) {
     if (updated.apiKey.length > 8) {
@@ -29,6 +25,14 @@ export default defineEventHandler(async (event) => {
       maskedKey = '••••••••'
     }
   }
+
+  recordAuditLog({
+    adminEmail: admin.email,
+    action: 'SYSTEM_CONFIG_UPDATED',
+    module: 'Settings',
+    target: 'Communications & System Config',
+    newValue: `From: ${updated.fromName} <${updated.fromEmail}>, Expiry: ${updated.otpExpiryMinutes}m, HasKey: ${Boolean(updated.apiKey)}`,
+  })
 
   return {
     success: true,

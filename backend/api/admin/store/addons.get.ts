@@ -1,14 +1,10 @@
 // server/api/admin/store/addons.get.ts
-import { defineEventHandler, getQuery, createError } from 'h3'
+import { defineEventHandler } from 'h3'
+import { requirePermission } from '../../../utils/authGuard'
 import { getAvailableAddons, getStoreAnalytics } from '../../../utils/storeEngine'
 
 export default defineEventHandler(async (event) => {
-  const query = getQuery(event)
-  const role = (query?.role as string) || 'admin'
-
-  if (role !== 'admin') {
-    throw createError({ statusCode: 403, statusMessage: 'Forbidden: Admin access required.' })
-  }
+  await requirePermission(event, 'store.manage')
 
   const addons = getAvailableAddons(true) // include drafts & archived
   const analytics = getStoreAnalytics()
