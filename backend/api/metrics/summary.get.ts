@@ -183,21 +183,42 @@ export default defineEventHandler(async (event) => {
   const summary90d = computeUnifiedMetricsSummary(sessions, payments, expenses, projects, overheads, incomeSources, { range: '90d', timezone, baseCurrency, targetHourly, headlinePreference, includeOverhead })
   const summaryYtd = computeUnifiedMetricsSummary(sessions, payments, expenses, projects, overheads, incomeSources, { range: 'ytd', timezone, baseCurrency, targetHourly, headlinePreference, includeOverhead })
 
+  const { shouldMaskFinancials } = await import('../../utils/authGuard')
+  const isMasked = shouldMaskFinancials(user)
+
+  function sanitizeSummary(s: any) {
+    if (!isMasked) return s
+    return {
+      ...s,
+      isFinancialsMasked: true,
+      effectiveHourlyRate: 0,
+      targetHourlyRate: 0,
+      rateVariance: 0,
+      varianceStatus: 'MASKED',
+      collectedRevenue: 0,
+      earnedRevenue: 0,
+      uncollectedRevenue: 0,
+      overheadDeductions: 0,
+      directExpenses: 0,
+    }
+  }
+
   return sendSuccess(event, {
-    summary,
-    today: todaySummary,
-    salariedCommuteAnalysis: summary.salariedCommuteAnalysis,
-    multiEmployerComparison: summary.multiEmployerComparison,
+    isFinancialsMasked: isMasked,
+    summary: sanitizeSummary(summary),
+    today: sanitizeSummary(todaySummary),
+    salariedCommuteAnalysis: isMasked ? null : summary.salariedCommuteAnalysis,
+    multiEmployerComparison: isMasked ? null : summary.multiEmployerComparison,
     rolling: {
-      '7d': summary7d,
-      '30d': summary30d,
-      '90d': summary90d,
-      'ytd': summaryYtd,
+      '7d': sanitizeSummary(summary7d),
+      '30d': sanitizeSummary(summary30d),
+      '90d': sanitizeSummary(summary90d),
+      'ytd': sanitizeSummary(summaryYtd),
     },
     meta: {
       timezone,
       baseCurrency,
-      targetHourly,
+      targetHourly: isMasked ? 0 : targetHourly,
       headlinePreference,
       includeOverhead,
     }

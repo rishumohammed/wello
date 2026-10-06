@@ -1,6 +1,6 @@
 // server/api/admin/users/impersonate.post.ts
 import { defineEventHandler, readBody, createError, getRequestHeader } from 'h3'
-import { requirePermission, extractClientIp } from '../../../utils/authGuard'
+import { requirePermission, requireStepUpOtp, extractClientIp } from '../../../utils/authGuard'
 import { getDb } from '../../../utils/db'
 import { createImpersonationSession } from '../../../utils/authService'
 import { recordAuditLog } from '../../../utils/auditStore'
@@ -8,6 +8,8 @@ import { recordAuditLog } from '../../../utils/auditStore'
 export default defineEventHandler(async (event) => {
   // 1. Enforce users.impersonate permission (SUPER_ADMIN & SUPPORT only)
   const admin = await requirePermission(event, 'users.impersonate')
+  await requireStepUpOtp(event, 'impersonation_start')
+
   const body = await readBody(event)
 
   const targetUserId = body?.userId ? Number(body.userId) : null
@@ -42,15 +44,23 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Security Policy Violation: Cannot impersonate administrative accounts.' })
   }
 
-  // 2. Create time-boxed, read-only session (15 minutes max)
+  // 2. Check if financial view is requested and authorized
+  const unmaskFinancials = Boolean(body?.unmaskFinancials)
+  const financialReason = (body?.financialReason || body?.reason || '').trim()
+  const hasFinancialPerm = admin.adminPermissions?.includes('users.financial_view') || admin.adminRole === 'SUPER_ADMIN'
+  const allowFinancialView = Boolean(unmaskFinancials && hasFinancialPerm && financialReason.length >= 10)
+
+  // 3. Create time-boxed, read-only session in dedicated impersonation_sessions table
   const { token, expiresAt } = await createImpersonationSession(
     targetUser.id,
+    admin.id,
     admin.email,
     reason,
+    allowFinancialView,
     15
   )
 
-  // 3. Record tamper-evident audit log
+  // 4. Record tamper-evident audit log
   await recordAuditLog({
     adminEmail: admin.email,
     actorId: admin.id,
@@ -58,10 +68,10 @@ export default defineEventHandler(async (event) => {
     module: 'Users',
     permissionUsed: 'users.impersonate',
     target: `${targetUser.email} (ID: ${targetUser.id})`,
-    reason,
+    reason: allowFinancialView ? `${reason} | Financial Unmasked: ${financialReason}` : reason,
     ipAddress: extractClientIp(event),
     userAgent: getRequestHeader(event, 'user-agent') || 'Admin UI',
-    newValue: `Started 15-minute read-only support impersonation session. Reason: "${reason}"`,
+    newValue: `Started 15-minute read-only support impersonation session. Financials Unmasked: ${allowFinancialView}`,
   })
 
   return {

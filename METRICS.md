@@ -4,28 +4,34 @@ This document details the exact mathematical formulations, operational constrain
 
 ---
 
-## 1. Dual Hourly Rate System
+## 1. Dual Headline Rate System
 
-Wello computes two distinct, complementary rate figures for every user:
+Wello computes two distinct, user-selectable headline rate figures:
 
-### A. Target Hourly Rate ($R_{\text{target}}$)
-The planned baseline hourly rate configured by the user in their profile settings.
-$$\text{Target Rate} = R_{\text{target}}$$
+### A. Client-Work Hourly Rate ($R_{\text{client\_work}}$)
+Measures the realized yield strictly on client commitments. It counts paid billable hours plus unbillable client friction hours (scope creep, revisions, meetings), but **excludes intentional unpaid value creation** (learning, portfolio projects, open-source):
 
-### B. Effective All-In Hourly Rate ($R_{\text{effective}}$)
-The true realized yield of a professional's time, accounting for all billable hours, non-billable overhead hours, non-project income, direct project expenses, and operational overhead deductions.
+$$R_{\text{client\_work}} = \frac{\text{Net Realized Revenue}}{H_{\text{paid}} + H_{\text{unpaid\_client}}} = \frac{Y_{\text{collected}} + Y_{\text{other}} - E_{\text{direct}} - E_{\text{overhead}}}{H_{\text{paid}} + H_{\text{unpaid\_client}}}$$
 
-$$R_{\text{effective}} = \frac{\text{Net Realized Revenue}}{\text{Total Worked Hours}} = \frac{Y_{\text{collected}} + Y_{\text{other}} - E_{\text{direct}} - E_{\text{overhead}}}{H_{\text{billable}} + H_{\text{unbillable}}}$$
+### B. All-In True Hourly Rate ($R_{\text{all\_in}}$)
+The holistic yield of a professional's total working time, factoring all paid hours, client friction hours, **and** intentional unpaid hours:
+
+$$R_{\text{all\_in}} = \frac{\text{Net Realized Revenue}}{H_{\text{total\_all}}} = \frac{Y_{\text{collected}} + Y_{\text{other}} - E_{\text{direct}} - E_{\text{overhead}}}{H_{\text{paid}} + H_{\text{unpaid\_client}} + H_{\text{intentional\_unpaid}}}$$
+
+### C. Target Hourly Rate ($R_{\text{target}}$)
+The planned baseline hourly rate configured by the user in profile settings. Users select whether $R_{\text{client\_work}}$ or $R_{\text{all\_in}}$ is displayed as their headline metric on dashboard cards.
 
 Where:
-- $Y_{\text{collected}}$: Total revenue actually received/collected in cash from client payments.
-- $Y_{\text{other}}$: Net income received from non-project income streams (e.g. royalties, retainers, teaching).
-- $E_{\text{direct}}$: Direct expenses incurred specifically on client projects (e.g. domain fees, subcontracts).
-- $E_{\text{overhead}}$: Prorated recurring operational overhead expenses (e.g. software subscriptions, hardware depreciation).
-- $H_{\text{billable}}$: Total hours logged on billable client milestones.
-- $H_{\text{unbillable}}$: Total non-billable hours logged (proposals, administrative, revisions, client calls).
+- $Y_{\text{collected}}$: Total revenue actually received in cash from client payments (NET of taxes).
+- $Y_{\text{other}}$: Non-project income (retainers, royalties, advisory/salaried streams), net of tax, dated by pay date, converted at the transaction-date exchange rate, with credit notes and refunds subtracted.
+- $E_{\text{direct}}$: Direct expenses incurred specifically on client projects.
+- $E_{\text{overhead}}$: Operational overhead deductions (prorated software subscriptions, equipment).
+- $H_{\text{paid}}$: Total hours logged on billable client sessions.
+- $H_{\text{unpaid\_client}}$: Client friction time (scope creep, revisions beyond scope, administrative billing, delays).
+- $H_{\text{intentional\_unpaid}}$: Intentional value creation time (learning, portfolio building, pro-bono, strategic).
 
 ---
+
 
 ## 2. Rate Variance & Status Classification
 

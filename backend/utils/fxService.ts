@@ -1,14 +1,31 @@
 // backend/utils/fxService.ts
-// Foreign Exchange (FX) Rate Engine, Triangular Conversion & Pluggable Providers
+// Robust Multi-Provider Foreign Exchange (FX) Engine, Fixed Pegs, and Precision Triangulation
 
 import { getDb } from './db'
-import { roundToCurrencyDecimals, getCurrencyDecimals } from './currencyUtils'
+import { roundToCurrencyDecimals } from './currencyUtils'
 
-export interface FxRateRecord {
-  baseCurrency: string
-  quoteCurrency: string
+export class RateUnavailableError extends Error {
+  public code: string
+  public fromCurrency: string
+  public toCurrency: string
+
+  constructor(fromCurrency: string, toCurrency: string, message?: string) {
+    super(message || `Exchange rate unavailable to convert ${fromCurrency} to ${toCurrency}. Manual rate required.`)
+    this.name = 'RateUnavailableError'
+    this.code = 'RATE_UNAVAILABLE'
+    this.fromCurrency = fromCurrency
+    this.toCurrency = toCurrency
+  }
+}
+
+export type FxRateType = 'live' | 'pegged' | 'stale' | 'manual'
+
+export interface FxRateDetail {
   rate: number
-  date: string
+  rateType: FxRateType
+  rateAgeDays: number
+  isStale: boolean
+  source: string
 }
 
 export interface IFxRateProvider {
@@ -16,7 +33,37 @@ export interface IFxRateProvider {
   fetchRates(baseCurrency: string, targetCurrencies?: string[], dateStr?: string): Promise<Record<string, number>>
 }
 
-// 1. Free European Central Bank Provider (Frankfurter API - no API key required)
+// 1. Primary Wide-Coverage Provider (Covers 160+ ISO currencies including AED, SAR, QAR, KWD, OMR, BHD, JOD, INR, etc.)
+export class WideCoverageProvider implements IFxRateProvider {
+  name = 'WideCoverageProvider'
+
+  async fetchRates(baseCurrency: string = 'USD', targetCurrencies?: string[], dateStr?: string): Promise<Record<string, number>> {
+    const base = baseCurrency.toUpperCase().trim()
+    const customUrl = process.env.FX_PROVIDER_URL
+    const url = customUrl ? customUrl.replace('{base}', base) : `https://open.er-api.com/v6/latest/${base}`
+
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(3500) })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      if (data && data.rates && typeof data.rates === 'object') {
+        const rates: Record<string, number> = {}
+        for (const [k, v] of Object.entries(data.rates)) {
+          if (typeof v === 'number' && v > 0) {
+            rates[k.toUpperCase()] = v
+          }
+        }
+        return rates
+      }
+      return {}
+    } catch (err: any) {
+      // Quietly allow chain to fallback to ECB / DB / Pegs
+      return {}
+    }
+  }
+}
+
+// 2. European Central Bank Provider (Frankfurter API)
 export class FrankfurterProvider implements IFxRateProvider {
   name = 'Frankfurter (ECB)'
 
@@ -27,18 +74,17 @@ export class FrankfurterProvider implements IFxRateProvider {
     const url = `https://api.frankfurter.app/${endpointDate}?from=${base}${symbols}`
 
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(4000) })
+      const res = await fetch(url, { signal: AbortSignal.timeout(3500) })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       return data.rates || {}
     } catch (err: any) {
-      console.warn(`[FX] FrankfurterProvider fetch failed: ${err.message}`)
       return {}
     }
   }
 }
 
-// 2. Database Fallback Provider (Reads from MySQL fx_rates table)
+// 3. Database Cache Provider
 export class DatabaseFallbackProvider implements IFxRateProvider {
   name = 'DatabaseFallback'
 
@@ -60,143 +106,243 @@ export class DatabaseFallbackProvider implements IFxRateProvider {
       const rows = await query
       const rates: Record<string, number> = {}
       for (const row of rows) {
-        if (!rates[row.quote_currency]) {
+        if (!rates[row.quote_currency] && Number(row.rate) > 0) {
           rates[row.quote_currency] = Number(row.rate)
         }
       }
       return rates
     } catch (err: any) {
-      console.warn(`[FX] DatabaseFallbackProvider failed: ${err.message}`)
       return {}
     }
   }
 }
 
-// Default seeded fallback rates against USD (used if network offline and DB table empty)
-const DEFAULT_USD_FALLBACK_RATES: Record<string, number> = {
-  USD: 1.0,
-  EUR: 0.92,
-  GBP: 0.79,
-  AED: 3.6725,
-  INR: 83.50,
-  CAD: 1.36,
-  AUD: 1.52,
-  JPY: 155.0,
-  CHF: 0.91,
-  SGD: 1.35,
-  HKD: 7.82,
-  NZD: 1.64,
-  SEK: 10.60,
-  NOK: 10.80,
-  DKK: 6.85,
-  PLN: 3.95,
-  BRL: 5.40,
-  MXN: 18.20,
-  ZAR: 18.50,
-  SAR: 3.75,
-  QAR: 3.64,
-  KWD: 0.307,
-  BHD: 0.376,
-  OMR: 0.385,
-  ILS: 3.70,
-  TRY: 32.50,
-  THB: 36.80,
-  MYR: 4.70,
-  IDR: 16200.0,
-  PHP: 58.0,
-  VND: 25400.0,
-  KRW: 1370.0,
-  CNY: 7.23,
-}
-
-let activeProvider: IFxRateProvider = new FrankfurterProvider()
+// Active provider instance
+let primaryProvider: IFxRateProvider = new WideCoverageProvider()
+let secondaryProvider: IFxRateProvider = new FrankfurterProvider()
 
 export function setFxProvider(provider: IFxRateProvider) {
-  activeProvider = provider
+  primaryProvider = provider
 }
 
 /**
- * Retrieves the exchange rate to convert 1 unit of `fromCurrency` to `toCurrency`.
- * Rate meaning: `Amount in toCurrency = Amount in fromCurrency * Rate`
+ * Checks the fixed_peg_rates table for official currency pegs (e.g., AED = 3.6725 USD).
  */
-export async function getFxRate(
+export async function getFixedPegRate(currencyCode: string): Promise<{ pegCurrency: string; pegRate: number; source: string; effectiveDate: string } | null> {
+  const code = currencyCode.toUpperCase().trim()
+  try {
+    const db = getDb()
+    const peg = await db('fixed_peg_rates').where({ currency: code }).first()
+    if (peg && Number(peg.peg_rate) > 0) {
+      return {
+        pegCurrency: peg.peg_currency || 'USD',
+        pegRate: Number(peg.peg_rate),
+        source: peg.source,
+        effectiveDate: peg.effective_date ? String(peg.effective_date).slice(0, 10) : '1997-01-01',
+      }
+    }
+  } catch (err) {}
+  return null
+}
+
+/**
+ * Resolves the exchange rate detail to convert 1 unit of `fromCurrency` to `toCurrency`.
+ * Follows the strict provider chain:
+ * Manual -> Live Primary -> Live ECB -> DB Cache (with age) -> Fixed Pegs -> RateUnavailableError.
+ * 
+ * NEVER falls back silently to 1.0 or 0.0.
+ */
+export async function getFxRateDetail(
   fromCurrency: string = 'USD',
   toCurrency: string = 'USD',
-  dateStr?: string
-): Promise<number> {
+  dateStr?: string,
+  manualRate?: number | null
+): Promise<FxRateDetail> {
   const from = fromCurrency.toUpperCase().trim()
   const to = toCurrency.toUpperCase().trim()
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const targetDate = dateStr ? dateStr.slice(0, 10) : todayStr
 
-  if (from === to) return 1.0
+  // 1. Identity pair
+  if (from === to) {
+    return {
+      rate: 1.0,
+      rateType: 'live',
+      rateAgeDays: 0,
+      isStale: false,
+      source: 'identity',
+    }
+  }
+
+  // 2. Explicit manual rate
+  if (manualRate && Number(manualRate) > 0) {
+    return {
+      rate: Number(manualRate),
+      rateType: 'manual',
+      rateAgeDays: 0,
+      isStale: false,
+      source: 'manual_override',
+    }
+  }
 
   const db = getDb()
-  const targetDate = dateStr ? dateStr.slice(0, 10) : new Date().toISOString().slice(0, 10)
 
-  // 1. Direct pair in DB: from -> to
-  const direct = await db('fx_rates')
+  // 3. Check direct pair in DB fx_rates
+  const directDb = await db('fx_rates')
     .where({ base_currency: from, quote_currency: to })
     .where('rate_date', '<=', targetDate)
     .orderBy('rate_date', 'desc')
     .first()
 
-  if (direct && Number(direct.rate) > 0) {
-    return Number(direct.rate)
+  if (directDb && Number(directDb.rate) > 0) {
+    const rateDate = new Date(directDb.rate_date)
+    const ageDays = Math.max(0, Math.floor((new Date(targetDate).getTime() - rateDate.getTime()) / 86400000))
+    const isStale = ageDays > 2
+    return {
+      rate: Number(directDb.rate),
+      rateType: isStale ? 'stale' : 'live',
+      rateAgeDays: ageDays,
+      isStale,
+      source: 'db_cache',
+    }
   }
 
-  // 2. Inverse pair in DB: to -> from
-  const inverse = await db('fx_rates')
-    .where({ base_currency: to, quote_currency: from })
-    .where('rate_date', '<=', targetDate)
-    .orderBy('rate_date', 'desc')
-    .first()
+  // 4. Try Live Primary Provider
+  try {
+    const liveRates = await primaryProvider.fetchRates(from, [to], targetDate)
+    if (liveRates[to] && Number(liveRates[to]) > 0) {
+      const fetchedRate = Number(liveRates[to])
+      // Cache rate to DB for future offline resilience
+      await db('fx_rates')
+        .insert({
+          rate_date: targetDate,
+          base_currency: from,
+          quote_currency: to,
+          rate: fetchedRate,
+          created_at: new Date(),
+        })
+        .onConflict(['rate_date', 'base_currency', 'quote_currency'])
+        .ignore()
 
-  if (inverse && Number(inverse.rate) > 0) {
-    return 1.0 / Number(inverse.rate)
-  }
+      return {
+        rate: fetchedRate,
+        rateType: 'live',
+        rateAgeDays: 0,
+        isStale: false,
+        source: primaryProvider.name,
+      }
+    }
+  } catch (e) {}
 
-  // 3. Triangular cross-rate via USD anchor in DB
-  const fromUsd = from === 'USD' ? { rate: 1.0 } : await db('fx_rates')
+  // 5. Try Live Secondary Provider (ECB)
+  try {
+    const ecbRates = await secondaryProvider.fetchRates(from, [to], targetDate)
+    if (ecbRates[to] && Number(ecbRates[to]) > 0) {
+      const fetchedRate = Number(ecbRates[to])
+      await db('fx_rates')
+        .insert({
+          rate_date: targetDate,
+          base_currency: from,
+          quote_currency: to,
+          rate: fetchedRate,
+          created_at: new Date(),
+        })
+        .onConflict(['rate_date', 'base_currency', 'quote_currency'])
+        .ignore()
+
+      return {
+        rate: fetchedRate,
+        rateType: 'live',
+        rateAgeDays: 0,
+        isStale: false,
+        source: secondaryProvider.name,
+      }
+    }
+  } catch (e) {}
+
+  // 6. Triangular Cross-Rate via USD in DB fx_rates
+  const fromUsd = from === 'USD' ? { rate: 1.0, rate_date: targetDate } : await db('fx_rates')
     .where({ base_currency: 'USD', quote_currency: from })
     .where('rate_date', '<=', targetDate)
     .orderBy('rate_date', 'desc')
     .first()
 
-  const toUsd = to === 'USD' ? { rate: 1.0 } : await db('fx_rates')
+  const toUsd = to === 'USD' ? { rate: 1.0, rate_date: targetDate } : await db('fx_rates')
     .where({ base_currency: 'USD', quote_currency: to })
     .where('rate_date', '<=', targetDate)
     .orderBy('rate_date', 'desc')
     .first()
 
   if (fromUsd && toUsd && Number(fromUsd.rate) > 0 && Number(toUsd.rate) > 0) {
-    // 1 USD = fromUsd.rate FROM, 1 USD = toUsd.rate TO => 1 FROM = (toUsd.rate / fromUsd.rate) TO
-    return Number(toUsd.rate) / Number(fromUsd.rate)
+    const crossRate = Number(toUsd.rate) / Number(fromUsd.rate)
+    const oldestDate = new Date(Math.min(new Date(fromUsd.rate_date).getTime(), new Date(toUsd.rate_date).getTime()))
+    const ageDays = Math.max(0, Math.floor((new Date(targetDate).getTime() - oldestDate.getTime()) / 86400000))
+    const isStale = ageDays > 2
+    return {
+      rate: crossRate,
+      rateType: isStale ? 'stale' : 'live',
+      rateAgeDays: ageDays,
+      isStale,
+      source: 'usd_triangular_db',
+    }
   }
 
-  // 4. Try live provider
-  try {
-    const liveRates = await activeProvider.fetchRates(from, [to], targetDate)
-    if (liveRates[to] && Number(liveRates[to]) > 0) {
-      const fetchedRate = Number(liveRates[to])
-      // Persist to DB for future offline/cached requests
-      await db('fx_rates').insert({
-        rate_date: targetDate,
-        base_currency: from,
-        quote_currency: to,
-        rate: fetchedRate,
-        created_at: new Date(),
-      }).onConflict(['rate_date', 'base_currency', 'quote_currency']).ignore()
-      return fetchedRate
-    }
-  } catch (e) {}
+  // 7. Fixed-Peg Rates (Official central bank peg table)
+  const fromPeg = from === 'USD' ? { pegRate: 1.0, source: 'USD anchor' } : await getFixedPegRate(from)
+  const toPeg = to === 'USD' ? { pegRate: 1.0, source: 'USD anchor' } : await getFixedPegRate(to)
 
-  // 5. Fallback hard-coded anchor rates
-  const fallbackFrom = DEFAULT_USD_FALLBACK_RATES[from] || 1.0
-  const fallbackTo = DEFAULT_USD_FALLBACK_RATES[to] || 1.0
-  return fallbackTo / fallbackFrom
+  if (fromPeg && toPeg && fromPeg.pegRate > 0 && toPeg.pegRate > 0) {
+    const pegRate = toPeg.pegRate / fromPeg.pegRate
+    return {
+      rate: pegRate,
+      rateType: 'pegged',
+      rateAgeDays: 0,
+      isStale: false,
+      source: `${fromPeg.source || from} / ${toPeg.source || to}`,
+    }
+  }
+
+  // Peg to a floating currency via USD anchor
+  if (fromPeg && toUsd && Number(toUsd.rate) > 0) {
+    return {
+      rate: Number(toUsd.rate) / fromPeg.pegRate,
+      rateType: 'pegged',
+      rateAgeDays: 0,
+      isStale: false,
+      source: `${fromPeg.source} + USD cache`,
+    }
+  }
+
+  if (toPeg && fromUsd && Number(fromUsd.rate) > 0) {
+    return {
+      rate: toPeg.pegRate / Number(fromUsd.rate),
+      rateType: 'pegged',
+      rateAgeDays: 0,
+      isStale: false,
+      source: `${toPeg.source} + USD cache`,
+    }
+  }
+
+  // 8. NO RATE FOUND: Throw explicit RateUnavailableError (Never silent 1.0 or 0.0)
+  throw new RateUnavailableError(from, to)
+}
+
+/**
+ * Retrieves numeric rate or throws RateUnavailableError.
+ */
+export async function getFxRate(
+  fromCurrency: string = 'USD',
+  toCurrency: string = 'USD',
+  dateStr?: string,
+  manualRate?: number | null
+): Promise<number> {
+  const detail = await getFxRateDetail(fromCurrency, toCurrency, dateStr, manualRate)
+  return detail.rate
 }
 
 /**
  * Converts any transaction amount from its source currency to the user's base currency.
+ * Returns convertedAmount and full provenance metadata (rateType, rateAgeDays, isStale, source).
  */
 export async function convertToBase(
   amount: number,
@@ -204,7 +350,15 @@ export async function convertToBase(
   baseCurrency: string = 'USD',
   dateStr?: string,
   manualFxRate?: number | null
-): Promise<{ convertedAmount: number; rateUsed: number }> {
+): Promise<{
+  convertedAmount: number
+  rateUsed: number
+  rateType: FxRateType
+  rateAgeDays: number
+  isStale: boolean
+  source: string
+  marker?: string | null
+}> {
   const from = fromCurrency.toUpperCase().trim()
   const base = baseCurrency.toUpperCase().trim()
   const numAmount = Number(amount) || 0
@@ -213,19 +367,94 @@ export async function convertToBase(
     return {
       convertedAmount: roundToCurrencyDecimals(numAmount, base),
       rateUsed: 1.0,
+      rateType: 'live',
+      rateAgeDays: 0,
+      isStale: false,
+      source: 'identity',
+      marker: null,
     }
   }
 
-  let rate = 1.0
-  if (manualFxRate && Number(manualFxRate) > 0) {
-    rate = Number(manualFxRate)
-  } else {
-    rate = await getFxRate(from, base, dateStr)
+  const detail = await getFxRateDetail(from, base, dateStr, manualFxRate)
+  const converted = numAmount * detail.rate
+
+  let marker: string | null = null
+  if (detail.rateType === 'pegged') {
+    marker = 'Pegged rate'
+  } else if (detail.rateType === 'stale' || detail.rateAgeDays > 1) {
+    marker = `Rate is ${detail.rateAgeDays} days old`
+  } else if (detail.rateType === 'manual') {
+    marker = 'Manual rate'
   }
 
-  const converted = numAmount * rate
   return {
     convertedAmount: roundToCurrencyDecimals(converted, base),
-    rateUsed: rate,
+    rateUsed: detail.rate,
+    rateType: detail.rateType,
+    rateAgeDays: detail.rateAgeDays,
+    isStale: detail.isStale,
+    source: detail.source,
+    marker,
   }
+}
+
+/**
+ * Synchronizes daily FX rates across major ISO currencies and fixed pegs.
+ */
+export async function syncDailyFxRates(targetDateStr?: string): Promise<{ executed: number; skipped: number; errors: string[] }> {
+  const db = getDb()
+  const targetDate = targetDateStr || new Date().toISOString().slice(0, 10)
+  const errors: string[] = []
+  let executed = 0
+
+  const TARGET_CURRENCIES = [
+    'EUR', 'GBP', 'AED', 'SAR', 'QAR', 'KWD', 'BHD', 'OMR', 'JOD',
+    'INR', 'CAD', 'AUD', 'JPY', 'CHF', 'SGD', 'HKD', 'NZD', 'SEK',
+    'NOK', 'DKK', 'PLN', 'BRL', 'MXN', 'ZAR', 'ILS', 'TRY', 'THB',
+    'MYR', 'IDR', 'PHP', 'VND', 'KRW', 'CNY'
+  ]
+
+  try {
+    const liveRates = await primaryProvider.fetchRates('USD', TARGET_CURRENCIES, targetDate).catch(() => ({} as Record<string, number>))
+
+    for (const quote of TARGET_CURRENCIES) {
+      let rate = liveRates[quote]
+
+      if (!rate || Number(rate) <= 0) {
+        // Try Pegs
+        const peg = await getFixedPegRate(quote)
+        if (peg && peg.pegRate > 0) {
+          rate = peg.pegRate
+        } else {
+          // Last known in DB
+          const lastKnown = await db('fx_rates')
+            .where({ base_currency: 'USD', quote_currency: quote })
+            .orderBy('rate_date', 'desc')
+            .first()
+          if (lastKnown && Number(lastKnown.rate) > 0) {
+            rate = Number(lastKnown.rate)
+          }
+        }
+      }
+
+      if (rate && Number(rate) > 0) {
+        await db('fx_rates')
+          .insert({
+            rate_date: targetDate,
+            base_currency: 'USD',
+            quote_currency: quote,
+            rate: Number(rate),
+            created_at: new Date(),
+          })
+          .onConflict(['rate_date', 'base_currency', 'quote_currency'])
+          .merge(['rate'])
+
+        executed++
+      }
+    }
+  } catch (err: any) {
+    errors.push(err.message || String(err))
+  }
+
+  return { executed, skipped: 0, errors }
 }

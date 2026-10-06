@@ -2,7 +2,7 @@
 import { defineEventHandler } from 'h3'
 import { requireUser } from '../../utils/authGuard'
 import { getDb } from '../../utils/db'
-import { sendSuccess } from '../../utils/apiResponse'
+import { sendMaskedSuccess } from '../../utils/apiResponse'
 
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event)
@@ -74,5 +74,5 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  return sendSuccess(event, items)
+  return sendMaskedSuccess(event, user, items)
 })

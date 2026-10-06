@@ -1,6 +1,7 @@
 // backend/api/admin/analytics/export.get.ts
 import { defineEventHandler, getQuery, setHeader, createError } from 'h3'
 import { requirePermission } from '../../../utils/authGuard'
+import { requireRateLimit } from '../../../utils/rateLimiter'
 import {
   AdminAnalyticsFilter,
   convertToCsv,
@@ -20,7 +21,14 @@ import {
 } from '../../../utils/analyticsAdminService'
 
 export default defineEventHandler(async (event) => {
-  await requirePermission(event, 'analytics.view')
+  await requirePermission(event, 'analytics.export')
+
+  // Enforce 5 req / 60s rate limit on export generation
+  await requireRateLimit(event, {
+    keyPrefix: 'admin_analytics_export',
+    limit: 5,
+    windowSeconds: 60,
+  })
 
   const query = getQuery(event)
   const section = (query?.section as string) || 'overview'

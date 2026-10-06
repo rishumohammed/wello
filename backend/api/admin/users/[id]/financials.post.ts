@@ -1,12 +1,20 @@
-// server/api/admin/users/[id]/financials.get.ts
-import { defineEventHandler, getRouterParam, getQuery, getRequestHeader, createError } from 'h3'
-import { requirePermission, extractClientIp } from '../../../../utils/authGuard'
+// server/api/admin/users/[id]/financials.post.ts
+import { defineEventHandler, getRouterParam, readBody, getRequestHeader, createError } from 'h3'
+import { z } from 'zod'
+import { requirePermission, requireStepUpOtp, extractClientIp } from '../../../../utils/authGuard'
 import { getDb } from '../../../../utils/db'
 import { recordAuditLog } from '../../../../utils/auditStore'
+import { formatZodError, sendError } from '../../../../utils/apiResponse'
+
+const viewFinancialsSchema = z.object({
+  reason: z.string({ required_error: 'Business justification reason is required.' })
+    .min(10, 'Business justification reason must be at least 10 characters explaining why financial data is being inspected.'),
+})
 
 export default defineEventHandler(async (event) => {
   // 1. Require users.financial_view permission (SUPER_ADMIN only by default)
   const admin = await requirePermission(event, 'users.financial_view')
+  await requireStepUpOtp(event, 'financial_view')
   const rawId = getRouterParam(event, 'id')
   const userId = Number(rawId)
 
@@ -14,17 +22,15 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Valid user ID required.' })
   }
 
-  // 2. Enforce mandatory business justification reason
-  const query = getQuery(event)
-  const reason = ((query?.reason as string) || getRequestHeader(event, 'x-audit-reason') || '').trim()
-
-  if (!reason || reason.length < 5) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'A valid business justification reason (minimum 5 characters) is required to view personal financial records.',
-    })
+  // 2. Enforce mandatory business justification reason in POST request body (min 10 chars)
+  const body = await readBody(event).catch(() => ({}))
+  const parsed = viewFinancialsSchema.safeParse(body)
+  if (!parsed.success) {
+    const formatted = formatZodError(parsed.error)
+    return sendError(event, 400, formatted.code, formatted.message, formatted.details)
   }
 
+  const { reason } = parsed.data
   const db = getDb()
   const user = await db('users')
     .where('id', userId)

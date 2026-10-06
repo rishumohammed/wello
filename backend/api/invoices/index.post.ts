@@ -8,6 +8,7 @@ import { getDb } from '../../utils/db'
 import { sendSuccess, sendError, formatZodError } from '../../utils/apiResponse'
 import { getNextInvoiceNumber } from '../../utils/invoiceSequenceService'
 import { getFxRate } from '../../utils/fxService'
+import { roundToCurrencyDecimals } from '../../utils/currencyUtils'
 import { recordAddonUsage } from '../../utils/storeEngine'
 import { logAnalyticsEvent } from '../../utils/analyticsService'
 
@@ -93,7 +94,8 @@ export default defineEventHandler(async (event) => {
   const items = rawItems.map((it, idx) => {
     const qty = Number(it.quantity !== undefined ? it.quantity : 1)
     const price = Number(it.unitPrice !== undefined ? it.unitPrice : (it.rate !== undefined ? it.rate : 0))
-    const amt = it.amount !== undefined ? Number(it.amount) : Math.round(qty * price * 10000) / 10000
+    const amt = it.amount !== undefined ? Number(it.amount) : roundToCurrencyDecimals(qty * price, currency)
+    const taxAmt = it.taxRate ? roundToCurrencyDecimals(amt * it.taxRate / 100, currency) : 0
     return {
       description: it.description,
       quantity: qty,
@@ -101,14 +103,14 @@ export default defineEventHandler(async (event) => {
       amount: amt,
       tax_rate: it.taxRate !== undefined ? it.taxRate : null,
       tax_name: it.taxName || null,
-      tax_amount: it.taxRate ? Math.round((amt * it.taxRate / 100) * 10000) / 10000 : 0,
+      tax_amount: taxAmt,
       display_order: idx + 1,
     }
   })
 
-  const subtotal = items.reduce((sum, it) => sum + it.amount, 0)
-  const discount = Number(data.discount || data.discountAmount || (data.discountPercent ? (subtotal * data.discountPercent / 100) : 0)) || 0
-  const afterDiscount = Math.max(0, subtotal - discount)
+  const subtotal = roundToCurrencyDecimals(items.reduce((sum, it) => sum + it.amount, 0), currency)
+  const discount = roundToCurrencyDecimals(Number(data.discount || data.discountAmount || (data.discountPercent ? (subtotal * data.discountPercent / 100) : 0)) || 0, currency)
+  const afterDiscount = Math.max(0, roundToCurrencyDecimals(subtotal - discount, currency))
 
   // Calculate taxes
   let taxAmount = 0
@@ -122,7 +124,7 @@ export default defineEventHandler(async (event) => {
       let amt = 0
       if (!isRev && pct > 0) {
         amt = isInc ? afterDiscount - (afterDiscount / (1 + pct / 100)) : (afterDiscount * pct) / 100
-        amt = Math.round(amt * 10000) / 10000
+        amt = roundToCurrencyDecimals(amt, currency)
         if (!isInc) {
           taxAmount += amt
         }
@@ -142,7 +144,7 @@ export default defineEventHandler(async (event) => {
     let amt = 0
     if (!isRev && pct > 0) {
       amt = isInc ? afterDiscount - (afterDiscount / (1 + pct / 100)) : (afterDiscount * pct) / 100
-      amt = Math.round(amt * 10000) / 10000
+      amt = roundToCurrencyDecimals(amt, currency)
       if (!isInc) {
         taxAmount += amt
       }
@@ -164,7 +166,7 @@ export default defineEventHandler(async (event) => {
         const itemAmt = it.amount
         const pct = it.tax_rate || 0
         let amt = isInc ? itemAmt - (itemAmt / (1 + pct / 100)) : (itemAmt * pct) / 100
-        amt = Math.round(amt * 10000) / 10000
+        amt = roundToCurrencyDecimals(amt, currency)
         itemTaxSum += amt
         calculatedTaxes.push({
           tax_name: it.tax_name || 'Item Tax',
@@ -176,7 +178,7 @@ export default defineEventHandler(async (event) => {
       }
       if (!isInc) {
         if (discount > 0 && subtotal > 0) {
-          taxAmount = Math.round((itemTaxSum * (afterDiscount / subtotal)) * 10000) / 10000
+          taxAmount = roundToCurrencyDecimals(itemTaxSum * (afterDiscount / subtotal), currency)
         } else {
           taxAmount = itemTaxSum
         }
@@ -184,8 +186,9 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const total = data.taxMode === 'inclusive' ? afterDiscount : afterDiscount + taxAmount
-  const baseTotal = Math.round(total * fxRate * 10000) / 10000
+  taxAmount = roundToCurrencyDecimals(taxAmount, currency)
+  const total = roundToCurrencyDecimals(data.taxMode === 'inclusive' ? afterDiscount : afterDiscount + taxAmount, currency)
+  const baseTotal = roundToCurrencyDecimals(total * fxRate, baseCurrency)
   const statusLower = (data.status || 'draft').toLowerCase()
 
   // UPDATE EXISTING INVOICE

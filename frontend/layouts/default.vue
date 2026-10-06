@@ -55,6 +55,9 @@
           </NuxtLink>
         </div>
         <div class="topbar-right">
+          <!-- SaaS 90-Day Trial Countdown & Pro Status Pill -->
+          <TrialCountdownPill />
+
           <!-- Network / Offline status badge -->
           <OfflineBadge />
 
@@ -258,6 +261,9 @@
 
     <!-- Gated Addon 1-Click Activation Modal -->
     <AddonActivationModal />
+
+    <!-- Global SaaS Subscription & Paywall Checkout Modal -->
+    <SubscriptionPaywallModal />
 
     <!-- PWA Mobile Home Screen Install Banner -->
     <PwaInstallBanner />

@@ -17,6 +17,25 @@ export default defineEventHandler(async (event) => {
 
   const estimatedHours = body.estimatedHours != null ? Number(body.estimatedHours) : null
   let projectId = body.projectId ? Number(body.projectId) : null
+  const targetQuoteId = body.quoteId ? Number(body.quoteId) : null
+
+  // If quoteId is specified, verify ownership
+  if (targetQuoteId) {
+    const existingQuote = await db('project_quotes')
+      .where({ id: targetQuoteId, user_id: user.id })
+      .first()
+    if (!existingQuote) {
+      return sendError(event, 404, 'QUOTE_NOT_FOUND', 'Quote not found.')
+    }
+    if (projectId) {
+      const explicitProj = await db('projects').where({ id: projectId, user_id: user.id }).first()
+      if (!explicitProj) {
+        return sendError(event, 404, 'PROJECT_NOT_FOUND', 'Project not found.')
+      }
+    } else {
+      projectId = existingQuote.project_id
+    }
+  }
 
   // If no projectId, create a new project
   if (!projectId) {
@@ -38,7 +57,7 @@ export default defineEventHandler(async (event) => {
     })
     projectId = Number(newProjId)
   } else {
-    // Verify ownership
+    // Verify project ownership
     const existing = await db('projects').where({ id: projectId, user_id: user.id }).first()
     if (!existing) {
       return sendError(event, 404, 'PROJECT_NOT_FOUND', 'Project not found.')

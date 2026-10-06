@@ -1,8 +1,8 @@
 // server/api/admin/users/status.post.ts
 import { defineEventHandler, readBody, createError, getRequestHeader } from 'h3'
-import { requirePermission, extractClientIp } from '../../../utils/authGuard'
+import { requirePermission, requireStepUpOtp, extractClientIp } from '../../../utils/authGuard'
 import { getDb } from '../../../utils/db'
-import { revokeAllSessionsForUser, verifyAdminActionOtp, isDevAuthAllowed } from '../../../utils/authService'
+import { revokeAllSessionsForUser } from '../../../utils/authService'
 import { recordAuditLog } from '../../../utils/auditStore'
 
 export default defineEventHandler(async (event) => {
@@ -12,7 +12,6 @@ export default defineEventHandler(async (event) => {
   const email = (body?.email || '').trim().toLowerCase()
   const newStatus = body?.status
   const reason = (body?.reason || '').trim()
-  const reauthOtp = (body?.reauthOtp || '').trim()
 
   const validStatuses = ['REGISTERED', 'EMAIL_PENDING', 'VERIFICATION_PENDING', 'VERIFIED', 'ACTIVE', 'INACTIVE', 'SUSPENDED', 'BLOCKED']
 
@@ -25,25 +24,7 @@ export default defineEventHandler(async (event) => {
 
   // Step-Up Re-Authentication for account suspension/blocking
   if (['SUSPENDED', 'BLOCKED'].includes(newStatus)) {
-    const requireStrictOtp = !isDevAuthAllowed() || Boolean(body?.requireOtp)
-    if (requireStrictOtp && !reauthOtp) {
-      throw createError({
-        statusCode: 403,
-        statusMessage: 'Step-Up Re-Authentication Required: 6-digit OTP code required to suspend or block user accounts.',
-        data: { reauthRequired: true },
-      })
-    }
-
-    if (reauthOtp) {
-      const otpRes = await verifyAdminActionOtp(admin.email, reauthOtp, 'user_status')
-      if (!otpRes.valid) {
-        throw createError({
-          statusCode: 403,
-          statusMessage: otpRes.error || 'Invalid or expired re-authentication code.',
-          data: { reauthRequired: true },
-        })
-      }
-    }
+    await requireStepUpOtp(event, 'user_status')
   }
 
   const db = getDb()

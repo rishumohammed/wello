@@ -221,6 +221,31 @@ export const useWelloStore = defineStore('wello', () => {
   const showAddonModal = ref(false)
   const addonModalData = ref({ key: '', name: '', description: '', isFree: true })
 
+  // SaaS Subscription & Paywall State (90-Day Free Trial & Monthly Pro Subscription)
+  const billing = ref({
+    status: 'trialing',
+    isTrialActive: true,
+    isSubscriptionActive: false,
+    isComped: false,
+    isSoftLocked: false,
+    daysLeftInTrial: 90,
+    trialEndsAt: null,
+    plan: {
+      planId: 'plan_wello_monthly_pro',
+      baseAmount: 1.00,
+      taxRatePct: 18.0,
+      taxAmount: 0.18,
+      gatewayFeeRatePct: 2.0,
+      gatewayFeeAmount: 0.03,
+      amount: 1.21,
+      currency: 'USD',
+      interval: 'month',
+    },
+    subscription: null,
+    invoices: [],
+  })
+  const showPaywallModal = ref(false)
+
   // Trust, Privacy, Onboarding & Feedback State
   const showFeedbackModal = ref(false)
   const showOnboardingWizard = ref(false)
@@ -1658,6 +1683,11 @@ export const useWelloStore = defineStore('wello', () => {
   }
 
   function fmtHourly(amount, currencyCode = null) {
+    if (amount === null || amount === undefined) return 'Not enough data'
+    if (typeof amount === 'object') {
+      if (amount.rate === null || amount.noData) return 'Not enough data'
+      amount = amount.rate
+    }
     const code = currencyCode || user.value.baseCurrency || user.value.currency || 'USD'
     return `${formatCurrencyIntl(amount, code)}/hr`
   }
@@ -1912,7 +1942,12 @@ export const useWelloStore = defineStore('wello', () => {
   }
   function fmtDuration(mins) { return minutesToHM(mins) }
   function fmtHourly(val, currencyCode = null) {
-    const formatted = fmtCurrency(val || 0, currencyCode)
+    if (val === null || val === undefined) return 'Not enough data'
+    if (typeof val === 'object') {
+      if (val.rate === null || val.noData) return 'Not enough data'
+      val = val.rate
+    }
+    const formatted = fmtCurrency(val, currencyCode)
     return `${formatted}/hr`
   }
 
@@ -3288,9 +3323,50 @@ export const useWelloStore = defineStore('wello', () => {
     clearCache()
   }
 
+  // ── SaaS Subscription & Billing Actions ───────────────────────────────────
+
+  async function fetchBillingStatus() {
+    if (!authStore.isAuthenticated) return null
+    try {
+      const res = await apiFetch('/api/billing/status')
+      if (res?.data) {
+        billing.value = res.data
+        return res.data
+      }
+    } catch (e) {
+      console.warn('Failed to fetch billing status', e)
+    }
+    return billing.value
+  }
+
+  async function initiateSubscriptionCheckout() {
+    const res = await apiFetch('/api/billing/create-subscription', {
+      method: 'POST',
+    })
+    return res?.data || res
+  }
+
+  async function cancelSubscription() {
+    const res = await apiFetch('/api/billing/cancel-subscription', {
+      method: 'POST',
+    })
+    await fetchBillingStatus()
+    return res
+  }
+
+  async function resumeSubscription() {
+    const res = await apiFetch('/api/billing/resume-subscription', {
+      method: 'POST',
+    })
+    await fetchBillingStatus()
+    return res
+  }
+
   return {
     // State
     user,
+    billing,
+    showPaywallModal,
     clients,
     projects,
     sessions,
@@ -3303,6 +3379,25 @@ export const useWelloStore = defineStore('wello', () => {
     recurringProposals,
     taxRates,
     fxRates,
+    notifications,
+    unreadNotificationCount,
+    notificationPreferences,
+    isNotificationsLoading,
+    activeTimer,
+    timerElapsed,
+    isTimerPaused,
+    isLoading,
+    isSyncing,
+    isOffline,
+    lastSyncedAt,
+    showMigrationPrompt,
+    migrationData,
+
+    // SaaS Billing
+    fetchBillingStatus,
+    initiateSubscriptionCheckout,
+    cancelSubscription,
+    resumeSubscription,
     notifications,
     unreadNotificationCount,
     notificationPreferences,

@@ -272,26 +272,64 @@ export function computeDualRates(
 
   const clientWorkRate = hasClient
     ? roundToCurrencyDecimals(financials.collectedNetIncome / clientHours, baseCurrency)
-    : 0
+    : null
 
   const allInRate = hasAll
     ? roundToCurrencyDecimals(financials.collectedNetIncome / allHours, baseCurrency)
-    : 0
+    : null
 
   const earnedClientWorkRate = hasClient
     ? roundToCurrencyDecimals(financials.earnedNetIncome / clientHours, baseCurrency)
-    : 0
+    : null
 
   const earnedAllInRate = hasAll
     ? roundToCurrencyDecimals(financials.earnedNetIncome / allHours, baseCurrency)
-    : 0
+    : null
 
   const headlineRate = headlinePreference === 'all_in' ? allInRate : clientWorkRate
   const target = Number(targetHourlyRate) || 0
-  const isTargetMet = target > 0 && headlineRate >= target
-  const targetDeltaPct = target > 0 && hasClient
-    ? Math.round(((headlineRate - target) / target) * 100)
-    : 0
+  const isTargetMet = target > 0 && headlineRate !== null && headlineRate >= target
+
+  let targetDeltaPct = null
+  let nullReason = null
+  let statusLabel = 'Active'
+
+  const hasFinancialActivity = (financials.collectedRevenue > 0 || financials.earnedRevenue > 0 || financials.directExpenses > 0 || financials.allocatedOverhead > 0)
+
+  if (headlineRate === null) {
+    if (!hasAll && !hasClient && !hasFinancialActivity) {
+      nullReason = 'no_data'
+    } else {
+      nullReason = 'no_hours'
+    }
+    statusLabel = 'Not enough data'
+  } else if (target <= 0) {
+    targetDeltaPct = null
+    nullReason = 'no_target'
+  } else {
+    targetDeltaPct = Math.round(((headlineRate - target) / target) * 100)
+  }
+
+  const clientWorkReason = clientWorkRate === null ? (!hasClient && !hasFinancialActivity ? 'no_data' : 'no_hours') : (target <= 0 ? 'no_target' : null)
+  const allInReason = allInRate === null ? (!hasAll && !hasFinancialActivity ? 'no_data' : 'no_hours') : (target <= 0 ? 'no_target' : null)
+
+  const clientWorkRateState = {
+    rate: clientWorkRate,
+    noData: clientWorkRate === null,
+    reason: clientWorkReason,
+  }
+
+  const allInRateState = {
+    rate: allInRate,
+    noData: allInRate === null,
+    reason: allInReason,
+  }
+
+  const headlineRateState = {
+    rate: headlineRate,
+    noData: headlineRate === null,
+    reason: nullReason,
+  }
 
   return {
     clientWorkRate,
@@ -299,11 +337,91 @@ export function computeDualRates(
     earnedClientWorkRate,
     earnedAllInRate,
     headlineRate,
+    rate: headlineRate,
+    noData: headlineRate === null,
+    reason: nullReason,
     isZeroHours: !hasAll,
     hasClientHours: hasClient,
     hasAllHours: hasAll,
     isTargetMet,
     targetDeltaPct,
+    nullReason,
+    statusLabel,
+    clientWorkRateState,
+    allInRateState,
+    headlineRateState,
+  }
+}
+
+export function computeValueMetrics(
+  netIncome,
+  hours,
+  targetHourly = 0,
+  baseCurrency = 'USD'
+) {
+  if (hours <= 0) {
+    return {
+      rate: null,
+      noData: true,
+      reason: 'no_hours',
+      status: 'Not enough data',
+      targetDeltaPct: null,
+    }
+  }
+
+  const rate = roundToCurrencyDecimals(netIncome / hours, baseCurrency)
+  let targetDeltaPct = null
+  let reason = null
+
+  if (targetHourly <= 0) {
+    reason = 'no_target'
+  } else {
+    targetDeltaPct = Math.round(((rate - targetHourly) / targetHourly) * 100)
+  }
+
+  return {
+    rate,
+    noData: false,
+    reason,
+    status: 'Active',
+    targetDeltaPct,
+  }
+}
+
+export function computeAverageUserRate(userRates) {
+  let sum = 0
+  let included = 0
+  let excluded = 0
+  const excludedReasons = {}
+
+  for (const item of userRates) {
+    if (item === null || item === undefined) {
+      excluded++
+      excludedReasons['no_data'] = (excludedReasons['no_data'] || 0) + 1
+      continue
+    }
+    if (typeof item === 'number') {
+      sum += item
+      included++
+      continue
+    }
+    if (item.rate === null || item.noData === true) {
+      excluded++
+      const r = item.reason || 'no_data'
+      excludedReasons[r] = (excludedReasons[r] || 0) + 1
+    } else {
+      sum += item.rate
+      included++
+    }
+  }
+
+  const averageRate = included > 0 ? Math.round((sum / included) * 100) / 100 : null
+  return {
+    averageRate,
+    includedCount: included,
+    excludedCount: excluded,
+    totalCount: included + excluded,
+    excludedReasons,
   }
 }
 
@@ -352,15 +470,17 @@ export function computeIncomeSourceMetrics(
     const netIncome = roundToCurrencyDecimals(fin.collectedRevenue - fin.directExpenses - (includeOverhead ? allocatedOverhead : 0), baseCurrency)
     const effRate = srcHrs.totalAllHours > 0
       ? roundToCurrencyDecimals(netIncome / srcHrs.totalAllHours, baseCurrency)
-      : 0
+      : null
 
     const expAmt = Number(src.expectedAmount ?? src.expected_amount) || 0
     const expHrs = Number(src.expectedHoursPerPeriod ?? src.expected_hours_per_period) || 0
     const expHourly = (expAmt > 0 && expHrs > 0)
       ? roundToCurrencyDecimals(expAmt / expHrs, baseCurrency)
-      : 0
+      : null
 
-    const rateVariance = expHourly > 0 ? roundToCurrencyDecimals(effRate - expHourly, baseCurrency) : 0
+    const rateVariance = (effRate !== null && expHourly !== null && expHourly > 0)
+      ? roundToCurrencyDecimals(effRate - expHourly, baseCurrency)
+      : null
 
     return {
       id: src.id,

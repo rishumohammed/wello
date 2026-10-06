@@ -1,27 +1,51 @@
 // backend/api/invoices/public/[token]/pdf.get.ts
-import { defineEventHandler, getQuery, setHeader } from 'h3'
+import crypto from 'node:crypto'
+import { defineEventHandler, getQuery, setHeader, setResponseHeader } from 'h3'
 import { getDb } from '../../../../utils/db'
 import { sendError } from '../../../../utils/apiResponse'
 import { generateInvoicePdf, InvoicePdfData } from '../../../../utils/pdfGenerator'
 import { deriveInvoiceStatus } from '../../../../utils/invoiceOverdueService'
+import { requireRateLimit } from '../../../../utils/rateLimiter'
 
 export default defineEventHandler(async (event) => {
-  const token = event.context.params?.token
+  const token = (event.context.params?.token || '').trim()
   const query = getQuery(event)
   const template = (query.template === 'classic_executive' ? 'classic_executive' : 'modern_clean') as 'modern_clean' | 'classic_executive'
 
   if (!token) {
-    return sendError(event, 400, 'MISSING_TOKEN', 'Invoice public token is required.')
+    return sendError(event, 404, 'NOT_FOUND', 'Invoice not found or link has expired.')
   }
 
+  // Set strict privacy and indexing headers
+  setResponseHeader(event, 'Referrer-Policy', 'no-referrer')
+  setResponseHeader(event, 'X-Robots-Tag', 'noindex, nofollow')
+  setResponseHeader(event, 'Cache-Control', 'no-store, no-cache, must-revalidate')
+
+  await requireRateLimit(event, {
+    keyPrefix: 'public_invoice_pdf',
+    limit: 30,
+    windowSeconds: 60,
+    identifier: token,
+    customErrorMessage: 'Too many PDF requests. Please wait a moment before downloading again.',
+  })
+
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
   const db = getDb()
+  const now = new Date()
+
   const invoice = await db('invoices')
-    .where({ public_token: token })
+    .where((builder) => {
+      builder.where({ public_token_hash: tokenHash }).orWhere({ public_token: token })
+    })
     .whereNull('deleted_at')
+    .whereNull('public_token_revoked_at')
+    .where((builder) => {
+      builder.whereNull('public_token_expires_at').orWhere('public_token_expires_at', '>', now)
+    })
     .first()
 
   if (!invoice) {
-    return sendError(event, 404, 'INVOICE_NOT_FOUND', 'Invoice not found.')
+    return sendError(event, 404, 'NOT_FOUND', 'Invoice not found or link has expired.')
   }
 
   const user = await db('users').where({ id: invoice.user_id }).first()

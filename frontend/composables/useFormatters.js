@@ -14,7 +14,12 @@ export function useFormatters() {
   }
 
   function fmtHourly(rate, currencyCode = null) {
-    const formatted = fmtCurrency(rate || 0, currencyCode)
+    if (rate === null || rate === undefined) return 'Not enough data'
+    if (typeof rate === 'object') {
+      if (rate.rate === null || rate.noData) return 'Not enough data'
+      rate = rate.rate
+    }
+    const formatted = fmtCurrency(rate, currencyCode)
     return `${formatted}/hr`
   }
 

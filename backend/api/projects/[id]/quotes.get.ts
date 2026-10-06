@@ -2,7 +2,7 @@
 import { defineEventHandler, getRouterParam } from 'h3'
 import { requireUser } from '../../../utils/authGuard'
 import { getDb } from '../../../utils/authService'
-import { sendSuccess, sendError } from '../../../utils/apiResponse'
+import { sendMaskedSuccess, sendError } from '../../../utils/apiResponse'
 
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event)
@@ -28,8 +28,9 @@ export default defineEventHandler(async (event) => {
     .whereNull('deleted_at')
     .orderBy('version', 'desc')
 
-  return sendSuccess(
+  return sendMaskedSuccess(
     event,
+    user,
     quotes.map((q) => ({
       id: q.id,
       projectId: q.project_id,

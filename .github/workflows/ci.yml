@@ -1,0 +1,224 @@
+name: Wello CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - 'release/**'
+  pull_request:
+    branches:
+      - main
+      - master
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_ENV: test
+  PORT: 3001
+  DB_HOST: 127.0.0.1
+  DB_PORT: 3306
+  DB_USER: root
+  DB_PASSWORD: rootpassword
+  DB_NAME: wello_test
+  REDIS_HOST: 127.0.0.1
+  REDIS_PORT: 6379
+  REDIS_PASSWORD: redis_ci_password_2026!
+  AUTH_HMAC_SECRET: wello_ci_test_auth_hmac_secret_32chars_min_len!
+  AUDIT_HMAC_SECRET: wello_ci_test_audit_hmac_secret_32chars_min_len!
+  BACKUP_ENCRYPTION_KEY: wello_ci_backup_aes256_passphrase_2026!
+  APP_BASE_URL: http://localhost:3000
+  STORAGE_DRIVER: local
+  TRUST_PROXY: false
+
+jobs:
+  # ─── 1. Security, Vulnerability & Compliance Audit ─────────────────────────
+  security-and-compliance:
+    name: Security, License & Compliance Gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js v24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Install Root & Workspace Dependencies
+        run: npm ci
+
+      - name: Vulnerability Audit (High/Critical Failure)
+        run: npm audit --audit-level=high
+
+      - name: Open-Source License Compliance Audit
+        run: node scripts/check_licenses.mjs
+
+      - name: Global Assumptions & Timezone Boundary Linter
+        run: node scripts/check_global_assumptions.mjs
+
+  # ─── 2. Typecheck & Code Quality ───────────────────────────────────────────
+  typecheck-and-lint:
+    name: Typecheck & Static Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js v24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Backend TypeScript Check
+        run: npx tsc --noEmit --project backend/tsconfig.json
+
+      - name: Frontend Vue / Nuxt Typecheck
+        run: npx vue-tsc --noEmit --project frontend/tsconfig.json
+
+  # ─── 3. Documentation Freshness Check ──────────────────────────────────────
+  docs-check:
+    name: Generated Documentation Synchronization
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js v24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Verify Docs & Schema Generators (docs:check)
+        run: npm run docs:check
+
+  # ─── 4. Database Lifecycle & Migrations (Up -> Down -> Up) ─────────────────
+  database-lifecycle:
+    name: MySQL Database & Migration Idempotency
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: rootpassword
+          MYSQL_DATABASE: wello_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -prootpassword"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js v24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Verify Migration Up -> Down -> Up Idempotency
+        run: node scripts/verify_migrations.mjs
+
+  # ─── 5. Test Suite & Coverage Gate Enforcement (>=90%) ─────────────────────
+  unit-and-coverage:
+    name: Test Runner & 90% Code Coverage Gate
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: rootpassword
+          MYSQL_DATABASE: wello_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -prootpassword"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      redis:
+        image: redis:7.0-alpine
+        command: redis-server --requirepass redis_ci_password_2026!
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli -a redis_ci_password_2026! ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js v24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Execute Full Test Runner & Coverage Gate
+        run: node scripts/run_test_runner.mjs
+
+  # ─── 6. End-to-End Playwright Workflow Tests ───────────────────────────────
+  playwright-e2e:
+    name: Playwright End-to-End Integration
+    runs-on: ubuntu-latest
+    needs: [unit-and-coverage]
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: rootpassword
+          MYSQL_DATABASE: wello_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -prootpassword"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      redis:
+        image: redis:7.0-alpine
+        command: redis-server --requirepass redis_ci_password_2026!
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli -a redis_ci_password_2026! ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js v24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Playwright E2E Test Suite
+        run: node backend/tests/test_e2e_playwright_flows.mjs

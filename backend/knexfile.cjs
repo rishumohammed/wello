@@ -4,6 +4,8 @@
  * Environment-aware database connection and migration settings
  */
 
+const path = require('path')
+
 module.exports = {
   client: 'mysql2',
   connection: {
@@ -17,12 +19,12 @@ module.exports = {
     decimalNumbers: true,
   },
   migrations: {
-    directory: './database/migrations',
+    directory: path.join(__dirname, 'database/migrations'),
     tableName: 'knex_migrations',
     extension: 'cjs',
   },
   seeds: {
-    directory: './database/seeds',
+    directory: path.join(__dirname, 'database/seeds'),
     extension: 'cjs',
   },
   pool: {

@@ -5,7 +5,7 @@ import { getDb } from '../../../utils/db'
 import { recordAuditLog } from '../../../utils/auditStore'
 
 export default defineEventHandler(async (event) => {
-  const admin = await requirePermission(event, 'jobs.manage')
+  const admin = await requirePermission(event, 'jobs.moderate')
   const body = await readBody(event)
 
   const jobId = Number(body?.jobId)
@@ -64,7 +64,7 @@ export default defineEventHandler(async (event) => {
     actorId: admin.id,
     action: auditAction,
     module: 'Jobs',
-    permissionUsed: 'jobs.manage',
+    permissionUsed: 'jobs.moderate',
     target: `Job #${jobId}: "${job.name}"`,
     ipAddress: extractClientIp(event),
     userAgent: getRequestHeader(event, 'user-agent') || 'Admin UI',
@@ -79,3 +79,4 @@ export default defineEventHandler(async (event) => {
     action,
   }
 })
+

@@ -175,8 +175,10 @@ async function runTests() {
     const targetUserId = targetUserObj?.id || 2
 
     // Analyst attempts to access user financials -> 403 Forbidden
-    const analystFinRes = await api(`/api/admin/users/${targetUserId}/financials?reason=AnalystCheck`, {
+    const analystFinRes = await api(`/api/admin/users/${targetUserId}/financials`, {
+      method: 'POST',
       token: analystToken,
+      body: { reason: 'Business reason for growth analysis' },
     })
     assert.strictEqual(analystFinRes.status, 403, 'ANALYST gets 403 Forbidden when requesting user financials')
     testPass('ANALYST cannot view individual user financial records (403 Forbidden)')
@@ -195,15 +197,19 @@ async function runTests() {
     
     // Attempt without reason -> 400 Bad Request
     const noReasonRes = await api(`/api/admin/users/${targetUserId}/financials`, {
+      method: 'POST',
       token: superAdminToken,
+      body: {},
     })
     assert.strictEqual(noReasonRes.status, 400, 'SUPER_ADMIN without reason receives 400 Bad Request')
     testPass('Viewing financial records without business reason is blocked (400 Bad Request)')
 
     // Attempt with valid reason -> 200 OK & Audited
-    const auditReason = 'Discrepancy audit ticket #9481'
-    const validFinRes = await api(`/api/admin/users/${targetUserId}/financials?reason=${encodeURIComponent(auditReason)}`, {
+    const auditReason = 'Discrepancy audit ticket #9481 justification'
+    const validFinRes = await api(`/api/admin/users/${targetUserId}/financials`, {
+      method: 'POST',
       token: superAdminToken,
+      body: { reason: auditReason },
     })
     assert.strictEqual(validFinRes.status, 200, 'SUPER_ADMIN with reason receives 200 OK')
     assert.ok(validFinRes.body?.financials, 'Returns user financial breakdown')
@@ -217,30 +223,30 @@ async function runTests() {
     assert.strictEqual(viewLog.permissionUsed, 'users.financial_view', 'Audit log recorded users.financial_view permission')
     testPass('Financial view operation recorded in audit log with permission and justification reason')
 
-    // ─── TEST 4: Tamper-Evident Audit Chain Verification ────────────────────────
+    // ─── TEST 4: Tamper-Evident Audit Chain & Database Trigger Protection ────────
     console.log('\n--- 4. Cryptographic Tamper-Evident Hash Chain Verification ---')
     const verifyRes = await api('/api/admin/audit-logs/verify', { token: superAdminToken })
+    if (!verifyRes.body?.valid) {
+      console.log('Verification Failure Info:', JSON.stringify(verifyRes.body, null, 2))
+    }
     assert.strictEqual(verifyRes.status, 200, 'GET /api/admin/audit-logs/verify returns 200')
     assert.strictEqual(verifyRes.body?.valid, true, 'Audit chain integrity is valid')
     assert.ok(verifyRes.body?.totalEntries > 0, 'Verified multiple audit entries')
     testPass(`Audit log cryptographic chain verified intact (${verifyRes.body?.totalEntries} entries)`)
 
-    // Verify tampering detection
+    // Verify MySQL Trigger protects audit_logs from UPDATE
     const latestLog = await db('audit_logs').orderBy('id', 'desc').first()
     if (latestLog) {
-      // Artificially mutate action column
-      await db('audit_logs').where({ id: latestLog.id }).update({ action: 'TAMPERED_ACTION' })
-      
-      const tamperedVerify = await api('/api/admin/audit-logs/verify', { token: superAdminToken })
-      assert.strictEqual(tamperedVerify.body?.valid, false, 'Tampered audit row is detected by verify-chain')
-      assert.strictEqual(tamperedVerify.body?.corruptedAtId, latestLog.id, 'Identified exact corrupted record ID')
-      testPass('Tampering with an audit row is successfully detected by verify-chain')
-
-      // Restore original action
-      await db('audit_logs').where({ id: latestLog.id }).update({ action: latestLog.action })
-      const restoredVerify = await api('/api/admin/audit-logs/verify', { token: superAdminToken })
-      assert.strictEqual(restoredVerify.body?.valid, true, 'Restored audit chain returns valid: true')
-      testPass('Restored audit chain passes integrity verification')
+      let triggerBlocked = false
+      try {
+        await db('audit_logs').where({ id: latestLog.id }).update({ action: 'TAMPERED_ACTION' })
+      } catch (err) {
+        if (err.message?.includes('append-only') || err.message?.includes('Security Violation')) {
+          triggerBlocked = true
+        }
+      }
+      assert.strictEqual(triggerBlocked, true, 'Database trigger prohibits UPDATE on audit_logs')
+      testPass('Database trigger blocks UPDATE attempts on audit_logs (Security Violation: append-only)')
     }
 
     // ─── TEST 5: Support Read-Only Time-Boxed Impersonation ──────────────────────

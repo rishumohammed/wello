@@ -1,22 +1,47 @@
 // backend/api/quotes/public/[token].get.ts
-import { defineEventHandler } from 'h3'
+import crypto from 'node:crypto'
+import { defineEventHandler, setResponseHeader } from 'h3'
 import { getDb } from '../../../utils/db'
 import { sendSuccess, sendError } from '../../../utils/apiResponse'
+import { requireRateLimit } from '../../../utils/rateLimiter'
 
 export default defineEventHandler(async (event) => {
-  const token = event.context.params?.token
+  const token = (event.context.params?.token || '').trim()
   if (!token) {
-    return sendError(event, 400, 'MISSING_TOKEN', 'Public quote token is required.')
+    return sendError(event, 404, 'NOT_FOUND', 'Quote proposal not found or link has expired.')
   }
 
+  // Set privacy and anti-indexing headers
+  setResponseHeader(event, 'Referrer-Policy', 'no-referrer')
+  setResponseHeader(event, 'X-Robots-Tag', 'noindex, nofollow')
+  setResponseHeader(event, 'Cache-Control', 'no-store, no-cache, must-revalidate')
+
+  // Rate limit per token and IP
+  await requireRateLimit(event, {
+    keyPrefix: 'public_quote_view',
+    limit: 60,
+    windowSeconds: 60,
+    identifier: token,
+    customErrorMessage: 'Too many requests. Please wait a moment before refreshing the proposal.',
+  })
+
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
   const db = getDb()
+  const now = new Date()
+
   const quote = await db('project_quotes')
-    .where({ public_token: token })
+    .where((builder) => {
+      builder.where({ public_token_hash: tokenHash }).orWhere({ public_token: token })
+    })
     .whereNull('deleted_at')
+    .whereNull('public_token_revoked_at')
+    .where((builder) => {
+      builder.whereNull('public_token_expires_at').orWhere('public_token_expires_at', '>', now)
+    })
     .first()
 
   if (!quote) {
-    return sendError(event, 404, 'QUOTE_NOT_FOUND', 'Quote proposal not found or link has expired.')
+    return sendError(event, 404, 'NOT_FOUND', 'Quote proposal not found or link has expired.')
   }
 
   const project = await db('projects').where({ id: quote.project_id }).first()

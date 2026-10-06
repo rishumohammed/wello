@@ -1,10 +1,10 @@
 // backend/api/admin/feedback/index.get.ts
 import { defineEventHandler, getQuery } from 'h3'
-import { requireAdmin } from '../../../utils/authGuard'
+import { requirePermission } from '../../../utils/authGuard'
 import { getDb } from '../../../utils/authService'
 
 export default defineEventHandler(async (event) => {
-  await requireAdmin(event)
+  await requirePermission(event, 'feedback.view')
   const db = getDb()
   const query = getQuery(event)
   const status = query.status as string

@@ -1,8 +1,8 @@
 // backend/api/invoices/recurring/index.get.ts
 import { defineEventHandler } from 'h3'
-import { requireAddon } from '../../../utils/addonGuard'
+import { requireAddon } from '../../../utils/addonService'
 import { getDb } from '../../../utils/db'
-import { sendSuccess } from '../../../utils/apiResponse'
+import { sendMaskedSuccess } from '../../../utils/apiResponse'
 
 export default defineEventHandler(async (event) => {
   const user = await requireAddon(event, 'recurring-retainers')
@@ -13,7 +13,7 @@ export default defineEventHandler(async (event) => {
     .whereNull('deleted_at')
     .orderBy('next_issue_date', 'asc')
 
-  return sendSuccess(event, {
+  return sendMaskedSuccess(event, user, {
     profiles: profiles.map((p) => ({
       id: p.id,
       title: p.title,

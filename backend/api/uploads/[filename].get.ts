@@ -19,6 +19,8 @@ export default defineEventHandler(async (event) => {
     setResponseHeader(event, 'Content-Type', file.mimeType)
     setResponseHeader(event, 'Cache-Control', 'public, max-age=31536000, immutable')
     setResponseHeader(event, 'X-Content-Type-Options', 'nosniff')
+    setResponseHeader(event, 'Referrer-Policy', 'no-referrer')
+    setResponseHeader(event, 'X-Robots-Tag', 'noindex, nofollow')
 
     return file.buffer
   } catch (err: any) {

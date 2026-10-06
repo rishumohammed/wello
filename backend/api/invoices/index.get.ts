@@ -177,8 +177,28 @@ export default defineEventHandler(async (event) => {
     totalOutstanding,
   }
 
+  const { shouldMaskFinancials } = await import('../../utils/authGuard')
+  const isMasked = shouldMaskFinancials(user)
+
+  const sanitizedInvoices = filteredInvoices.map(inv => {
+    if (!isMasked) return inv
+    return {
+      ...inv,
+      isFinancialsMasked: true,
+      subtotal: 0,
+      taxAmount: 0,
+      total: 0,
+      amountPaid: 0,
+      balanceDue: 0,
+      items: (inv.items || []).map((it: any) => ({ ...it, unitPrice: 0, amount: 0 })),
+    }
+  })
+
   return sendSuccess(event, {
-    invoices: filteredInvoices,
-    analytics,
+    isFinancialsMasked: isMasked,
+    invoices: sanitizedInvoices,
+    analytics: isMasked
+      ? { ...analytics, totalBilled: 0, totalOutstanding: 0, isFinancialsMasked: true }
+      : analytics,
   })
 })

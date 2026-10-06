@@ -1,7 +1,7 @@
 // backend/api/admin/store/user-addons.post.ts
 import { defineEventHandler, readBody } from 'h3'
 import { z } from 'zod'
-import { requirePermission } from '../../../utils/authGuard'
+import { requirePermission, requireStepUpOtp, extractClientIp } from '../../../utils/authGuard'
 import { getDb } from '../../../utils/authService'
 import { sendSuccess, sendError, formatZodError } from '../../../utils/apiResponse'
 import { activateAddonForUser, deactivateAddonForUser, hasAddon } from '../../../utils/addonService'
@@ -16,6 +16,8 @@ const adminUserAddonSchema = z.object({
 
 export default defineEventHandler(async (event) => {
   const admin = await requirePermission(event, 'store.manage')
+  await requireStepUpOtp(event, 'user_addon_grant')
+
   const body = await readBody(event).catch(() => ({}))
   const parsed = adminUserAddonSchema.safeParse(body)
   if (!parsed.success) {

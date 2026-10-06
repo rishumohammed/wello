@@ -1017,6 +1017,117 @@
       </div>
     </div>
 
+    <!-- TAB: SUBSCRIPTION & BILLING -->
+    <div v-if="activeTab === 'billing'" class="settings-section">
+      <div class="card mb-6" id="settings-billing-plan-card">
+        <div class="card-header flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="metric-icon-box purple">
+              <IconReceipt :size="16" />
+            </div>
+            <div>
+              <div class="card-title text-base">Wello Pro Subscription</div>
+              <div class="card-subtitle text-xs">Manage your monthly recurring subscription, trial status, and payment mandates</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span v-if="billingState.isComped" class="badge badge-success text-xs font-bold">💎 VIP Lifetime Active</span>
+            <span v-else-if="billingState.isSubscriptionActive" class="badge badge-success text-xs font-bold">✓ Active Subscription</span>
+            <span v-else-if="billingState.isTrialActive" class="badge badge-warning text-xs font-bold">⏳ 90-Day Trial ({{ billingState.daysLeftInTrial }}d left)</span>
+            <span v-else class="badge badge-danger text-xs font-bold">⚠️ Trial Expired</span>
+          </div>
+        </div>
+
+        <div class="card-body">
+          <div class="p-5 bg-off-white rounded-16 border-subtle-box mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div class="text-xs text-tertiary uppercase fw-700 tracking-wider">Active Plan</div>
+              <div class="fw-800 text-2xl text-primary mt-1">
+                {{ billingState.plan?.currency === 'INR' ? '₹' : '$' }}{{ (billingState.plan?.baseAmount ?? (billingState.plan?.currency === 'INR' ? 89 : 1)).toFixed(2) }}
+                <span class="text-xs font-normal text-tertiary">/ month base (Total: {{ billingState.plan?.currency === 'INR' ? '₹' : '$' }}{{ (billingState.plan?.amount ?? (billingState.plan?.currency === 'INR' ? 107.12 : 1.21)).toFixed(2) }} incl. tax + gateway fee)</span>
+              </div>
+              <div class="text-xs text-secondary mt-1">
+                <span v-if="billingState.isComped">Permanent complimentary VIP access granted by administration.</span>
+                <span v-else-if="billingState.isSubscriptionActive">
+                  {{ billingState.subscription?.cancelAtPeriodEnd ? 'Subscription will cancel at the end of the billing cycle.' : 'Automatically renews monthly via secure Razorpay mandate.' }}
+                </span>
+                <span v-else-if="billingState.isTrialActive">
+                  Full unrestricted access active until {{ billingState.trialEndsAt?.slice(0, 10) || 'trial conclusion' }}.
+                </span>
+                <span v-else>
+                  Your 90-day free trial has expired. Subscribe to reactivate active time logging and invoice generation.
+                </span>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2 flex-wrap">
+              <button
+                v-if="!billingState.isSubscriptionActive && !billingState.isComped"
+                type="button"
+                class="btn btn-primary btn-sm"
+                @click="store.showPaywallModal = true"
+                id="btn-settings-upgrade"
+              >
+                <span>✨ Upgrade to Wello Pro</span>
+              </button>
+
+              <button
+                v-if="billingState.isSubscriptionActive && !billingState.subscription?.cancelAtPeriodEnd"
+                type="button"
+                class="btn btn-danger btn-sm"
+                @click="handleCancelSubscription"
+                :disabled="isBillingActionLoading"
+                id="btn-settings-cancel-sub"
+              >
+                <span>{{ isBillingActionLoading ? 'Processing...' : 'Cancel Subscription' }}</span>
+              </button>
+
+              <button
+                v-if="billingState.isSubscriptionActive && billingState.subscription?.cancelAtPeriodEnd"
+                type="button"
+                class="btn btn-secondary btn-sm"
+                @click="handleResumeSubscription"
+                :disabled="isBillingActionLoading"
+                id="btn-settings-resume-sub"
+              >
+                <span>{{ isBillingActionLoading ? 'Processing...' : 'Resume Subscription' }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Billing Invoices & Receipts History -->
+          <div class="mt-4">
+            <div class="fw-700 text-sm text-primary mb-3">Subscription Billing Receipts</div>
+            <div v-if="billingState.invoices && billingState.invoices.length > 0" class="table-container">
+              <table class="data-table text-xs">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Invoice Reference</th>
+                    <th>Payment ID</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="inv in billingState.invoices" :key="inv.id">
+                    <td>{{ inv.paidAt?.slice(0, 10) || inv.createdAt?.slice(0, 10) }}</td>
+                    <td class="font-mono text-tertiary">{{ inv.invoiceId }}</td>
+                    <td class="font-mono text-tertiary">{{ inv.paymentId }}</td>
+                    <td class="fw-700 text-primary">{{ inv.currency }} {{ inv.amount }}</td>
+                    <td><span class="badge badge-success text-2xs uppercase">Paid</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-else class="p-6 text-center text-xs text-tertiary bg-off-white rounded-12 border-subtle-box">
+              No subscription payment transactions recorded yet.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- TAB 5: SYSTEM & ABOUT -->
     <div v-if="activeTab === 'about'" class="settings-section">
       <div class="card" id="settings-app-info-card">
@@ -1139,12 +1250,52 @@ const tabs = [
   { id: 'profile', label: 'Profile & Timezone', icon: IconUser },
   { id: 'business', label: 'Business & Invoice', icon: IconReceipt },
   { id: 'work', label: 'Rate Targets & Tax Rates', icon: IconClock },
+  { id: 'billing', label: 'Subscription & Billing', icon: IconReceipt },
   { id: 'data', label: 'Data Management & CSV', icon: IconDownload },
   { id: 'privacy', label: 'Privacy & Consent', icon: IconShield },
   { id: 'notifications', label: 'Notifications & Email Digest', icon: IconBell },
   { id: 'account', label: 'Account & Security', icon: IconShield },
   { id: 'about', label: 'System Info', icon: IconPackage },
 ]
+
+// SaaS Billing State & Actions
+const billingState = computed(() => store.billing || {})
+const isBillingActionLoading = ref(false)
+
+async function handleCancelSubscription() {
+  if (!confirm('Are you sure you want to cancel your monthly subscription? You will maintain full access until the end of your current billing period.')) {
+    return
+  }
+  isBillingActionLoading.value = true
+  try {
+    const res = await store.cancelSubscription()
+    if (res?.success) {
+      toast.info('Subscription scheduled for cancellation at the end of the billing period.')
+    } else {
+      toast.error(res?.message || 'Failed to cancel subscription.')
+    }
+  } catch (err) {
+    toast.error(err?.data?.message || err?.message || 'Failed to cancel subscription.')
+  } finally {
+    isBillingActionLoading.value = false
+  }
+}
+
+async function handleResumeSubscription() {
+  isBillingActionLoading.value = true
+  try {
+    const res = await store.resumeSubscription()
+    if (res?.success) {
+      toast.success('Subscription resumed successfully! Automatic renewal restored.')
+    } else {
+      toast.error(res?.message || 'Failed to resume subscription.')
+    }
+  } catch (err) {
+    toast.error(err?.data?.message || err?.message || 'Failed to resume subscription.')
+  } finally {
+    isBillingActionLoading.value = false
+  }
+}
 
 // Personal Profile Form
 const profileForm = ref({
@@ -1624,5 +1775,6 @@ onMounted(() => {
   loadNotificationPreferences()
   loadPrivacySettings()
   webPush.checkSubscription()
+  store.fetchBillingStatus()
 })
 </script>

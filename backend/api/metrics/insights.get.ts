@@ -4,7 +4,7 @@
 import { defineEventHandler, getQuery } from 'h3'
 import { requireUser } from '../../utils/authGuard'
 import { getDb } from '../../utils/authService'
-import { sendSuccess } from '../../utils/apiResponse'
+import { sendMaskedSuccess } from '../../utils/apiResponse'
 import {
   computeIntelligenceInsights,
   SessionData,
@@ -110,7 +110,7 @@ export default defineEventHandler(async (event) => {
     baseCurrency
   )
 
-  return sendSuccess(event, {
+  return sendMaskedSuccess(event, user, {
     insights,
     meta: {
       timezone,

@@ -6,14 +6,18 @@
  */
 
 import dayjs from 'dayjs'
-import utc from 'dayjs/plugin/utc'
-import timezonePlugin from 'dayjs/plugin/timezone'
+import utc from 'dayjs/plugin/utc.js'
+import timezonePlugin from 'dayjs/plugin/timezone.js'
 import { getDb } from './db'
 import { createNotification } from './notificationsEngine'
 import { dispatchEmailWithLog, renderEmailTemplate } from './emailEngine'
 import { generateReportSummary } from './reportsEngine'
 import { roundToCurrencyDecimals } from './currencyUtils'
 import { runDataRetentionPurge } from './dataRetentionService'
+import { runAuditVerificationJob } from './auditStore'
+import { syncDailyFxRates } from './fxService'
+import { buildDailyRollup } from './analyticsRollupService'
+import { sendSystemAlert } from './alertEngine'
 
 dayjs.extend(utc)
 dayjs.extend(timezonePlugin)
@@ -22,7 +26,9 @@ const LOCK_NAME = 'wello_global_scheduler_lock'
 const LEASE_DURATION_MS = 45 * 1000 // 45-second lock lease
 
 export interface SchedulerRunResult {
+  success?: boolean
   acquiredLock: boolean
+  jobsExecuted?: number
   executedAt: string
   jobResults: Record<string, { executed: number; skipped: number; errors: string[] }>
   durationMs: number
@@ -146,7 +152,6 @@ export async function checkOverdueInvoices(): Promise<{ executed: number; skippe
         updated_at: db.fn.now(3),
       })
 
-      // Notify seller/user
       await createNotification({
         userId: inv.user_id,
         type: 'invoice_overdue',
@@ -215,7 +220,6 @@ export async function checkForgottenTimers(): Promise<{ executed: number; skippe
       const totalElapsedSec = Math.max(0, Math.floor((now.getTime() - startedMs) / 1000) - (Number(timer.total_paused_seconds) || 0))
 
       if (totalElapsedSec >= maxSeconds) {
-        // Run once per active session instance
         const jobKey = `forgotten_timer:${timer.id}:${Math.floor(totalElapsedSec / 3600)}h`
         if (await isJobAlreadyExecuted(jobKey)) {
           skipped++
@@ -289,7 +293,6 @@ export async function checkQuoteFollowups(): Promise<{ executed: number; skipped
 // ─── 4. SCHEDULED EMAIL DIGEST DISPATCHER ───────────────────────────────────
 export async function dispatchWeeklyDigests(): Promise<{ executed: number; skipped: number; errors: string[] }> {
   const db = getDb()
-  const nowUtc = dayjs.utc()
   const errors: string[] = []
   let executed = 0
   let skipped = 0
@@ -304,23 +307,20 @@ export async function dispatchWeeklyDigests(): Promise<{ executed: number; skipp
     for (const user of users) {
       const userTz = user.timezone || 'UTC'
       const userLocal = dayjs().tz(userTz)
-      const userDayOfWeek = userLocal.day() // 0 = Sun, 1 = Mon
+      const userDayOfWeek = userLocal.day()
       const targetDay = Number(user.digest_day_of_week != null ? user.digest_day_of_week : 1)
       const weekKey = `${userLocal.year()}-W${userLocal.isoWeek ? userLocal.isoWeek() : Math.ceil(userLocal.dayOfYear() / 7)}`
       const jobKey = `weekly_digest:${user.id}:${weekKey}`
 
-      // Check if already dispatched for this user this week
       if (await isJobAlreadyExecuted(jobKey)) {
         skipped++
         continue
       }
 
-      // If frequency is weekly, only run on user's configured day (or if triggered manually)
       if (user.digest_frequency === 'weekly' && userDayOfWeek !== targetDay) {
         continue
       }
 
-      // Generate Authoritative Weekly Report
       const report = await generateReportSummary({
         userId: user.id,
         range: 'weekly',
@@ -331,10 +331,8 @@ export async function dispatchWeeklyDigests(): Promise<{ executed: number; skipp
       const isTargetMet = report.rates.allInRate >= targetRate
       const targetDelta = report.rates.targetDeltaPct
       const currency = user.base_currency || 'USD'
-
       const unsubscribeUrl = `https://wello.app/api/auth/unsubscribe?token=${user.unsubscribe_token || user.id}`
 
-      // Render digest HTML
       const digestHtml = `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 580px; margin: 0 auto; padding: 28px; border: 1px solid #E5E7EB; border-radius: 12px; background: #FFFFFF;">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
@@ -347,7 +345,6 @@ export async function dispatchWeeklyDigests(): Promise<{ executed: number; skipp
 
           <p style="font-size: 15px; color: #374151; margin: 0 0 20px 0;">Hello <strong>${user.name}</strong>, here is your executive performance & true hourly value summary for the past week:</p>
 
-          <!-- Key Stats Grid -->
           <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px;">
             <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 8px; padding: 14px;">
               <div style="font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase;">All-In Real Rate</div>
@@ -361,7 +358,6 @@ export async function dispatchWeeklyDigests(): Promise<{ executed: number; skipp
             </div>
           </div>
 
-          <!-- Hours & Leakage -->
           <div style="background: #F3F4F6; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
             <div style="font-weight: 700; font-size: 13px; color: #1F2937; margin-bottom: 8px;">Time & Unpaid Leakage Overview</div>
             <div style="font-size: 13px; color: #4B5563; line-height: 1.6;">
@@ -386,7 +382,6 @@ export async function dispatchWeeklyDigests(): Promise<{ executed: number; skipp
         </div>
       `
 
-      // 1. Dispatch Email via Resend
       const emailRes = await dispatchEmailWithLog({
         to: user.email,
         subject: `Your Weekly Value Digest: ${currency} ${report.rates.allInRate}/hr (${report.rangeLabel})`,
@@ -394,7 +389,6 @@ export async function dispatchWeeklyDigests(): Promise<{ executed: number; skipp
         templateKey: 'weekly_digest',
       })
 
-      // 2. In-App Notification
       await createNotification({
         userId: user.id,
         type: 'weekly_leakage_alert',
@@ -438,7 +432,6 @@ export async function processRecurringInvoices(): Promise<{ executed: number; sk
         continue
       }
 
-      // Calculate next issue date based on interval
       const interval = prof.interval || 'monthly'
       let nextDate = dayjs(prof.next_issue_date)
       if (interval === 'weekly') nextDate = nextDate.add(1, 'week')
@@ -452,7 +445,6 @@ export async function processRecurringInvoices(): Promise<{ executed: number; sk
         updated_at: db.fn.now(3),
       })
 
-      // Create draft invoice notification
       await createNotification({
         userId: prof.user_id,
         type: 'invoice_due_soon',
@@ -463,6 +455,443 @@ export async function processRecurringInvoices(): Promise<{ executed: number; sk
       })
 
       await logJobExecution(jobKey, 'recurring_invoice_generator', prof.user_id, 'success', { profileId: prof.id, nextDate: nextDate.format('YYYY-MM-DD') })
+      executed++
+    }
+  } catch (err: any) {
+    errors.push(err?.message || String(err))
+  }
+
+  return { executed, skipped, errors }
+}
+
+// ─── 6. ANALYTICS SCHEDULED REPORTS SENDER ──────────────────────────────────
+export async function processAnalyticsScheduledReports(): Promise<{ executed: number; skipped: number; errors: string[] }> {
+  const db = getDb()
+  const errors: string[] = []
+  let executed = 0
+  let skipped = 0
+
+  try {
+    const hasTable = await db.schema.hasTable('analytics_scheduled_reports')
+    if (!hasTable) return { executed: 0, skipped: 0, errors: [] }
+
+    const now = new Date()
+    const todayStr = now.toISOString().slice(0, 10)
+    const reports = await db('analytics_scheduled_reports')
+      .where('is_active', true)
+
+    for (const report of reports) {
+      const jobKey = `analytics_scheduled_report:${report.id}:${todayStr}`
+      if (await isJobAlreadyExecuted(jobKey)) {
+        skipped++
+        continue
+      }
+
+      // Check frequency schedule
+      const lastSent = report.last_sent_at ? new Date(report.last_sent_at) : null
+      const daysSince = lastSent ? (now.getTime() - lastSent.getTime()) / (24 * 3600 * 1000) : 999
+      const frequency = (report.frequency || 'weekly').toLowerCase()
+
+      if (frequency === 'daily' && daysSince < 0.9) continue
+      if (frequency === 'weekly' && daysSince < 6.9) continue
+      if (frequency === 'monthly' && daysSince < 27.9) continue
+
+      // Dispatch report to configured recipient
+      const recipients = (report.recipients || '').split(',').map((r: string) => r.trim()).filter(Boolean)
+      for (const email of recipients) {
+        await dispatchEmailWithLog({
+          to: email,
+          subject: `Wello Analytics Digest: ${report.name}`,
+          html: `<p>Your scheduled analytics report <strong>${report.name}</strong> (${frequency}) is ready for review.</p>`,
+          templateKey: 'analytics_digest',
+        })
+      }
+
+      await db('analytics_scheduled_reports').where({ id: report.id }).update({
+        last_sent_at: now,
+        updated_at: now,
+      })
+
+      await logJobExecution(jobKey, 'analytics_scheduled_report_sender', report.admin_user_id || null, 'success', {
+        reportId: report.id,
+        recipients,
+      })
+      executed++
+    }
+  } catch (err: any) {
+    errors.push(err?.message || String(err))
+    await sendSystemAlert({
+      title: 'Scheduled Reports Dispatch Failed',
+      message: err?.message || 'Error processing analytics scheduled reports',
+      severity: 'error',
+      module: 'scheduler',
+    }).catch(() => {})
+  }
+
+  return { executed, skipped, errors }
+}
+
+// ─── 7. ANALYTICS NIGHTLY FULL ROLLUPS ──────────────────────────────────────
+export async function runAnalyticsNightlyRollups(): Promise<{ executed: number; skipped: number; errors: string[] }> {
+  const today = dayjs()
+  const todayStr = today.format('YYYY-MM-DD')
+  const jobKey = `analytics_nightly_rollups:${todayStr}`
+  const errors: string[] = []
+  let executed = 0
+
+  try {
+    if (await isJobAlreadyExecuted(jobKey)) {
+      return { executed: 0, skipped: 1, errors: [] }
+    }
+
+    // Build rollups for today and previous 3 days for historical closure
+    for (let i = 0; i <= 3; i++) {
+      const targetDateStr = today.subtract(i, 'day').format('YYYY-MM-DD')
+      await buildDailyRollup(targetDateStr)
+      executed++
+    }
+
+    await logJobExecution(jobKey, 'analytics_nightly_rollups', null, 'success', { daysComputed: executed })
+  } catch (err: any) {
+    errors.push(err?.message || String(err))
+    await sendSystemAlert({
+      title: 'Analytics Nightly Rollups Failed',
+      message: err?.message || 'Error computing daily analytics rollups',
+      severity: 'error',
+      module: 'scheduler',
+    }).catch(() => {})
+    await logJobExecution(jobKey, 'analytics_nightly_rollups', null, 'failed', { error: err?.message })
+  }
+
+  return { executed, skipped: 0, errors }
+}
+
+// ─── 8. ANALYTICS HOURLY TODAY REFRESH ──────────────────────────────────────
+export async function runAnalyticsHourlyRollups(): Promise<{ executed: number; skipped: number; errors: string[] }> {
+  const now = dayjs()
+  const hourKey = `analytics_hourly_rollups:${now.format('YYYY-MM-DD-HH')}`
+  const errors: string[] = []
+  let executed = 0
+
+  try {
+    if (await isJobAlreadyExecuted(hourKey)) {
+      return { executed: 0, skipped: 1, errors: [] }
+    }
+
+    const todayStr = now.format('YYYY-MM-DD')
+    await buildDailyRollup(todayStr)
+    executed++
+
+    await logJobExecution(hourKey, 'analytics_hourly_rollups', null, 'success', { date: todayStr })
+  } catch (err: any) {
+    errors.push(err?.message || String(err))
+    await sendSystemAlert({
+      title: 'Analytics Hourly Rollup Failed',
+      message: err?.message || 'Error refreshing today analytics rollup',
+      severity: 'warning',
+      module: 'scheduler',
+    }).catch(() => {})
+    await logJobExecution(hourKey, 'analytics_hourly_rollups', null, 'failed', { error: err?.message })
+  }
+
+  return { executed, skipped: 0, errors }
+}
+
+// ─── 9b. REQUEST METRICS 30-DAY PRUNING ─────────────────────────────────────
+export async function runRequestMetricsPruning(): Promise<{ executed: number; skipped: number; errors: string[] }> {
+  const db = getDb()
+  const cutoff = new Date(Date.now() - 30 * 86400 * 1000)
+  const errors: string[] = []
+  let executed = 0
+  try {
+    const deleted = await db('request_metrics_minute').where('minute', '<', cutoff).delete()
+    executed = Number(deleted) || 0
+  } catch (err: any) {
+    errors.push(err?.message || String(err))
+  }
+  return { executed, skipped: 0, errors }
+}
+
+// ─── 10. SCHEDULED DAILY DATABASE BACKUP ────────────────────────────────────
+export async function backupDatabaseDaily(): Promise<{ executed: number; skipped: number; errors: string[] }> {
+  const db = getDb()
+  const todayStr = dayjs().format('YYYY-MM-DD')
+  const jobKey = `daily_backup:${todayStr}`
+  const errors: string[] = []
+  let executed = 0
+  let skipped = 0
+
+  try {
+    if (await isJobAlreadyExecuted(jobKey)) {
+      return { executed: 0, skipped: 1, errors: [] }
+    }
+
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const crypto = await import('node:crypto')
+    const rootDir = path.resolve(process.cwd())
+    const backupDir = path.join(rootDir, 'backups')
+
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true })
+    }
+
+    const timestamp = dayjs().format('YYYYMMDD_HHmmss')
+    const dumpFileName = `wello_backup_${timestamp}.sql`
+    const dumpFilePath = path.join(backupDir, dumpFileName)
+
+    // Introspect and dump all tables
+    const [tables] = await db.raw('SHOW FULL TABLES WHERE Table_type = "BASE TABLE"')
+    const tableNames = (tables as any[]).map((row) => Object.values(row)[0])
+
+    const writeStream = fs.createWriteStream(dumpFilePath, { encoding: 'utf8' })
+    writeStream.write(`-- Wello Automated Daily Backup\n-- Timestamp: ${new Date().toISOString()}\n\nSET FOREIGN_KEY_CHECKS=0;\n\n`)
+
+    for (const tableName of tableNames) {
+      const [createRes] = await db.raw(`SHOW CREATE TABLE \`${tableName}\``)
+      const createSql = (createRes as any[])[0]['Create Table']
+      writeStream.write(`-- Structure for \`${tableName}\`\nDROP TABLE IF EXISTS \`${tableName}\`;\n${createSql};\n\n`)
+
+      const rows = await db(tableName).select('*')
+      if (rows.length > 0) {
+        const cols = Object.keys(rows[0]).map((k) => `\`${k}\``).join(', ')
+        const batchSize = 100
+        for (let i = 0; i < rows.length; i += batchSize) {
+          const batch = rows.slice(i, i + batchSize)
+          const valueTuples = batch.map((r) => {
+            const vals = Object.values(r).map((v) => {
+              if (v === null) return 'NULL'
+              if (typeof v === 'number') return v
+              if (typeof v === 'boolean') return v ? 1 : 0
+              if (v instanceof Date) return `'${v.toISOString().slice(0, 19).replace('T', ' ')}'`
+              if (typeof v === 'object') return `'${JSON.stringify(v).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
+              return `'${String(v).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
+            })
+            return `(${vals.join(', ')})`
+          })
+          writeStream.write(`INSERT INTO \`${tableName}\` (${cols}) VALUES \n${valueTuples.join(',\n')};\n`)
+        }
+        writeStream.write('\n')
+      }
+    }
+
+    writeStream.write('SET FOREIGN_KEY_CHECKS=1;\n')
+    await new Promise((resolve) => writeStream.end(resolve))
+
+    // Optional AES-256-GCM encryption
+    let finalPath = dumpFilePath
+    let finalName = dumpFileName
+    const encryptionKey = process.env.BACKUP_ENCRYPTION_KEY
+
+    if (encryptionKey) {
+      const rawContent = fs.readFileSync(dumpFilePath)
+      const salt = crypto.randomBytes(16)
+      const key = crypto.scryptSync(encryptionKey, salt, 32)
+      const iv = crypto.randomBytes(12)
+      const cipher = crypto.createCipheriv('aes-256-gcm', key, iv)
+      const encrypted = Buffer.concat([cipher.update(rawContent), cipher.final()])
+      const authTag = cipher.getAuthTag()
+      const packed = Buffer.concat([salt, iv, authTag, encrypted])
+
+      const encPath = `${dumpFilePath}.enc`
+      fs.writeFileSync(encPath, packed)
+      fs.unlinkSync(dumpFilePath)
+      finalPath = encPath
+      finalName = `${dumpFileName}.enc`
+    }
+
+    // Generate SHA-256 checksum
+    const fileBuffer = fs.readFileSync(finalPath)
+    const sha256 = crypto.createHash('sha256').update(fileBuffer).digest('hex')
+    fs.writeFileSync(`${finalPath}.sha256`, `${sha256}  ${finalName}\n`, 'utf8')
+
+    await logJobExecution(jobKey, 'daily_database_backup', null, 'success', {
+      fileName: finalName,
+      sizeBytes: fileBuffer.length,
+      sha256,
+      encrypted: Boolean(encryptionKey),
+      tablesDumped: tableNames.length,
+    })
+    executed++
+  } catch (err: any) {
+    errors.push(err?.message || String(err))
+    await logJobExecution(jobKey, 'daily_database_backup', null, 'failed', { error: err?.message })
+    await sendSystemAlert({
+      title: 'Daily Database Backup Failed',
+      message: err?.message || 'Error creating scheduled database backup snapshot',
+      severity: 'error',
+      module: 'backup',
+    }).catch(() => {})
+  }
+
+  return { executed, skipped, errors }
+}
+
+// ─── 11. MONTHLY AUTOMATED RESTORE & DISASTER RECOVERY DRILL ────────────────
+export async function databaseRestoreDrill(): Promise<{ executed: number; skipped: number; errors: string[] }> {
+  const db = getDb()
+  const monthStr = dayjs().format('YYYY-MM')
+  const jobKey = `monthly_restore_drill:${monthStr}`
+  const errors: string[] = []
+  let executed = 0
+  let skipped = 0
+
+  try {
+    if (await isJobAlreadyExecuted(jobKey)) {
+      return { executed: 0, skipped: 1, errors: [] }
+    }
+
+    const timestamp = Date.now()
+    const drillDb = `wello_dr_drill_${timestamp}`
+
+    // Create scratch database
+    await db.raw(`CREATE DATABASE IF NOT EXISTS \`${drillDb}\``)
+
+    // Introspect source schema
+    const [tables] = await db.raw('SHOW FULL TABLES WHERE Table_type = "BASE TABLE"')
+    const tableNames = (tables as any[]).map((row) => Object.values(row)[0])
+
+    // Duplicate schema and data into drillDb
+    for (const tbl of tableNames) {
+      const [createRes] = await db.raw(`SHOW CREATE TABLE \`${tbl}\``)
+      const createSql = (createRes as any[])[0]['Create Table']
+      await db.raw(`USE \`${drillDb}\``)
+      await db.raw(`DROP TABLE IF EXISTS \`${tbl}\``)
+      await db.raw(createSql)
+
+      const rows = await db(tbl).select('*')
+      if (rows.length > 0) {
+        await db.raw(`USE \`${drillDb}\``)
+        await db(tbl).insert(rows)
+      }
+    }
+
+    await db.raw(`USE \`${drillDb}\``)
+    const [auditRows] = await db.raw('SELECT count(*) as count FROM audit_logs')
+    const [userRows] = await db.raw('SELECT count(*) as count FROM users')
+
+    await logJobExecution(jobKey, 'monthly_restore_drill', null, 'success', {
+      drillDb,
+      tablesRestored: tableNames.length,
+      usersVerified: (userRows as any[])[0]?.count || 0,
+      auditRecordsVerified: (auditRows as any[])[0]?.count || 0,
+    })
+    executed++
+  } catch (err: any) {
+    errors.push(err?.message || String(err))
+    await logJobExecution(jobKey, 'monthly_restore_drill', null, 'failed', { error: err?.message })
+    await sendSystemAlert({
+      title: 'Monthly Restore Drill Failed',
+      message: err?.message || 'Disaster recovery restore drill failed integrity validation',
+      severity: 'error',
+      module: 'disaster_recovery',
+    }).catch(() => {})
+  } finally {
+    const primaryDb = process.env.DB_NAME || 'wello'
+    await db.raw(`USE \`${primaryDb}\``).catch(() => {})
+  }
+
+/**
+ * Job 15: SaaS Trial Milestones & Subscription Lifecycle Checker
+ * Evaluates active trials at Day 75 (15 days left), Day 87 (3 days left), and Day 90 (expiry).
+ */
+export async function checkTrialMilestonesAndDunning(): Promise<{ executed: number; skipped: number; errors: string[] }> {
+  const db = getDb()
+  const todayStr = dayjs().format('YYYY-MM-DD')
+  let executed = 0
+  let skipped = 0
+  const errors: string[] = []
+
+  try {
+    const now = new Date()
+
+    // 1. Check users whose trials expired today
+    const expiredUsers = await db('users')
+      .whereNull('deleted_at')
+      .where('is_comped', false)
+      .where('trial_ends_at', '<=', now)
+      .where('subscription_status', 'trialing')
+
+    for (const u of expiredUsers) {
+      const jobKey = `trial_expired:${u.id}:${todayStr}`
+      if (await isJobAlreadyExecuted(jobKey)) {
+        skipped++
+        continue
+      }
+
+      await db('users')
+        .where({ id: u.id })
+        .update({
+          subscription_status: 'expired',
+          updated_at: db.fn.now(3),
+        })
+
+      await createNotification({
+        userId: u.id,
+        type: 'subscription_alert',
+        title: 'Your 90-Day Free Trial Has Concluded',
+        message: 'Your historical data remains safe and accessible. Subscribe to Wello to continue tracking new work and invoices.',
+        actionUrl: '/settings?tab=billing',
+        metadata: { userId: u.id, milestone: 'trial_expired' },
+      })
+
+      await logJobExecution(jobKey, 'saas_trial_milestones', u.id, 'success', { milestone: 'expired' })
+      executed++
+    }
+
+    // 2. Check 15-day warning (between 14 and 16 days left)
+    const fifteenDaysFromNow = dayjs().add(15, 'day').format('YYYY-MM-DD')
+    const warning15Users = await db('users')
+      .whereNull('deleted_at')
+      .where('is_comped', false)
+      .where('subscription_status', 'trialing')
+      .whereRaw(`DATE(trial_ends_at) = ?`, [fifteenDaysFromNow])
+
+    for (const u of warning15Users) {
+      const jobKey = `trial_warning_15d:${u.id}:${fifteenDaysFromNow}`
+      if (await isJobAlreadyExecuted(jobKey)) {
+        skipped++
+        continue
+      }
+
+      await createNotification({
+        userId: u.id,
+        type: 'subscription_alert',
+        title: '15 Days Remaining in Your Wello Trial',
+        message: 'You have 15 days left of full access to all Wello rate intelligence and invoicing tools.',
+        actionUrl: '/settings?tab=billing',
+        metadata: { userId: u.id, milestone: 'trial_warning_15d' },
+      })
+
+      await logJobExecution(jobKey, 'saas_trial_milestones', u.id, 'success', { milestone: 'warning_15d' })
+      executed++
+    }
+
+    // 3. Check 3-day warning (between 2 and 4 days left)
+    const threeDaysFromNow = dayjs().add(3, 'day').format('YYYY-MM-DD')
+    const warning3Users = await db('users')
+      .whereNull('deleted_at')
+      .where('is_comped', false)
+      .where('subscription_status', 'trialing')
+      .whereRaw(`DATE(trial_ends_at) = ?`, [threeDaysFromNow])
+
+    for (const u of warning3Users) {
+      const jobKey = `trial_warning_3d:${u.id}:${threeDaysFromNow}`
+      if (await isJobAlreadyExecuted(jobKey)) {
+        skipped++
+        continue
+      }
+
+      await createNotification({
+        userId: u.id,
+        type: 'subscription_alert',
+        title: '3 Days Left in Your Wello Trial',
+        message: 'Your 90-day trial is ending soon. Activate your monthly subscription to ensure uninterrupted rate tracking.',
+        actionUrl: '/settings?tab=billing',
+        metadata: { userId: u.id, milestone: 'trial_warning_3d' },
+      })
+
+      await logJobExecution(jobKey, 'saas_trial_milestones', u.id, 'success', { milestone: 'warning_3d' })
       executed++
     }
   } catch (err: any) {
@@ -492,11 +921,37 @@ export async function runScheduledJobs(workerId: string = 'worker_' + Math.rando
   const jobResults: Record<string, { executed: number; skipped: number; errors: string[] }> = {}
 
   try {
+    // 1. Daily FX Rate Fetch
+    jobResults.fxRates = await syncDailyFxRates()
+
+    // 2. Invoices Overdue & Due Soon Reminders
     jobResults.invoiceOverdue = await checkOverdueInvoices()
+
+    // 3. Forgotten Active Timers
     jobResults.forgottenTimers = await checkForgottenTimers()
+
+    // 4. Quote Follow-Ups
     jobResults.quoteFollowups = await checkQuoteFollowups()
+
+    // 5. Weekly Email Digests
     jobResults.weeklyDigests = await dispatchWeeklyDigests()
+
+    // 6. Recurring Invoice Profiles
     jobResults.recurringInvoices = await processRecurringInvoices()
+
+    // 7. Analytics Scheduled Reports
+    jobResults.analyticsScheduledReports = await processAnalyticsScheduledReports()
+
+    // 8. Analytics Nightly Full Rollups
+    jobResults.analyticsNightlyRollups = await runAnalyticsNightlyRollups()
+
+    // 9. Analytics Hourly Today Refresh
+    jobResults.analyticsHourlyRollups = await runAnalyticsHourlyRollups()
+
+    // 10. Request Metrics 30-Day Pruning
+    jobResults.requestMetricsPruning = await runRequestMetricsPruning()
+
+    // 11. Session, OTP & Data Retention Pruning
     try {
       const retentionSummary = await runDataRetentionPurge()
       const totalPurged = Object.values(retentionSummary).reduce((a, b) => a + b, 0)
@@ -504,6 +959,18 @@ export async function runScheduledJobs(workerId: string = 'worker_' + Math.rando
     } catch (e: any) {
       jobResults.dataRetention = { executed: 0, skipped: 0, errors: [e?.message || 'Retention error'] }
     }
+
+    // 12. Cryptographic Audit Chain Verification
+    jobResults.auditVerification = await runAuditVerificationJob()
+
+    // 13. Daily Scheduled Database Backup
+    jobResults.databaseBackup = await backupDatabaseDaily()
+
+    // 14. Monthly Automated Restore & DR Drill
+    jobResults.databaseRestoreDrill = await databaseRestoreDrill()
+
+    // 15. SaaS Trial Milestones & Subscription Lifecycle
+    jobResults.trialMilestones = await checkTrialMilestonesAndDunning()
   } finally {
     await releaseSchedulerLock(workerId)
   }
@@ -519,3 +986,5 @@ export async function runScheduledJobs(workerId: string = 'worker_' + Math.rando
     durationMs: Date.now() - startMs,
   }
 }
+
+

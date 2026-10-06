@@ -4,23 +4,45 @@ import { z } from 'zod'
 import { submitCategoryRequest } from '../../utils/categoryStore'
 import { pushAdminNotification } from '../../utils/auditStore'
 import { logAnalyticsEvent } from '../../utils/analyticsEngine'
+import { requireRateLimit } from '../../utils/rateLimiter'
 
 const categoryRequestSchema = z.object({
-  userEmail: z.string().email('Please enter a valid email address.').optional(),
-  email: z.string().email('Please enter a valid email address.').optional(),
-  requestedName: z.string().optional(),
-  name: z.string().optional(),
-  description: z.string().optional(),
-  reason: z.string().optional(),
+  userEmail: z.string().email('Please enter a valid email address.').max(255).optional(),
+  email: z.string().email('Please enter a valid email address.').max(255).optional(),
+  requestedName: z.string().min(2, 'Category name must be at least 2 characters.').max(100, 'Category name cannot exceed 100 characters.').optional(),
+  name: z.string().min(2, 'Category name must be at least 2 characters.').max(100, 'Category name cannot exceed 100 characters.').optional(),
+  description: z.string().max(500, 'Description cannot exceed 500 characters.').optional(),
+  reason: z.string().max(500, 'Reason cannot exceed 500 characters.').optional(),
+  // Honeypot fields (must be empty)
+  website: z.string().optional(),
+  hp_field: z.string().optional(),
+  company_url: z.string().optional(),
 })
 
 export default defineEventHandler(async (event) => {
+  // 1. Rate limiting: 5 requests per hour per IP
+  await requireRateLimit(event, {
+    keyPrefix: 'category_request_public',
+    limit: 5,
+    windowSeconds: 3600,
+    keyByIpOnly: true,
+    customErrorMessage: 'Too many category requests from this network. Maximum 5 submissions per hour allowed.',
+  })
+
   const body = await readBody(event)
   const parseResult = categoryRequestSchema.safeParse(body)
   if (!parseResult.success) {
     throw createError({
       statusCode: 400,
       statusMessage: parseResult.error.errors[0]?.message || 'Invalid request data.',
+    })
+  }
+
+  // 2. Honeypot check for automated bot spam
+  if (parseResult.data.website || parseResult.data.hp_field || parseResult.data.company_url) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Invalid submission parameters detected.',
     })
   }
 
@@ -62,4 +84,5 @@ export default defineEventHandler(async (event) => {
     request: req,
   }
 })
+
 

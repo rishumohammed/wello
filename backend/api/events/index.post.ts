@@ -1,20 +1,34 @@
 // backend/api/events/index.post.ts
-import { defineEventHandler, readBody, getRequestHeaders, getRequestIP, getHeader, setResponseStatus } from 'h3'
+import { defineEventHandler, readBody, getRequestHeaders, getRequestIP, getHeader, setResponseStatus, createError } from 'h3'
 import { ingestEvents, mergeAnonymousIdToUser } from '../../utils/analyticsIngestService'
 import { getOptionalUser } from '../../utils/authGuard'
-
 import { requireRateLimit } from '../../utils/rateLimiter'
+
+const MAX_BATCH_EVENTS = 50
 
 export default defineEventHandler(async (event) => {
   try {
-    // Distributed rate limit on event ingestion: 120 req/min
+    // Distributed rate limit on event ingestion: 120 req/min per IP
     await requireRateLimit(event, {
       keyPrefix: 'events_ingest',
       limit: 120,
       windowSeconds: 60,
+      keyByIpOnly: true,
+      customErrorMessage: 'Analytics event ingestion throttled. Maximum 120 batch requests per minute allowed.',
     })
 
     const body = await readBody(event)
+    const rawEvents = body?.events || body
+
+    // Enforce max batch size limit of 50 events
+    if (Array.isArray(rawEvents) && rawEvents.length > MAX_BATCH_EVENTS) {
+      setResponseStatus(event, 400)
+      return {
+        success: false,
+        error: `Payload batch limit exceeded. Maximum ${MAX_BATCH_EVENTS} events per request permitted.`,
+      }
+    }
+
     const headers = getRequestHeaders(event)
     const ip = getRequestIP(event, { xForwardedFor: true }) || '127.0.0.1'
     const userAgent = getHeader(event, 'user-agent') || ''
@@ -31,7 +45,7 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    const result = await ingestEvents(body?.events || body, {
+    const result = await ingestEvents(rawEvents, {
       ipAddress: ip,
       userAgent,
       headers,
@@ -55,10 +69,11 @@ export default defineEventHandler(async (event) => {
     }
   } catch (err: any) {
     console.error('[POST /api/events] Ingestion error:', err)
-    setResponseStatus(event, 400)
+    setResponseStatus(event, err.statusCode || 400)
     return {
       success: false,
-      error: err.message || 'Invalid event payload format',
+      error: err.message || err.statusMessage || 'Invalid event payload format',
     }
   }
 })
+

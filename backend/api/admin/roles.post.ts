@@ -1,38 +1,17 @@
 // server/api/admin/roles.post.ts
 import { defineEventHandler, readBody, createError, getRequestHeader } from 'h3'
-import { requirePermission, extractClientIp } from '../../utils/authGuard'
+import { requirePermission, requireStepUpOtp, extractClientIp } from '../../utils/authGuard'
 import { getDb } from '../../utils/db'
-import { revokeAllSessionsForUser, verifyAdminActionOtp, isDevAuthAllowed } from '../../utils/authService'
+import { revokeAllSessionsForUser } from '../../utils/authService'
 import { recordAuditLog } from '../../utils/auditStore'
 
 export default defineEventHandler(async (event) => {
   const admin = await requirePermission(event, 'admins.manage')
+  await requireStepUpOtp(event, 'roles')
+
   const body = await readBody(event)
   const action = body?.action || 'UPDATE_ROLE'
   const db = getDb()
-
-  // Mandatory re-authentication check for sensitive role modifications
-  const reauthOtp = (body?.reauthOtp || '').trim()
-  const requireStrictOtp = !isDevAuthAllowed() || Boolean(body?.requireOtp)
-
-  if (requireStrictOtp && !reauthOtp) {
-    throw createError({
-      statusCode: 403,
-      statusMessage: 'Step-Up Re-Authentication Required: Please enter the 6-digit OTP code to execute administrative role changes.',
-      data: { reauthRequired: true },
-    })
-  }
-
-  if (reauthOtp) {
-    const otpRes = await verifyAdminActionOtp(admin.email, reauthOtp, 'roles')
-    if (!otpRes.valid) {
-      throw createError({
-        statusCode: 403,
-        statusMessage: otpRes.error || 'Invalid or expired re-authentication code.',
-        data: { reauthRequired: true },
-      })
-    }
-  }
 
   if (action === 'CREATE_ADMIN') {
     const email = (body?.email || '').trim().toLowerCase()

@@ -1,7 +1,7 @@
 // backend/utils/taxService.ts
 // Generic, Global Tax Engine supporting Inclusive/Exclusive, Reverse Charge & Zero-Rated Taxes
 
-import { roundToCurrencyDecimals } from './currencyUtils'
+import { roundToCurrencyDecimals } from './currencyUtils.ts'
 
 export interface TaxCalculationParams {
   subtotal: number

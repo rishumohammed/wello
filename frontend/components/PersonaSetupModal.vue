@@ -21,21 +21,21 @@
               <div
                 v-for="p in personas"
                 :key="p.key"
-                class="p-4 rounded-xl border cursor-pointer transition-all flex flex-col justify-between"
-                :class="selectedPersona === p.key ? 'border-primary bg-primary/10 shadow-md ring-1 ring-primary' : 'border-neutral hover:border-secondary bg-surface'"
+                class="persona-select-card"
+                :class="{ selected: selectedPersona === p.key }"
                 @click="selectedPersona = p.key"
                 :id="`btn-persona-${p.key}`"
               >
                 <div>
                   <div class="flex items-center justify-between mb-1.5">
                     <span class="text-2xl">{{ p.icon }}</span>
-                    <span v-if="selectedPersona === p.key" class="badge badge-primary text-2xs font-bold">Selected</span>
+                    <span v-if="selectedPersona === p.key" class="badge badge-purple text-2xs font-bold">Selected</span>
                   </div>
                   <div class="fw-700 text-sm text-primary mb-1">{{ p.title }}</div>
                   <div class="text-xs text-tertiary leading-normal">{{ p.description }}</div>
                 </div>
 
-                <div class="mt-3 pt-2 border-t border-neutral/60 text-[11px] text-secondary flex items-center gap-1.5">
+                <div class="persona-highlight-row">
                   <span class="text-primary font-bold">Key features:</span>
                   <span>{{ p.highlights }}</span>
                 </div>
@@ -43,7 +43,7 @@
             </div>
 
             <!-- Overhead Inclusion Option -->
-            <div class="p-4 bg-tertiary/10 rounded-xl border border-neutral/60 flex items-center justify-between gap-4 flex-wrap">
+            <div class="overhead-toggle-box">
               <div>
                 <div class="fw-700 text-sm text-primary flex items-center gap-1.5">
                   <span>Factor Overhead Costs into Effective Hourly Rate</span>
@@ -153,3 +153,54 @@ async function handleSave() {
   }
 }
 </script>
+
+<style scoped>
+.persona-select-card {
+  background: var(--color-off-white);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  transition: all var(--transition-apple-ease);
+}
+
+.persona-select-card:hover {
+  background: var(--color-white);
+  border-color: rgba(122, 63, 246, 0.35);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(17, 24, 39, 0.05);
+}
+
+.persona-select-card.selected {
+  background: rgba(122, 63, 246, 0.05);
+  border-color: var(--color-purple);
+  box-shadow: 0 0 0 2px rgba(122, 63, 246, 0.2);
+}
+
+.persona-highlight-row {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.overhead-toggle-box {
+  padding: 16px;
+  background: var(--color-off-white);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+</style>

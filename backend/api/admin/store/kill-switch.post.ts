@@ -1,7 +1,7 @@
 // backend/api/admin/store/kill-switch.post.ts
 import { defineEventHandler, readBody } from 'h3'
 import { z } from 'zod'
-import { requirePermission } from '../../../utils/authGuard'
+import { requirePermission, requireStepUpOtp, extractClientIp } from '../../../utils/authGuard'
 import { getDb } from '../../../utils/authService'
 import { sendSuccess, sendError, formatZodError } from '../../../utils/apiResponse'
 import { recordAuditLog } from '../../../utils/auditStore'
@@ -14,6 +14,8 @@ const killSwitchSchema = z.object({
 
 export default defineEventHandler(async (event) => {
   const admin = await requirePermission(event, 'store.manage')
+  await requireStepUpOtp(event, 'addon_kill_switch')
+
   const body = await readBody(event).catch(() => ({}))
   const parsed = killSwitchSchema.safeParse(body)
   if (!parsed.success) {

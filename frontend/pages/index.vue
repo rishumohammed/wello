@@ -1,5 +1,11 @@
 <template>
-  <div class="dashboard-page animate-fade-in">
+  <div>
+    <!-- Public / Unauthenticated Visitor: SaaS Marketing Landing Page -->
+    <LandingPage v-if="!authStore.isAuthenticated" />
+
+    <!-- Authenticated User: Personalized In-App Workspace Dashboard -->
+    <NuxtLayout v-else name="default">
+      <div class="dashboard-page animate-fade-in">
     <!-- Greeting & Header -->
     <div class="page-header flex items-center justify-between flex-wrap gap-4 mb-5">
       <div>
@@ -22,7 +28,7 @@
       <!-- Header Pending Expected Income Banner (if any) -->
       <div v-if="pendingExpectedCount > 0" class="flex items-center gap-2">
         <button
-          class="btn btn-secondary btn-sm bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 border-purple-300 dark:border-purple-800 flex items-center gap-1.5 shadow-sm"
+          class="btn btn-secondary btn-sm flex items-center gap-1.5 text-purple"
           @click="showExpectedIncomeModal = true"
           id="btn-header-expected-income"
         >
@@ -604,6 +610,8 @@
       @confirm="executeDeleteSession"
       @cancel="confirmDelete = null"
     />
+      </div>
+    </NuxtLayout>
   </div>
 </template>
 
@@ -613,6 +621,11 @@ import { useWelloStore } from '~/stores/wello'
 import { useAuthStore } from '~/stores/auth'
 import { useToast } from '~/composables/useToast'
 import FirstRunTour from '~/components/FirstRunTour.vue'
+import LandingPage from '~/components/LandingPage.vue'
+
+definePageMeta({
+  layout: false,
+})
 
 const store = useWelloStore()
 const authStore = useAuthStore()

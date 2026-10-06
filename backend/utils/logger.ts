@@ -116,13 +116,17 @@ export class Logger {
   }
 }
 
+export const logger = Logger
+
 export function logRequest(event: H3Event, durationMs: number, statusCode: number): void {
   const reqId = event.context?.requestId
   const user = event.context?.user
-  Logger.info(`HTTP ${event.node?.req?.method || 'GET'} ${event.node?.req?.url || '/'} ${statusCode}`, {
+  const rawUrl = event.node?.req?.url || '/'
+  const cleanPath = rawUrl.split('?')[0] // Always strip query strings from server logs
+  Logger.info(`HTTP ${event.node?.req?.method || 'GET'} ${cleanPath} ${statusCode}`, {
     requestId: reqId,
     userId: user?.id,
-    path: event.node?.req?.url,
+    path: cleanPath,
     method: event.node?.req?.method,
     durationMs,
     meta: {

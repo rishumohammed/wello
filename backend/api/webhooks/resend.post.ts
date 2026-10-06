@@ -1,10 +1,48 @@
 // backend/api/webhooks/resend.post.ts
-import { defineEventHandler, readBody } from 'h3'
+import { defineEventHandler, readBody, getHeader, createError } from 'h3'
+import crypto from 'node:crypto'
 import { getDb } from '../../utils/authService'
 
 export default defineEventHandler(async (event) => {
+  const secret = process.env.RESEND_WEBHOOK_SECRET || ''
+  const svixId = getHeader(event, 'svix-id') || getHeader(event, 'x-resend-id')
+  const svixTimestamp = getHeader(event, 'svix-timestamp') || getHeader(event, 'x-resend-timestamp')
+  const svixSignature = getHeader(event, 'svix-signature') || getHeader(event, 'x-resend-signature')
+
   const body = await readBody(event)
   if (!body) return { received: true }
+
+  // Verify signature if secret is configured
+  if (secret && svixSignature) {
+    try {
+      const payloadString = JSON.stringify(body)
+      const toSign = `${svixId || ''}.${svixTimestamp || ''}.${payloadString}`
+      const cleanSecret = secret.startsWith('whsec_') ? secret.slice(6) : secret
+      const expectedSig = crypto
+        .createHmac('sha256', Buffer.from(cleanSecret, 'base64'))
+        .update(toSign)
+        .digest('base64')
+
+      const signatureParts = svixSignature.split(',').map(s => s.trim().replace(/^v1=/, ''))
+      const matches = signatureParts.some(sig => {
+        try {
+          return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))
+        } catch {
+          return sig === expectedSig
+        }
+      })
+
+      if (!matches && process.env.NODE_ENV === 'production') {
+        throw createError({
+          statusCode: 401,
+          statusMessage: 'Invalid Resend webhook signature.',
+        })
+      }
+    } catch (err: any) {
+      if (err.statusCode) throw err
+      console.warn('[Resend Webhook] Signature verification notice:', err.message)
+    }
+  }
 
   const db = getDb()
   const eventType = body.type // 'email.delivered', 'email.opened', 'email.bounced', 'email.complained'
@@ -44,9 +82,10 @@ export default defineEventHandler(async (event) => {
       })
       .update(updates)
 
-    return { received: true, processed: true }
+    return { received: true, processed: true, eventType }
   } catch (err: any) {
     console.error('[Resend Webhook Error]', err)
     return { received: true, error: err.message }
   }
 })
+

@@ -125,5 +125,25 @@ export default defineEventHandler(async (event) => {
     updatedAt: inv.updated_at,
   }
 
-  return sendSuccess(event, { invoice })
+  const { shouldMaskFinancials } = await import('../../utils/authGuard')
+  const isMasked = shouldMaskFinancials(user)
+
+  const sanitizedInvoice = isMasked
+    ? {
+        ...invoice,
+        isFinancialsMasked: true,
+        discount: 0,
+        taxAmount: 0,
+        subtotal: 0,
+        total: 0,
+        amountPaid: 0,
+        balanceDue: 0,
+        items: invoice.items.map((it: any) => ({ ...it, unitPrice: 0, amount: 0 })),
+        taxes: invoice.taxes.map((tx: any) => ({ ...tx, taxAmount: 0 })),
+        payments: invoice.payments.map((p: any) => ({ ...p, amount: 0 })),
+        creditNotes: invoice.creditNotes.map((cn: any) => ({ ...cn, amount: 0 })),
+      }
+    : invoice
+
+  return sendSuccess(event, { isFinancialsMasked: isMasked, invoice: sanitizedInvoice })
 })

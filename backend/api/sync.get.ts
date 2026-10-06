@@ -132,31 +132,77 @@ export default defineEventHandler(async (event) => {
   }
   const invoiceRecords = await invoicesQuery
 
-  // 8. Income Sources
+  // 8. Credit Notes (Read-only)
+  let creditNotesQuery = db('credit_notes').where({ user_id: user.id })
+  let creditNoteTombstones: number[] = []
+  if (sinceDate) {
+    const tombRows = await db('credit_notes')
+      .where({ user_id: user.id })
+      .where((b) => b.where('deleted_at', '>', sinceDate).orWhere((b2) => b2.whereNotNull('deleted_at').andWhere('updated_at', '>', sinceDate)))
+      .select('id')
+    creditNoteTombstones = tombRows.map((r) => r.id)
+    creditNotesQuery = creditNotesQuery.where('updated_at', '>', sinceDate).whereNull('deleted_at')
+  } else {
+    creditNotesQuery = creditNotesQuery.whereNull('deleted_at')
+  }
+  const creditNoteRecords = await creditNotesQuery
+
+  // 9. Recurring Invoice Profiles
+  let recurringQuery = db('recurring_invoice_profiles').where({ user_id: user.id })
+  let recurringTombstones: number[] = []
+  if (sinceDate) {
+    const tombRows = await db('recurring_invoice_profiles')
+      .where({ user_id: user.id })
+      .where((b) => b.where('deleted_at', '>', sinceDate).orWhere((b2) => b2.whereNotNull('deleted_at').andWhere('updated_at', '>', sinceDate)))
+      .select('id')
+    recurringTombstones = tombRows.map((r) => r.id)
+    recurringQuery = recurringQuery.where('updated_at', '>', sinceDate).whereNull('deleted_at')
+  } else {
+    recurringQuery = recurringQuery.whereNull('deleted_at')
+  }
+  const recurringRecords = await recurringQuery
+
+  // 10. Income Sources
   let incomeSourcesQuery = db('income_sources').where({ user_id: user.id })
   if (sinceDate) {
     incomeSourcesQuery = incomeSourcesQuery.where('updated_at', '>', sinceDate)
   }
   const incomeSourceRecords = await incomeSourcesQuery
 
-  // 9. Overhead Expenses
+  // 11. Overhead Expenses
   let overheadsQuery = db('overhead_expenses').where({ user_id: user.id })
   if (sinceDate) {
     overheadsQuery = overheadsQuery.where('updated_at', '>', sinceDate)
   }
   const overheadRecords = await overheadsQuery
 
-  // 10. Categories (Master lookup)
+  // 12. Tax Rates
+  let taxRatesQuery = db('tax_rates').where({ user_id: user.id })
+  let taxRateTombstones: number[] = []
+  if (sinceDate) {
+    const tombRows = await db('tax_rates')
+      .where({ user_id: user.id })
+      .where((b) => b.where('deleted_at', '>', sinceDate).orWhere((b2) => b2.whereNotNull('deleted_at').andWhere('updated_at', '>', sinceDate)))
+      .select('id')
+    taxRateTombstones = tombRows.map((r) => r.id)
+    taxRatesQuery = taxRatesQuery.where('updated_at', '>', sinceDate).whereNull('deleted_at')
+  } else {
+    taxRatesQuery = taxRatesQuery.whereNull('deleted_at')
+  }
+  const taxRateRecords = await taxRatesQuery
+
+  // 13. Categories (Master lookup)
   let categoriesQuery = db('categories').where({ is_active: true })
+  let categoryTombstones: number[] = []
   if (sinceDate) {
     categoriesQuery = categoriesQuery.where('updated_at', '>', sinceDate)
   }
   const categoryRecords = await categoriesQuery
 
-    const userProfileObj = {
-      earningPersona: user.earning_persona || 'freelancer_projects',
-      includeOverheadInMetrics: user.include_overhead_in_metrics !== 0 && user.include_overhead_in_metrics !== false,
-    }
+  const userProfileObj = {
+    earningPersona: user.earning_persona || 'freelancer_projects',
+    includeOverheadInMetrics: user.include_overhead_in_metrics !== 0 && user.include_overhead_in_metrics !== false,
+  }
 
     const incomeSourcesMapped = incomeSourceRecords.map((src) => ({
       id: src.id,
@@ -234,11 +280,13 @@ export default defineEventHandler(async (event) => {
           id: q.id,
           projectId: q.project_id,
           version: q.version,
-          amount: Number(q.amount),
+          amount: Number(q.quote_amount !== null ? q.quote_amount : q.amount || 0),
+          quoteAmount: Number(q.quote_amount !== null ? q.quote_amount : q.amount || 0),
           currency: q.currency,
-          estimatedHours: q.estimated_hours !== null ? Number(q.estimated_hours) : null,
-          pricingModel: q.pricing_model,
+          estimatedHours: q.est_hours !== null ? Number(q.est_hours) : (q.estimated_hours !== null ? Number(q.estimated_hours) : null),
+          estHours: q.est_hours !== null ? Number(q.est_hours) : null,
           status: q.status,
+          notes: q.notes,
           createdAt: q.created_at,
           updatedAt: q.updated_at,
         })),
@@ -334,6 +382,52 @@ export default defineEventHandler(async (event) => {
         })),
         tombstones: invoiceTombstones,
       },
+      creditNotes: {
+        records: creditNoteRecords.map((cn) => ({
+          id: cn.id,
+          invoiceId: cn.invoice_id,
+          creditNoteNumber: cn.credit_note_number,
+          amount: Number(cn.amount),
+          currency: cn.currency,
+          reason: cn.reason,
+          issuedAt: cn.issued_at || cn.created_at,
+          createdAt: cn.created_at,
+          updatedAt: cn.updated_at,
+        })),
+        tombstones: creditNoteTombstones,
+      },
+      recurringProfiles: {
+        records: recurringRecords.map((rp) => ({
+          id: rp.id,
+          clientId: rp.client_id,
+          projectId: rp.project_id,
+          profileName: rp.profile_name,
+          frequency: rp.frequency,
+          amount: Number(rp.amount),
+          currency: rp.currency,
+          nextIssueDate: rp.next_issue_date,
+          isActive: Boolean(rp.is_active),
+          autoSend: Boolean(rp.auto_send),
+          notes: rp.notes,
+          createdAt: rp.created_at,
+          updatedAt: rp.updated_at,
+        })),
+        tombstones: recurringTombstones,
+      },
+      taxRates: {
+        records: taxRateRecords.map((t) => ({
+          id: t.id,
+          name: t.name,
+          ratePercent: Number(t.rate_percent),
+          isCompound: Boolean(t.is_compound),
+          isRecoverable: Boolean(t.is_recoverable),
+          isDefault: Boolean(t.is_default),
+          description: t.description,
+          createdAt: t.created_at,
+          updatedAt: t.updated_at,
+        })),
+        tombstones: taxRateTombstones,
+      },
       categories: {
         records: categoryRecords.map((c) => ({
           id: c.id,
@@ -343,6 +437,7 @@ export default defineEventHandler(async (event) => {
           icon: c.icon,
           displayOrder: c.display_order,
         })),
+        tombstones: categoryTombstones,
       },
     })
 })

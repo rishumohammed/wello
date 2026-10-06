@@ -2,7 +2,7 @@
 import { defineEventHandler, getRouterParam } from 'h3'
 import { requireUser } from '../../utils/authGuard'
 import { getDb } from '../../utils/authService'
-import { sendSuccess, sendError } from '../../utils/apiResponse'
+import { sendMaskedSuccess, sendError } from '../../utils/apiResponse'
 
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event)
@@ -35,7 +35,7 @@ export default defineEventHandler(async (event) => {
     .whereNull('deleted_at')
     .select(db.raw('COUNT(id) as total_payments, COALESCE(SUM(amount), 0) as total_paid'))
 
-  return sendSuccess(event, {
+  return sendMaskedSuccess(event, user, {
     id: client.id,
     name: client.name,
     email: client.email,

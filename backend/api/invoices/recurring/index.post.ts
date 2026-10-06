@@ -1,7 +1,7 @@
 // backend/api/invoices/recurring/index.post.ts
 import { defineEventHandler, readBody } from 'h3'
 import { z } from 'zod'
-import { requireAddon } from '../../../utils/addonGuard'
+import { requireAddon } from '../../../utils/addonService'
 import { getDb } from '../../../utils/db'
 import { sendSuccess, sendError, formatZodError } from '../../../utils/apiResponse'
 

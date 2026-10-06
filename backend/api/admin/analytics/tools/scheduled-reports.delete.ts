@@ -1,10 +1,11 @@
 // backend/api/admin/analytics/tools/scheduled-reports.delete.ts
 import { defineEventHandler, getQuery, createError } from 'h3'
-import { requirePermission } from '../../../../utils/authGuard'
+import { requirePermission, extractClientIp } from '../../../../utils/authGuard'
 import { deleteScheduledReport } from '../../../../utils/analyticsAdminService'
+import { recordAuditLog } from '../../../../utils/auditStore'
 
 export default defineEventHandler(async (event) => {
-  const user = await requirePermission(event, 'analytics.view')
+  const admin = await requirePermission(event, 'analytics.manage')
   const query = getQuery(event)
   const id = Number(query?.id)
 
@@ -12,5 +13,19 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Valid report id is required' })
   }
 
-  return await deleteScheduledReport(user.id, id)
+  const result = await deleteScheduledReport(admin.id, id)
+
+  await recordAuditLog({
+    adminEmail: admin.email,
+    actorId: admin.id,
+    action: 'ADMIN_SCHEDULED_REPORT_DELETED',
+    module: 'Analytics',
+    permissionUsed: 'analytics.manage',
+    target: `Scheduled Report #${id}`,
+    reason: (query?.reason as string) || 'Deleted scheduled report',
+    ipAddress: extractClientIp(event),
+  })
+
+  return result
 })
+

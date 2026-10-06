@@ -79,7 +79,9 @@ export interface AuthenticatedUser extends DbUser {
   adminPermissions: string[]
   isImpersonation?: boolean
   impersonatorEmail?: string | null
+  impersonationAdminId?: number | null
   impersonationExpiresAt?: string | null
+  hasImpersonationFinancialView?: boolean
 }
 
 export interface SessionContext {
@@ -363,6 +365,9 @@ export async function getOrCreateDbUser(
     digest_frequency: 'weekly',
     digest_day_of_week: 1,
     digest_hour_utc: 9,
+    trial_ends_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+    subscription_status: 'trialing',
+    is_comped: false,
     created_at: knexFnNow(),
     updated_at: knexFnNow(),
   })
@@ -415,20 +420,32 @@ export async function createDbSession(
 }
 
 /**
+ * Generates a high-entropy 192-bit random token for public portals with SHA-256 hash
+ */
+export function generatePublicToken(): { rawToken: string; tokenHash: string } {
+  const rawToken = crypto.randomBytes(24).toString('base64url')
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
+  return { rawToken, tokenHash }
+}
+
+/**
  * Creates a time-boxed, strictly read-only impersonation session for Support / Admin
  */
 export async function createImpersonationSession(
   targetUserId: number,
+  adminId: number,
   adminEmail: string,
   reason: string,
+  hasFinancialView: boolean = false,
   durationMinutes: number = 15
 ): Promise<{ token: string; expiresAt: Date }> {
   const db = getDb()
   const token = 'imp_' + crypto.randomBytes(32).toString('hex')
   const tokenHash = hashSessionToken(token)
-  const clampedMinutes = Math.min(30, Math.max(5, durationMinutes))
+  const clampedMinutes = Math.min(15, Math.max(5, durationMinutes))
   const expiresAt = new Date(Date.now() + clampedMinutes * 60 * 1000)
 
+  // 1. Insert into auth_sessions
   await db('auth_sessions').insert({
     token_hash: tokenHash,
     user_id: targetUserId,
@@ -442,6 +459,20 @@ export async function createImpersonationSession(
     last_seen_at: knexFnNow(),
     expires_at: expiresAt,
     revoked_at: null,
+  })
+
+  // 2. Insert into dedicated impersonation_sessions table
+  await db('impersonation_sessions').insert({
+    admin_id: adminId,
+    admin_email: adminEmail,
+    target_user_id: targetUserId,
+    reason,
+    has_financial_view: hasFinancialView,
+    token_hash: tokenHash,
+    started_at: knexFnNow(),
+    expires_at: expiresAt,
+    ended_at: null,
+    created_at: knexFnNow(),
   })
 
   return { token, expiresAt }
@@ -558,9 +589,28 @@ export async function getAuthenticatedUserByToken(token: string): Promise<Authen
     return null
   }
 
-  // Sliding expiry (only for non-impersonation regular sessions)
   const isImpersonation = Boolean(sessionRecord.session_is_impersonation)
-  if (!isImpersonation) {
+  let impersonationAdminId: number | null = null
+  let hasImpersonationFinancialView = false
+
+  if (isImpersonation) {
+    // Validate against dedicated impersonation_sessions table
+    const impSession = await db('impersonation_sessions')
+      .where({ token_hash: tokenHash })
+      .whereNull('ended_at')
+      .where('expires_at', '>', now)
+      .first()
+
+    if (!impSession) {
+      // Impersonation session expired or ended
+      await db('auth_sessions').where({ id: sessionRecord.session_id }).update({ revoked_at: now })
+      return null
+    }
+
+    impersonationAdminId = impSession.admin_id
+    hasImpersonationFinancialView = Boolean(impSession.has_financial_view)
+  } else {
+    // Sliding expiry for regular sessions
     const lastSeenMs = new Date(sessionRecord.session_last_seen).getTime()
     if (now.getTime() - lastSeenMs > 5 * 60 * 1000) {
       const slidingDuration = sessionRecord.role === 'admin' ? 4 * 3600 * 1000 : 30 * 86400 * 1000
@@ -603,16 +653,23 @@ export async function getAuthenticatedUserByToken(token: string): Promise<Authen
     adminPermissions,
     isImpersonation,
     impersonatorEmail: sessionRecord.session_impersonator_email || null,
+    impersonationAdminId,
     impersonationExpiresAt: isImpersonation ? new Date(sessionRecord.session_expires_at).toISOString() : null,
+    hasImpersonationFinancialView,
   }
 }
 
 export async function revokeSessionByToken(token: string): Promise<boolean> {
   const db = getDb()
   const tokenHash = hashSessionToken(token)
+  const now = new Date()
+  await db('impersonation_sessions')
+    .where({ token_hash: tokenHash })
+    .whereNull('ended_at')
+    .update({ ended_at: now })
   const rows = await db('auth_sessions')
     .where({ token_hash: tokenHash })
-    .update({ revoked_at: new Date() })
+    .update({ revoked_at: now })
   return rows > 0
 }
 

@@ -29,6 +29,9 @@ export default defineEventHandler(async (event) => {
 
   const rows = await q
 
+  const { shouldMaskFinancials } = await import('../../utils/authGuard')
+  const isMasked = shouldMaskFinancials(user)
+
   const items = rows.map(row => ({
     id: row.id,
     userId: row.user_id,
@@ -37,12 +40,13 @@ export default defineEventHandler(async (event) => {
     category: row.category,
     name: row.description,
     description: row.description,
-    amount: Number(row.amount),
+    amount: isMasked ? 0 : Number(row.amount),
     currency: row.currency,
     expenseDate: row.expense_date,
     frequency: row.recurring_period || (row.is_recurring ? 'monthly' : 'one_off'),
     allocationRule: row.allocation_rule || 'none',
     notes: row.notes,
+    isFinancialsMasked: isMasked,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }))

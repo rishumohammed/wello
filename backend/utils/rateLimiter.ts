@@ -5,7 +5,7 @@
  * Enforces sliding/fixed-window limits across Auth, OTP, Ingestion, Exports, and Analytics.
  */
 
-import { H3Event, getRequestHeader, setResponseHeader, createError } from 'h3'
+import { H3Event, setResponseHeader, createError } from 'h3'
 import { getDb } from './db'
 import { extractClientIp } from './authGuard'
 
@@ -131,10 +131,15 @@ export async function resetRateLimit(key: string): Promise<void> {
   try {
     const db = getDb()
     await db('rate_limits').where({ key }).delete()
+    await db('rate_limits').where('key', 'like', `${key}:%`).delete()
   } catch (e) {
     // ignore
   }
-  memStore.delete(key)
+  for (const k of memStore.keys()) {
+    if (k === key || k.startsWith(`${key}:`)) {
+      memStore.delete(k)
+    }
+  }
 }
 
 /**
@@ -162,11 +167,17 @@ export async function requireRateLimit(
     windowSeconds: number
     identifier?: string
     customErrorMessage?: string
+    keyByIpOnly?: boolean
   }
 ): Promise<RateLimitResult> {
   const ip = extractClientIp(event)
-  const id = options.identifier ? options.identifier.trim().toLowerCase() : ip
-  const compositeKey = `rl:${options.keyPrefix}:${id}`
+  const id = options.identifier ? options.identifier.trim().toLowerCase() : ''
+  
+  // Key composite by identifier + IP for robust protection against brute force and distributed attacks
+  let compositeKey = `rl:${options.keyPrefix}:${ip}`
+  if (id && !options.keyByIpOnly) {
+    compositeKey = `rl:${options.keyPrefix}:${id}:${ip}`
+  }
 
   const result = await consumeRateLimit(compositeKey, options.limit, options.windowSeconds)
 

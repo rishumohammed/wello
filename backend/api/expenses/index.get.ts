@@ -2,7 +2,7 @@
 import { defineEventHandler, getQuery } from 'h3'
 import { requireUser } from '../../utils/authGuard'
 import { getDb } from '../../utils/authService'
-import { sendSuccess, decodeCursor, encodeCursor } from '../../utils/apiResponse'
+import { sendMaskedSuccess, decodeCursor, encodeCursor } from '../../utils/apiResponse'
 
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event)
@@ -81,7 +81,7 @@ export default defineEventHandler(async (event) => {
   const lastItem = items[items.length - 1]
   const nextCursor = hasMore && lastItem ? encodeCursor(lastItem[sort], lastItem.id) : null
 
-  return sendSuccess(event, formatted, {
+  return sendMaskedSuccess(event, user, formatted, {
     limit,
     nextCursor,
     hasMore,

@@ -2,7 +2,7 @@
 import { defineEventHandler, getRouterParam } from 'h3'
 import { requireUser } from '../../utils/authGuard'
 import { getDb } from '../../utils/db'
-import { sendSuccess, sendError } from '../../utils/apiResponse'
+import { sendMaskedSuccess, sendError } from '../../utils/apiResponse'
 
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event)
@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
     return sendError(event, 404, 'NOT_FOUND', 'Income source not found')
   }
 
-  return sendSuccess(event, {
+  return sendMaskedSuccess(event, user, {
     id: source.id,
     userId: source.user_id,
     type: source.type,

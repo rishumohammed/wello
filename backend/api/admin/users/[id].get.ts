@@ -4,6 +4,11 @@ import { requirePermission } from '../../../utils/authGuard'
 import { getDb } from '../../../utils/db'
 
 export default defineEventHandler(async (event) => {
+  const rawUrl = (event.node?.req?.url || event.path || '').toLowerCase()
+  if (rawUrl.includes('/financials')) {
+    throw createError({ statusCode: 404, statusMessage: 'Endpoint not found or method not allowed. Use POST /api/admin/users/:id/financials.' })
+  }
+
   await requirePermission(event, 'users.view')
   const rawId = getRouterParam(event, 'id')
   const userId = Number(rawId)

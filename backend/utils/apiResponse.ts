@@ -1,6 +1,7 @@
 // backend/utils/apiResponse.ts
 import { H3Event, setResponseStatus } from 'h3'
 import { ZodError } from 'zod'
+import { serializeWithFinancialMasking } from './responseMasker'
 
 export interface ApiResponse<T = any> {
   success: boolean
@@ -42,6 +43,23 @@ export function sendSuccess<T>(
   return {
     success: true,
     data,
+    ...(pagination ? { pagination } : {}),
+  }
+}
+
+export function sendMaskedSuccess<T>(
+  event: H3Event,
+  user: any,
+  data: T,
+  pagination?: ApiResponse['pagination'],
+  statusCode: number = 200,
+  customFields?: { financial?: string[]; contact?: string[] }
+): ApiResponse<T> {
+  const { data: serializedData } = serializeWithFinancialMasking(user, data, customFields)
+  setResponseStatus(event, statusCode)
+  return {
+    success: true,
+    data: serializedData,
     ...(pagination ? { pagination } : {}),
   }
 }

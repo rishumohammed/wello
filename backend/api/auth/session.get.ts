@@ -1,11 +1,12 @@
 // server/api/auth/session.get.ts
 import { defineEventHandler } from 'h3'
-import { requireUser } from '../../utils/authGuard'
+import { requireUser, shouldMaskFinancials } from '../../utils/authGuard'
+import { maskSensitivePayload } from '../../utils/responseMasker'
 
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event)
 
-  return {
+  const payload = {
     authenticated: true,
     user: {
       id: user.id,
@@ -23,4 +24,10 @@ export default defineEventHandler(async (event) => {
       status: user.status,
     },
   }
+
+  if (shouldMaskFinancials(user)) {
+    return maskSensitivePayload(payload)
+  }
+
+  return payload
 })

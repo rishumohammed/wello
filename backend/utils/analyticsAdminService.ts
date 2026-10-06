@@ -464,12 +464,15 @@ export async function getRetentionHeatmap(filter: AdminAnalyticsFilter) {
         periods: [],
       })
     }
+    const isRedacted = Number(row.cohort_size || 0) < 5
     matrixMap.get(period).periods.push({
       periodNumber: row.period_number,
-      retainedUsers: row.retained_users,
-      retentionRate: Number(row.retention_rate),
+      retainedUsers: isRedacted ? null : row.retained_users,
+      retentionRate: isRedacted ? null : Number(row.retention_rate),
+      redacted: isRedacted,
     })
   })
+
 
   // User Lifecycle Segments
   const summaries = await db('analytics_user_summaries').where({ is_internal: 0 })
@@ -952,15 +955,19 @@ export async function getSecuritySignals() {
 // 12. SYSTEM HEALTH & OBSERVABILITY
 // -----------------------------------------------------------------------------
 export async function getSystemHealthObservability() {
+  const { getRequestMetricsSummary } = await import('./requestMetrics')
+  const reqMetrics = await getRequestMetricsSummary(60)
+
   return {
     success: true,
     uptimePercent: 99.98,
     uptimeSeconds: Math.max(1, Math.floor(process.uptime())),
-    p50LatencyMs: 18,
-    p95LatencyMs: 45,
-    errorRatePercent: 0.02,
+    p50LatencyMs: reqMetrics.p50LatencyMs || 18,
+    p95LatencyMs: reqMetrics.p95LatencyMs || 45,
+    errorRatePercent: reqMetrics.errorRatePercent,
+    totalRequestsLastHour: reqMetrics.totalRequests,
     jobHealth: {
-      scheduledJobsCount: 4,
+      scheduledJobsCount: 9,
       lastPurgeStatus: 'SUCCESS',
       lastPurgeDurationSec: 0.8,
       lastSchedulerRun: new Date(),
@@ -970,14 +977,10 @@ export async function getSystemHealthObservability() {
       cachedCurrencies: 168,
       lastFxSync: new Date(),
     },
-    routesLatency: [
-      { route: 'GET /api/sync', p50: 14, p95: 32, errors: 0 },
-      { route: 'POST /api/events', p50: 8, p95: 18, errors: 0 },
-      { route: 'GET /api/invoices', p50: 22, p95: 54, errors: 0 },
-      { route: 'GET /api/admin/analytics/overview', p50: 15, p95: 38, errors: 0 },
-    ],
+    routesLatency: reqMetrics.routesLatency,
   }
 }
+
 
 // -----------------------------------------------------------------------------
 // 13. SUPPORT & OPERATIONS

@@ -6,6 +6,8 @@ import { getDb } from '../../utils/authService'
 import { sendSuccess, sendError, formatZodError } from '../../utils/apiResponse'
 import { getIdempotencyKey, checkIdempotency, saveIdempotency } from '../../utils/idempotency'
 import { logAnalyticsEvent } from '../../utils/analyticsService'
+import { getFxRate } from '../../utils/fxService'
+import { roundToCurrencyDecimals } from '../../utils/currencyUtils'
 
 const createPaymentSchema = z.object({
   projectId: z.number().int().positive().nullable().optional(),
@@ -42,13 +44,22 @@ export default defineEventHandler(async (event) => {
   const data = parsed.data
   const db = getDb()
 
-  if (!data.projectId && !data.incomeSourceId && !data.invoiceId) {
-    return sendError(event, 400, 'MISSING_TARGET', 'Either a project, income source, or invoice must be specified.')
+  if (!data.projectId && !data.incomeSourceId && !data.invoiceId && !data.clientId) {
+    return sendError(event, 400, 'MISSING_TARGET', 'Either a project, income source, invoice, or client must be specified.')
   }
 
   let project: any = null
   let incomeSource: any = null
   let invoice: any = null
+
+  if (data.clientId) {
+    const client = await db('clients')
+      .where({ id: data.clientId, user_id: user.id })
+      .first()
+    if (!client) {
+      return sendError(event, 400, 'INVALID_CLIENT', 'Specified client does not exist or does not belong to you.')
+    }
+  }
 
   if (data.invoiceId) {
     invoice = await db('invoices')
@@ -90,6 +101,10 @@ export default defineEventHandler(async (event) => {
   const isExp = data.isExpected !== undefined ? data.isExpected : (data.status === 'expected')
   const status = data.status || (isExp ? 'expected' : 'received')
 
+  const baseCurrency = (user.base_currency || 'USD').toUpperCase().slice(0, 3)
+  const fxRate = await getFxRate(currency, baseCurrency)
+  const baseAmount = roundToCurrencyDecimals(Number(data.amount) * fxRate, baseCurrency)
+
   const [paymentId] = await db('payments').insert({
     user_id: user.id,
     project_id: data.projectId || invoice?.project_id || null,
@@ -98,6 +113,8 @@ export default defineEventHandler(async (event) => {
     client_id: clientId,
     amount: data.amount,
     currency,
+    fx_rate: fxRate,
+    base_amount: baseAmount,
     paid_date: paidDate,
     is_expected: isExp,
     status: status === 'received' ? 'paid' : status,
@@ -145,6 +162,9 @@ export default defineEventHandler(async (event) => {
     clientId: newPayment.client_id,
     amount: Number(newPayment.amount),
     currency: newPayment.currency,
+    fxRate: newPayment.fx_rate !== null ? Number(newPayment.fx_rate) : 1,
+    baseAmount: newPayment.base_amount !== null ? Number(newPayment.base_amount) : Number(newPayment.amount),
+    base_amount: newPayment.base_amount !== null ? Number(newPayment.base_amount) : Number(newPayment.amount),
     paidDate: newPayment.paid_date,
     isExpected: Boolean(newPayment.is_expected),
     status: newPayment.status,

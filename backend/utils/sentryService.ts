@@ -59,3 +59,12 @@ export class SentryTracker {
     return errorId
   }
 }
+
+export function captureException(err: any, context?: ErrorContext): string {
+  return SentryTracker.captureException(err, context)
+}
+
+export function captureMessage(msg: string, level: string = 'info'): string {
+  Logger.info(`[Sentry Message] [${level}] ${msg}`)
+  return `msg_${Math.random().toString(36).slice(2, 11)}`
+}

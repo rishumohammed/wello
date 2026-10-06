@@ -2,9 +2,14 @@
 // Cryptographically Tamper-Evident, Append-Only Admin Audit Trail & Notification Store for Wello
 
 import crypto from 'node:crypto'
+import fs from 'node:fs'
+import path from 'node:path'
 import { getDb } from './db'
+import { dispatchSecurityAlert } from './alertEngine'
 
 export const GENESIS_HASH = '0000000000000000000000000000000000000000000000000000000000000000'
+
+const AUDIT_HMAC_SECRET = process.env.AUDIT_HMAC_SECRET || process.env.SESSION_SECRET || 'wello-audit-hmac-sha256-secret-key-production-2026'
 
 export interface AuditLogRecord {
   id: string | number
@@ -35,11 +40,23 @@ export interface AdminNotification {
   createdAt: string
 }
 
+export interface AuditVerificationResult {
+  valid: boolean
+  totalEntries: number
+  verifiedAt: string
+  headHash?: string
+  corruptedAtId?: string | number
+  brokenIndex?: number
+  expectedHash?: string
+  actualHash?: string
+  reason?: string
+}
+
 const auditLogs: AuditLogRecord[] = []
 const adminNotifications: AdminNotification[] = []
 
 /**
- * Computes canonical SHA-256 hash for an audit log record linking to previous hash
+ * Computes canonical HMAC-SHA256 hash for an audit log record linking to previous hash
  */
 export function calculateAuditHash(
   entry: {
@@ -73,14 +90,14 @@ export function calculateAuditHash(
     entry.createdAt ? new Date(entry.createdAt).toISOString() : '',
   ].join('|')
 
-  return crypto.createHash('sha256').update(payload, 'utf8').digest('hex')
+  return crypto.createHmac('sha256', AUDIT_HMAC_SECRET).update(payload, 'utf8').digest('hex')
 }
 
 let hasBackfilled = false
 
 /**
  * Ensures any legacy unhashed records in MySQL database are sequentially backfilled
- * from GENESIS_HASH into a valid cryptographic hash chain.
+ * from GENESIS_HASH into a valid cryptographic HMAC-SHA256 hash chain.
  */
 export async function ensureAuditChainBackfilled(): Promise<void> {
   if (hasBackfilled) return
@@ -157,23 +174,27 @@ export async function getLatestAuditHash(): Promise<string> {
 
 /**
  * Appends a tamper-evident audit log record to both MySQL DB and memory store.
- * STRICTLY INSERT ONLY — NO UPDATE OR DELETE GRANTED.
+ * STRICTLY INSERT ONLY — DATABASE TRIGGERS PROHIBIT UPDATE OR DELETE.
  */
 export async function recordAuditLog(
-  log: Omit<AuditLogRecord, 'id' | 'previousHash' | 'hash' | 'createdAt'> & { createdAt?: string }
+  log: Omit<AuditLogRecord, 'id' | 'previousHash' | 'hash' | 'createdAt'> & { createdAt?: string; actorEmail?: string; targetType?: string; targetId?: string; details?: any }
 ): Promise<AuditLogRecord> {
   await ensureAuditChainBackfilled()
+  const adminEmail = log.adminEmail || log.actorEmail || 'system@wello.local'
+  const action = log.action || 'SYSTEM_ACTION'
+  const module = log.module || (log.targetType ? log.targetType.toUpperCase() : 'SYSTEM')
+  const target = log.target || (log.targetId ? `${log.targetType || 'entity'}:${log.targetId}` : null)
   const createdAt = log.createdAt ? new Date(log.createdAt).toISOString() : new Date().toISOString()
   const previousHash = await getLatestAuditHash()
 
   const hash = calculateAuditHash(
     {
-      adminEmail: log.adminEmail,
+      adminEmail,
       actorId: log.actorId,
-      action: log.action,
-      module: log.module,
+      action,
+      module,
       permissionUsed: log.permissionUsed,
-      target: log.target,
+      target: target || undefined,
       reason: log.reason,
       prevValue: log.prevValue,
       newValue: log.newValue,
@@ -189,13 +210,13 @@ export async function recordAuditLog(
   try {
     const db = getDb()
     const [insertedId] = await db('audit_logs').insert({
-      admin_email: log.adminEmail || 'system@wello.local',
+      admin_email: adminEmail,
       actor_id: log.actorId || null,
-      actor_email: log.adminEmail || 'system@wello.local',
-      action: log.action,
-      module: log.module,
+      actor_email: adminEmail,
+      action,
+      module,
       permission_used: log.permissionUsed || null,
-      target: log.target || null,
+      target: target || null,
       reason: log.reason || null,
       prev_value: log.prevValue || null,
       new_value: log.newValue || null,
@@ -281,17 +302,9 @@ export async function getAuditLogs(limit: number = 200, moduleFilter?: string): 
 
 /**
  * Cryptographically verifies the entire audit log chain integrity from genesis to tip.
- * Returns verification status and flags any tampering.
+ * Returns verification status, head hash, and identifies exact corrupted ID/index if broken.
  */
-export async function verifyAuditLogChain(): Promise<{
-  valid: boolean
-  totalEntries: number
-  verifiedAt: string
-  corruptedAtId?: string | number
-  expectedHash?: string
-  actualHash?: string
-  reason?: string
-}> {
+export async function verifyAuditLogChain(): Promise<AuditVerificationResult> {
   await ensureAuditChainBackfilled()
   let records: AuditLogRecord[] = []
 
@@ -327,6 +340,7 @@ export async function verifyAuditLogChain(): Promise<{
     return {
       valid: true,
       totalEntries: 0,
+      headHash: GENESIS_HASH,
       verifiedAt: new Date().toISOString(),
     }
   }
@@ -342,14 +356,15 @@ export async function verifyAuditLogChain(): Promise<{
         valid: false,
         totalEntries: records.length,
         corruptedAtId: row.id,
+        brokenIndex: i,
         expectedHash: expectedPrevHash,
         actualHash: row.previousHash,
-        reason: `Broken chain link at log entry #${row.id}. Expected previous_hash ${expectedPrevHash}, but found ${row.previousHash}.`,
+        reason: `Broken chain link at log entry #${row.id} (index ${i}). Expected previous_hash ${expectedPrevHash}, but found ${row.previousHash}.`,
         verifiedAt: new Date().toISOString(),
       }
     }
 
-    // 2. Recompute SHA-256 hash
+    // 2. Recompute HMAC-SHA256 hash
     const recomputedHash = calculateAuditHash(
       {
         adminEmail: row.adminEmail,
@@ -373,9 +388,10 @@ export async function verifyAuditLogChain(): Promise<{
         valid: false,
         totalEntries: records.length,
         corruptedAtId: row.id,
+        brokenIndex: i,
         expectedHash: recomputedHash,
         actualHash: row.hash,
-        reason: `Tampering detected at log entry #${row.id}. Payload does not match cryptographic signature.`,
+        reason: `Tampering detected at log entry #${row.id} (index ${i}). Payload does not match cryptographic HMAC signature.`,
         verifiedAt: new Date().toISOString(),
       }
     }
@@ -386,7 +402,54 @@ export async function verifyAuditLogChain(): Promise<{
   return {
     valid: true,
     totalEntries: records.length,
+    headHash: expectedPrevHash,
     verifiedAt: new Date().toISOString(),
+  }
+}
+
+/**
+ * Appends an off-database anchor log of the verified audit head hash.
+ */
+export function anchorAuditChainHead(headHash: string, totalEntries: number): void {
+  try {
+    const anchorDir = path.resolve(process.cwd(), 'backups')
+    if (!fs.existsSync(anchorDir)) {
+      fs.mkdirSync(anchorDir, { recursive: true })
+    }
+    const anchorFile = path.join(anchorDir, 'audit_anchors.log')
+    const logLine = `${new Date().toISOString()} | ENTRIES:${totalEntries} | HEAD:${headHash}\n`
+    fs.appendFileSync(anchorFile, logLine, 'utf8')
+  } catch (err) {
+    console.warn('[Audit Anchor] Failed to write anchor file:', err)
+  }
+}
+
+/**
+ * Scheduled job to verify audit log chain and alert on any tampering
+ */
+export async function runAuditVerificationJob(): Promise<{ executed: number; skipped: number; errors: string[] }> {
+  const errors: string[] = []
+  try {
+    const result = await verifyAuditLogChain()
+    if (!result.valid) {
+      errors.push(result.reason || 'Audit chain verification failed')
+      await dispatchSecurityAlert('AUDIT_CHAIN_INTEGRITY_BREACH', {
+        corruptedAtId: result.corruptedAtId,
+        brokenIndex: result.brokenIndex,
+        expectedHash: result.expectedHash,
+        actualHash: result.actualHash,
+        reason: result.reason,
+      })
+      return { executed: 0, skipped: 0, errors }
+    }
+
+    if (result.headHash) {
+      anchorAuditChainHead(result.headHash, result.totalEntries)
+    }
+    return { executed: 1, skipped: 0, errors: [] }
+  } catch (err: any) {
+    errors.push(err?.message || String(err))
+    return { executed: 0, skipped: 0, errors }
   }
 }
 

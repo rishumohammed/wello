@@ -77,12 +77,12 @@ async function runTests() {
     // ─── TEST 1: Health & Readiness Probes ──────────────────────────────────────
     console.log('--- 1. Health & Readiness Observability Probes ---')
     
-    // Liveness probe
+    // Liveness probe (minimal public surface)
     const healthRes = await api('/api/health')
     assert.strictEqual(healthRes.status, 200, 'GET /api/health returns 200 OK')
     assert.strictEqual(healthRes.body?.status, 'healthy', 'Health status is "healthy"')
-    assert.ok(typeof healthRes.body?.uptimeSeconds === 'number', 'Reports uptime in seconds')
-    testPass('Liveness probe (/api/health) returns 200 with runtime memory and uptime')
+    assert.ok(healthRes.body?.timestamp, 'Reports ISO timestamp')
+    testPass('Liveness probe (/api/health) returns 200 with minimal status and timestamp')
 
     // Readiness probe
     const readyRes = await api('/api/ready')

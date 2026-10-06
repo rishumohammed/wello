@@ -1,7 +1,7 @@
 // backend/api/admin/feedback/[id].patch.ts
 import { defineEventHandler, getRouterParam, readBody } from 'h3'
 import { z } from 'zod'
-import { requireAdmin } from '../../../utils/authGuard'
+import { requirePermission } from '../../../utils/authGuard'
 import { getDb } from '../../../utils/authService'
 import { sendError, formatZodError } from '../../../utils/apiResponse'
 
@@ -11,7 +11,7 @@ const updateSchema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
-  await requireAdmin(event)
+  await requirePermission(event, 'feedback.manage')
   const idStr = getRouterParam(event, 'id')
   const id = parseInt(idStr || '0', 10)
   if (!id) {

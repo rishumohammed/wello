@@ -17,12 +17,15 @@ export default defineEventHandler(async (event) => {
     return sendError(event, 404, 'USER_NOT_FOUND', 'User account not found or deactivated.')
   }
 
+  const { shouldMaskFinancials } = await import('../../utils/authGuard')
+  const isMasked = shouldMaskFinancials(user)
+
   return sendSuccess(event, {
     id: dbUser.id,
     name: dbUser.name,
     email: dbUser.email,
     avatarInitials: dbUser.avatar_initials,
-    targetHourly: dbUser.target_hourly !== null ? Number(dbUser.target_hourly) : null,
+    targetHourly: isMasked ? 0 : (dbUser.target_hourly !== null ? Number(dbUser.target_hourly) : null),
     baseCurrency: dbUser.base_currency || 'USD',
     currency: dbUser.base_currency || 'USD',
     timezone: dbUser.timezone || 'UTC',
@@ -48,7 +51,8 @@ export default defineEventHandler(async (event) => {
     maxTimerHours: dbUser.max_timer_hours !== undefined && dbUser.max_timer_hours !== null ? Number(dbUser.max_timer_hours) : 8,
     earningPersona: dbUser.earning_persona || 'freelancer_projects',
     includeOverheadInMetrics: dbUser.include_overhead_in_metrics !== 0 && dbUser.include_overhead_in_metrics !== false,
-    targetMonthlyIncome: dbUser.target_monthly_income !== null && dbUser.target_monthly_income !== undefined ? Number(dbUser.target_monthly_income) : null,
+    targetMonthlyIncome: isMasked ? 0 : (dbUser.target_monthly_income !== null && dbUser.target_monthly_income !== undefined ? Number(dbUser.target_monthly_income) : null),
+    isFinancialsMasked: isMasked,
     onboardingCompletedAt: dbUser.onboarding_completed_at || null,
     analyticsConsent: dbUser.analytics_consent !== 0 && dbUser.analytics_consent !== false,
     cookieConsent: dbUser.cookie_consent || 'accepted',
